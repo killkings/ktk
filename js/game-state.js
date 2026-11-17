@@ -296,7 +296,17 @@ var  camera = {x:0,y:0};
     }
 
     if(playerVisual.correctionRemaining>0) {
-      const fraction=Math.min(1,dt/Math.max(0.001,playerVisual.correctionRemaining));
+      const speedLevel=Number(playerStats?.stats?.speed?.value);
+      const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
+      const correctionDistance=Math.hypot(playerVisual.correctionX,playerVisual.correctionY);
+      // Correções também são limitadas por velocidade para não criar um salto
+      // brusco ao soltar a tecla depois de uma previsão que divergiu do servidor.
+      const maxCorrectionStep=Math.max(45,movementSpeed*0.5)*dt;
+      const fraction=Math.min(
+        1,
+        dt/Math.max(0.001,playerVisual.correctionRemaining),
+        correctionDistance>0?maxCorrectionStep/correctionDistance:1
+      );
       let correctionX=playerVisual.correctionX*fraction;
       let correctionY=playerVisual.correctionY*fraction;
       // Nunca aplica correção contrária ao eixo em que a tecla continua pressionada.
