@@ -85,8 +85,10 @@ function acceptRemote(payload) {
     id,
     display_name: String(payload.display_name || payload.displayName || previous?.display_name || "Aventureiro").slice(0, 24),
     displayName: String(payload.display_name || payload.displayName || previous?.displayName || "Aventureiro").slice(0, 24),
-    x: previous?.x ?? x,
-    y: previous?.y ?? y,
+    // Cada pacote representa a posição mais recente do jogador remoto.
+    // A interpolação visual acontece no cliente que recebe o pacote.
+    x,
+    y,
     targetX: x,
     targetY: y,
     direction: Math.max(0, Math.min(3, Number(payload.direction) || 2)),
