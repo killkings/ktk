@@ -645,6 +645,8 @@ async function clearLocalSession(statusMessage) {
   state.user = null;
   state.accessToken = "";
   state.displayName = "";
+  const nameInput = document.getElementById("ktk-display-name");
+  if (nameInput) nameInput.value = "";
   state.lastPosition = null;
   state.lastIntentSignature = "";
   state.lastInputSignature = "";
@@ -766,6 +768,8 @@ function startHeartbeat() {
     state.user = null;
     state.accessToken = "";
     state.displayName = "";
+    const nameInput = document.getElementById("ktk-display-name");
+    if (nameInput) nameInput.value = "";
     state.remote.clear();
     state.profileCache.clear();
     state.profileLoads.clear();
