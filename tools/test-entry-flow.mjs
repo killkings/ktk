@@ -165,7 +165,7 @@ assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)
 assert.match(html, /id="enter-world"/);
 assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
 assert.match(html, /game-lifecycle\.js\?v=20261117-realtime-entry-fix-001/);
-assert.match(html, /online\.js\?v=20261117-client-movement-001/);
+assert.match(html, /online\.js\?v=20261117-movement-authority-002/);
 assert.doesNotMatch(lifecycle, /onProgress\s*:/);
 assert.ok(lifecycle.indexOf("showScreen('game')") < lifecycle.indexOf("applyServerState(onlinePlayer.state)"),
   "A tela do mundo deve ser ativada antes de atualizar os dados visuais.");
