@@ -205,6 +205,8 @@ function renderCharacterPanel(local) {
   ui.clanChoose.disabled = Boolean(clanColor) || !canAct || !ui.clanChoice.value;
   ui.clanStatus.textContent = clanColor ? "Clã definido" : "Escolha uma cor";
   ui.clanStatus.style.color = clanColor || "";
+  ui.interact.disabled = !canAct;
+  ui.attack.disabled = !canAct;
 }
 
 function updateHud() {
@@ -216,7 +218,9 @@ function updateHud() {
   }
   const count = state.players.size;
   ui.players.textContent = count + (count === 1 ? " jogador" : " jogadores");
-  if (state.kingUserId) {
+  if (state.connectionSuspended) {
+    ui.connection.textContent = "⏸ Personagem pausado";
+  } else if (state.kingUserId) {
     const king = state.players.get(state.kingUserId);
     ui.connection.textContent = "♛ Rei: " + (king?.displayName || "ativo");
   } else if (state.joined) {
@@ -285,7 +289,7 @@ async function setConnectionSuspended(suspended) {
 }
 
 async function claimCrown() {
-  if (!state.joined || state.leaving || state.claimBusy) return;
+  if (!state.joined || state.leaving || state.connectionSuspended || state.claimBusy) return;
   const generation = state.sessionGeneration;
   state.claimBusy = true;
   try {
@@ -308,7 +312,7 @@ async function claimCrown() {
 }
 
 async function runGameAction(rpcName, args = {}) {
-  if (!state.joined || state.leaving || state.actionBusy) return null;
+  if (!state.joined || state.leaving || state.connectionSuspended || state.actionBusy) return null;
   const generation = state.sessionGeneration;
   const userId = state.userId;
   state.actionBusy = true;
@@ -505,7 +509,7 @@ async function enterWorld(displayName, appearance) {
 }
 
 async function pumpMovement() {
-  if (!state.joined || state.leaving || state.busy) return;
+  if (!state.joined || state.leaving || state.connectionSuspended || state.busy) return;
   const generation = state.sessionGeneration;
   const userId = state.userId;
   const controls = readControls();
