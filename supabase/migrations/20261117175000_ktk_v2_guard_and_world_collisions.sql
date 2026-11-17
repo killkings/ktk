@@ -552,7 +552,7 @@ begin
     update public.ktk_v2_entities
     set x=v_enemy_x,y=v_enemy_y,state=v_enemy_state,
         revision=revision+1,updated_at=v_now
-    where world_id='main' and entity_id='skeleton-1';
+    where world_id='main' and entity_id=v_enemy.entity_id;
   end loop;
 end;
 $function$;
