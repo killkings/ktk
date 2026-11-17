@@ -1203,6 +1203,191 @@ begin
 end;
 $function$;
 
+create or replace function public.ktk_v2_choose_clan(p_color text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_uid uuid:=auth.uid();
+  v_player public.ktk_v2_players;
+  v_color text:=lower(trim(coalesce(p_color,'')));
+begin
+  if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+  if v_color not in ('#d94343','#3d75d6','#4b9f62','#d9ae38','#8b61c2','#e97e28','#45a9a2','#c05a9b') then
+    raise exception 'INVALID_CLAN_COLOR';
+  end if;
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('ktk-v2:main:movement'));
+  select * into v_player from public.ktk_v2_players
+  where user_id=v_uid and world_id='main' and is_alive for update;
+  if not found then raise exception 'PLAYER_NOT_ACTIVE'; end if;
+  if coalesce((v_player.state->>'suspended')::boolean,false) then
+    raise exception 'PLAYER_SUSPENDED';
+  end if;
+  if v_player.clan_color is not null and v_player.clan_color<>v_color then
+    raise exception 'CLAN_ALREADY_CHOSEN';
+  end if;
+  update public.ktk_v2_players
+  set clan_color=v_color,revision=revision+1
+  where user_id=v_uid and world_id='main'
+  returning * into v_player;
+  return to_jsonb(v_player);
+end;
+$function$;
+
+create or replace function public.ktk_v2_launch_projectile()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_uid uuid:=auth.uid();
+  v_player public.ktk_v2_players;
+  v_item_def public.ktk_v2_item_catalog;
+  v_state jsonb;
+  v_inventory jsonb;
+  v_item jsonb;
+  v_ammo jsonb;
+  v_slot integer;
+  v_ammo_slot integer:=-1;
+  v_i integer;
+  v_quantity integer;
+  v_durability integer;
+  v_direction integer;
+  v_vx double precision;
+  v_vy double precision;
+  v_projectile_id text;
+  v_projectile_type text;
+  v_speed numeric;
+  v_max_distance numeric;
+  v_stamina_cost numeric;
+  v_mana_cost numeric;
+  v_attack integer;
+  v_now timestamptz:=clock_timestamp();
+begin
+  if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+  perform pg_catalog.set_config('lock_timeout','500ms',true);
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('ktk-v2:main:movement'));
+
+  select * into v_player
+  from public.ktk_v2_players
+  where user_id=v_uid and world_id='main' and is_alive
+  for update;
+  if not found then raise exception 'PLAYER_NOT_ACTIVE'; end if;
+
+  v_state:=coalesce(v_player.state,'{}'::jsonb);
+  if coalesce((v_state->>'suspended')::boolean,false) then
+    raise exception 'PLAYER_SUSPENDED';
+  end if;
+  v_inventory:=coalesce(v_state->'inventory','[null,null]'::jsonb);
+  v_slot:=greatest(0,least(jsonb_array_length(v_inventory)-1,coalesce((v_state->>'selected_slot')::integer,0)));
+  v_item:=v_inventory->v_slot;
+  if v_item is null or v_item='null'::jsonb then raise exception 'PROJECTILE_WEAPON_REQUIRED'; end if;
+
+  select * into v_item_def from public.ktk_v2_item_catalog
+  where item_id=v_item->>'item_id';
+  if not found or v_item_def.item_type not in ('ranged','magic') then
+    raise exception 'INVALID_PROJECTILE_WEAPON';
+  end if;
+
+  if nullif(v_state->>'next_attack_at','') is not null
+     and (v_state->>'next_attack_at')::timestamptz>v_now then
+    raise exception 'ATTACK_COOLDOWN';
+  end if;
+
+  v_stamina_cost:=greatest(0,coalesce(v_item_def.stamina_cost,0));
+  v_mana_cost:=greatest(0,coalesce((v_item_def.metadata->>'mana_cost')::numeric,0));
+  if coalesce((v_state->>'stamina')::numeric,100)<v_stamina_cost then
+    raise exception 'NOT_ENOUGH_STAMINA';
+  end if;
+  if coalesce((v_state->>'mana')::numeric,0)<v_mana_cost then
+    raise exception 'NOT_ENOUGH_MANA';
+  end if;
+
+  if coalesce(v_item_def.metadata->>'ammo','')='arrow' then
+    for v_i in 0..jsonb_array_length(v_inventory)-1 loop
+      if v_inventory->v_i<>'null'::jsonb
+         and v_inventory->v_i->>'item_id'='equipment-arrow' then
+        v_ammo_slot:=v_i;
+        exit;
+      end if;
+    end loop;
+    if v_ammo_slot<0 then raise exception 'AMMO_REQUIRED'; end if;
+    v_ammo:=v_inventory->v_ammo_slot;
+    v_quantity:=greatest(1,coalesce((v_ammo->>'quantity')::integer,1))-1;
+    if v_quantity<=0 then
+      v_inventory:=jsonb_set(v_inventory,array[v_ammo_slot::text],'null'::jsonb,true);
+    else
+      v_inventory:=jsonb_set(v_inventory,array[v_ammo_slot::text],
+        jsonb_set(v_ammo,'{quantity}',to_jsonb(v_quantity),true),true);
+    end if;
+  end if;
+
+  if v_item_def.max_durability>0 and v_item_def.durability_unit is not null then
+    v_durability:=greatest(0,round(coalesce((v_item->>'durability')::numeric,v_item_def.max_durability)-1)::integer);
+    if v_durability<=0 then
+      v_inventory:=jsonb_set(v_inventory,array[v_slot::text],'null'::jsonb,true);
+    else
+      v_inventory:=jsonb_set(v_inventory,array[v_slot::text],
+        jsonb_set(v_item,'{durability}',to_jsonb(v_durability),true),true);
+    end if;
+  end if;
+
+  v_direction:=v_player.direction;
+  v_vx:=case v_direction when 1 then -1 when 3 then 1 else 0 end;
+  v_vy:=case v_direction when 0 then -1 when 2 then 1 else 0 end;
+  v_projectile_type:=case
+    when v_item_def.item_id ilike '%boomerang%' then 'boomerang'
+    when v_item_def.item_type='magic' then 'magic'
+    else 'arrow'
+  end;
+  v_speed:=coalesce((v_item_def.metadata->>'projectile_speed')::numeric,
+    case v_projectile_type when 'boomerang' then 480 when 'magic' then 620 else 720 end);
+  v_max_distance:=greatest(72,coalesce(v_item_def.range_tiles,6)*72);
+  v_attack:=greatest(1,round(coalesce((v_state->>'attack')::numeric,10)+v_item_def.attack_bonus)::integer);
+  v_projectile_id:='projectile-'||gen_random_uuid()::text;
+
+  v_state:=jsonb_set(v_state,'{inventory}',v_inventory,true);
+  v_state:=jsonb_set(v_state,'{stamina}',
+    to_jsonb(greatest(0,coalesce((v_state->>'stamina')::numeric,100)-v_stamina_cost)),true);
+  v_state:=jsonb_set(v_state,'{mana}',
+    to_jsonb(greatest(0,coalesce((v_state->>'mana')::numeric,0)-v_mana_cost)),true);
+  v_state:=jsonb_set(v_state,'{next_attack_at}',
+    to_jsonb(v_now+make_interval(secs=>greatest(0.3,v_item_def.attack_interval)::double precision)),true);
+  v_state:=jsonb_set(v_state,'{last_attack_at}',to_jsonb(v_now),true);
+  v_state:=jsonb_set(v_state,'{last_attack_direction}',to_jsonb(v_direction),true);
+  v_state:=jsonb_set(v_state,'{last_attack_type}',to_jsonb(v_projectile_type),true);
+  v_state:=jsonb_set(v_state,'{last_attack_weapon_id}',to_jsonb(v_item_def.item_id),true);
+
+  insert into public.ktk_v2_entities(
+    world_id,entity_id,entity_type,x,y,collision_radius,state,revision
+  ) values (
+    'main',v_projectile_id,'projectile',
+    v_player.x+v_vx*18,v_player.y+v_vy*18,6,
+    jsonb_build_object(
+      'owner_id',v_uid::text,
+      'owner_clan_color',v_player.clan_color,
+      'weapon_id',v_item_def.item_id,
+      'projectile_type',v_projectile_type,
+      'vector_x',v_vx,'vector_y',v_vy,
+      'speed',v_speed,'max_distance',v_max_distance,
+      'distance',0,'damage',v_attack,'direction',v_direction,
+      'phase','outbound','created_at',v_now,'last_tick_at',v_now,'ttl',15
+    ),1
+  );
+
+  update public.ktk_v2_players
+  set state=v_state,revision=revision+1
+  where user_id=v_uid and world_id='main'
+  returning * into v_player;
+
+  return jsonb_build_object('ok',true,'projectile_id',v_projectile_id,
+    'projectile_type',v_projectile_type,'state',v_state,'attacker',to_jsonb(v_player));
+end;
+$function$;
+
 create or replace function public.ktk_v2_set_suspended(
   p_suspended boolean,
   p_sequence bigint
@@ -1219,7 +1404,9 @@ declare
   v_previous_sequence bigint;
 begin
   if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
-  if p_sequence is null or p_sequence<1 then raise exception 'INVALID_VISIBILITY_SEQUENCE'; end if;
+  if p_sequence is null or p_sequence<1 or p_sequence>2147483647 then
+    raise exception 'INVALID_VISIBILITY_SEQUENCE';
+  end if;
 
   perform pg_catalog.set_config('lock_timeout','500ms',true);
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('ktk-v2:main:movement'));
