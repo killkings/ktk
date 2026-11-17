@@ -686,7 +686,7 @@
     character.mustache=populateCatalogOptions(
       'mustache-select',window.KTKMustacheStyles || [],character.mustache,'none'
     );
-    const hairstyle=(window.KTKHairStyles || []).find(item=>item.id===(characterData.hairstyle||'hair_pixie'));
+    const hairstyle=(window.KTKHairStyles || []).find(item=>item.id===character.hairstyle);
     document.getElementById('style-name').textContent = hairstyle ? hairstyle.name : '';
   }
 
