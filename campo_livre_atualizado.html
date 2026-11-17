@@ -377,7 +377,7 @@
 })();
 </script>
 <script src="./personagem.js?v=stable-20261115-13"></script>
-<script src="./mapa/player/stats.js?v=20261117-full-audit-fixes1"></script>
+<script src="./mapa/player/stats.js?v=20261117-final-audit-perf1"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
 <script src="./enemy/skeleton/skeleton.js?v=stable-20261117-combat1"></script>
 <script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
@@ -549,6 +549,9 @@
   const worldItems = new Set();
   const serverWorldEntities = new Map();
   const serverEntityRevisions = new Map();
+  let lastServerInventorySignature = null;
+  let lastServerWearablesSignature = null;
+  let lastServerSelectedSlot = null;
   let crownRealtimeSeen = false;
   let kingCrownClaimedBy = null;
   const wearableSlotOrder = ['head','chest','waist','legs','feet'];
@@ -3110,34 +3113,53 @@
   function applyServerState(serverState) {
     if(!serverState || typeof serverState!=='object') return false;
     const stats=window.KTKPlayerStats?.stats;
+    let inventoryChanged=false;
+    let wearablesChanged=false;
+    let selectedSlotChanged=false;
     if(stats) {
       ['health','satiety','hydration','stamina','mana','magicLevel','temperature','attack','defense'].forEach(key=>{
         const source=key==='magicLevel'?'magic_level':key;
         if(serverState[source]!==undefined && stats[key]) stats[key].value=Math.max(stats[key].min,Math.min(stats[key].max,Number(serverState[source])||0));
       });
-      if(Number.isInteger(Number(serverState.selected_slot))) selectedInventorySlot=Math.max(0,Math.min(inventory.length-1,Number(serverState.selected_slot)));
+      if(Number.isInteger(Number(serverState.selected_slot))) {
+        const nextSlot=Math.max(0,Math.min(inventory.length-1,Number(serverState.selected_slot)));
+        selectedSlotChanged=nextSlot!==selectedInventorySlot;
+        selectedInventorySlot=nextSlot;
+      }
       window.KTKPlayerStats.render();
     }
     if(Array.isArray(serverState.inventory)) {
-      inventory.splice(0,inventory.length,...serverState.inventory.slice(0,2).map(entry=>{
-        if(!entry || entry==='null') return null;
-        const id=entry.item_id;
-        let item=id==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(candidate=>candidate.id===id);
-        if(!item) item=makeServerDropItem(id,entry);
-        return item?{...item,...entry,id,collected:true}:null;
-      }));
+      const signature=JSON.stringify(serverState.inventory);
+      if(signature!==lastServerInventorySignature) {
+        inventory.splice(0,inventory.length,...serverState.inventory.slice(0,2).map(entry=>{
+          if(!entry || entry==='null') return null;
+          const id=entry.item_id;
+          let item=id==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(candidate=>candidate.id===id);
+          if(!item) item=makeServerDropItem(id,entry);
+          return item?{...item,...entry,id,collected:true}:null;
+        }));
+        lastServerInventorySignature=signature;
+        inventoryChanged=true;
+      }
     }
     if(serverState.wearables) {
-      wearableSlotOrder.forEach(slot=>{
-        const entry=serverState.wearables[slot];
-        if(!entry || entry==='null') { equippedWearables[slot]=null; return; }
-        const id=entry.item_id;
-        const item=equipmentCatalog?.items.find(candidate=>candidate.id===id);
-        equippedWearables[slot]=item?{...item,...entry,id,collected:true}:null;
-      });
+      const signature=JSON.stringify(serverState.wearables);
+      if(signature!==lastServerWearablesSignature) {
+        wearableSlotOrder.forEach(slot=>{
+          const entry=serverState.wearables[slot];
+          if(!entry || entry==='null') { equippedWearables[slot]=null; return; }
+          const id=entry.item_id;
+          const item=equipmentCatalog?.items.find(candidate=>candidate.id===id);
+          equippedWearables[slot]=item?{...item,...entry,id,collected:true}:null;
+        });
+        lastServerWearablesSignature=signature;
+        wearablesChanged=true;
+      }
     }
-    renderInventory();
-    rebuildCharacterLayers();
+    // Posição, direção, estamina e outras atualizações frequentes do servidor
+    // não alteram o inventário nem exigem recarregar dezenas de sprites LPC.
+    if(inventoryChanged||wearablesChanged||selectedSlotChanged) renderInventory();
+    if(wearablesChanged) void rebuildCharacterLayers();
     return true;
   }
 
@@ -3498,6 +3520,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-full-audit-fixes1"></script>
+<script type="module" src="./js/online.js?v=20261117-final-audit-perf1"></script>
 </body>
 </html>
