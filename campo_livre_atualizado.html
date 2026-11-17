@@ -3216,7 +3216,8 @@
     rebuildCharacterLayers();
     document.getElementById('enter-world').textContent='Criar novo personagem';
     showScreen('death');
-    if(!serverConfirmed) void window.KTKOnline?.markDead?.();
+    // mark_dead agora é idempotente: o servidor já descartou o personagem quando esta confirmação chega.
+    void window.KTKOnline?.markDead?.();
     updateKingStatus();
   }
 
