@@ -14,6 +14,7 @@ declare
   v_start_y double precision;
   v_distance double precision;
   v_failed boolean;
+  i integer;
 begin
   insert into auth.users(id) values (v_uid),(v_other_uid);
 
