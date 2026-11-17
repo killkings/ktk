@@ -3,7 +3,7 @@ import { state } from "./state.js?v=20261117-remote-snapshot-007";
 import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
 } from "./supabase-client.js?v=20261117-remote-snapshot-007";
-import { sendPosition } from "./movement.js?v=20261117-remote-snapshot-007";
+import { sendPosition } from "./movement.js?v=20261117-movement-reconcile-001";
 import { subscribeWorld } from "./realtime.js?v=20261117-remote-snapshot-007";
 import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-remote-snapshot-007";
 import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-remote-snapshot-007";
