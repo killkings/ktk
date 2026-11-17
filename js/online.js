@@ -26,7 +26,8 @@ const state = {
   user: null, accessToken: "", channel: null, joined: false, online: false,
   leaving: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
-  lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
+  lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", lastInputSignature: "",
+  stepInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), profileLoads: new Map(),
   profileRetryTimers: new Map(), profileRetryCounts: new Map(), seenCombatEvents: new Set(),
@@ -56,6 +57,8 @@ function readLocal() {
     display_name: state.displayName,
     x: Number(data.x), y: Number(data.y),
     direction: Number.isFinite(Number(data.direction)) ? Math.max(0, Math.min(3, Number(data.direction))) : 2,
+    inputX: Number.isFinite(Number(data.inputX)) ? Math.max(-1, Math.min(1, Math.trunc(Number(data.inputX)))) : 0,
+    inputY: Number.isFinite(Number(data.inputY)) ? Math.max(-1, Math.min(1, Math.trunc(Number(data.inputY)))) : 0,
     character: data.character || {},
     wearables: data.wearables || {},
     combat_stats: data.combatStats || {},
@@ -437,88 +440,77 @@ async function sendPosition(force = false) {
   if (state.leaving || !state.online || !state.channel || !state.joined) return;
   const payload = readLocal();
   if (!payload) return;
+
   const now = Date.now();
-  const previous = state.lastPosition;
+  const inputX = Math.max(-1, Math.min(1, Math.trunc(Number(payload.inputX) || 0)));
+  const inputY = Math.max(-1, Math.min(1, Math.trunc(Number(payload.inputY) || 0)));
+  const moving = inputX !== 0 || inputY !== 0;
+  const running = Boolean(payload.running) && moving;
+  const guarding = Boolean(payload.guarding);
+  const inputSignature = JSON.stringify({ inputX, inputY, running, guarding });
+  const inputChanged = inputSignature !== state.lastInputSignature;
+
   const appearanceSignature = JSON.stringify({
     character: payload.character || {},
     wearables: payload.wearables || {},
     combatStats: payload.combat_stats || {}
   });
   const appearanceChanged = appearanceSignature !== state.lastAppearanceSignature;
-  const moved = !previous || Math.hypot(payload.x - previous.x, payload.y - previous.y) > 0.35 ||
-    payload.direction !== previous.direction;
-
-  if ((moved || appearanceChanged) && (force || appearanceChanged || now - state.lastSent >= 90)) {
-    state.lastSent = now;
+  if (appearanceChanged) {
     state.lastAppearanceSignature = appearanceSignature;
-    // A posição só é considerada confirmada depois da resposta do banco.
+    void trackPresence();
   }
-
-  if (appearanceChanged) void trackPresence();
   if (now - state.lastTrack >= 10000) void trackPresence();
+
   if (now - state.lastDbHeartbeat >= 10000) {
     state.lastDbHeartbeat = now;
-    void supabase.rpc("ktk_touch_player").then(({error})=>{
-      if(error) console.warn("KTK world heartbeat:",error.message);
-    }).catch(error=>console.warn("KTK world heartbeat:",error));
-  }
-  // Garante que o servidor registre caminhada/corrida antes de validar
-  // a próxima posição. Uma intenção ainda pendente nunca pode ser ultrapassada
-  // por um checkpoint que dependa dela.
-  if (state.intentInFlight) return;
-  const intentSignature = JSON.stringify({ moving: payload.moving, running: payload.running, guarding: payload.guarding });
-  if (intentSignature !== state.lastIntentSignature) {
-    state.lastIntentSignature = intentSignature;
-    state.intentInFlight = true;
-    let intentError = null;
-    try {
-      const result = await supabase.rpc("ktk_game_action", {
-        p_action: "intent",
-        p_payload: {
-          moving: Boolean(payload.moving),
-          running: Boolean(payload.running),
-          guarding: Boolean(payload.guarding)
-        }
-      });
-      intentError = result.error || null;
-    } catch (error) {
-      intentError = error;
-    } finally {
-      state.intentInFlight = false;
-    }
-    if (intentError) {
-      console.warn("KTK authoritative intent:", intentError.message || intentError);
-      state.lastIntentSignature = "";
-      return;
-    }
+    void supabase.rpc("ktk_touch_player").then(({ error }) => {
+      if (error) console.warn("KTK world heartbeat:", error.message);
+    }).catch(error => console.warn("KTK world heartbeat:", error));
   }
 
-  // Uma solicitação antiga não pode iniciar um checkpoint depois que a saída começou.
+  // O cliente envia somente a intenção de movimento. A posição, a velocidade
+  // e as colisões são calculadas no banco, a partir da posição já registrada.
+  const shouldStep = inputChanged || (moving && now - state.lastCheckpoint >= 90) || force;
+  if (!shouldStep || state.stepInFlight) return;
   if (state.leaving || !state.online || !state.joined) return;
 
-  if ((moved || force) && now - state.lastCheckpoint >= 90 && !state.positionInFlight) {
-    state.lastCheckpoint = now;
-    state.positionInFlight = true;
-    try {
-      const { data: checkpoint, error: checkpointError } = await supabase.rpc("ktk_checkpoint_player", {
-        p_x: payload.x, p_y: payload.y, p_direction: payload.direction
-      });
-      if (checkpointError) {
-        console.warn("KTK authoritative movement:", checkpointError.message);
-        return;
-      }
-      if (state.leaving || !state.online || !state.joined) return;
-      if (checkpoint && Number.isFinite(Number(checkpoint.x)) && Number.isFinite(Number(checkpoint.y))) {
-        const serverX=Number(checkpoint.x), serverY=Number(checkpoint.y);
-        const dx=serverX-payload.x, dy=serverY-payload.y;
-        if(checkpoint.accepted===false || Math.hypot(dx,dy)>1.5) {
-          window.KTKWorldEntities?.setLocalState?.(serverX,serverY,checkpoint.direction);
-        }
-        state.lastPosition={x:serverX,y:serverY,direction:Number(checkpoint.direction)};
-      }
-    } finally {
-      state.positionInFlight = false;
+  state.stepInFlight = true;
+  state.lastCheckpoint = now;
+  try {
+    const { data: step, error } = await supabase.rpc("ktk_step_player", {
+      p_input_x: inputX,
+      p_input_y: inputY,
+      p_running: running,
+      p_guarding: guarding
+    });
+    if (error) {
+      state.lastInputSignature = "";
+      console.warn("KTK server movement:", error.message);
+      return;
     }
+    if (state.leaving || !state.online || !state.joined) return;
+
+    state.lastInputSignature = inputSignature;
+    if (step && Number.isFinite(Number(step.x)) && Number.isFinite(Number(step.y))) {
+      const serverX = Number(step.x);
+      const serverY = Number(step.y);
+      const direction = Number.isFinite(Number(step.direction))
+        ? Math.max(0, Math.min(3, Number(step.direction)))
+        : payload.direction;
+      state.lastPosition = {
+        x: serverX,
+        y: serverY,
+        direction,
+        lastPositionAt: Date.now()
+      };
+      window.KTKWorldEntities?.reconcileLocalPosition?.(serverX, serverY, direction);
+    }
+  } catch (error) {
+    state.lastInputSignature = "";
+    console.warn("KTK server movement:", error?.message || error);
+  } finally {
+    state.stepInFlight = false;
   }
 }
 
@@ -590,6 +582,10 @@ async function enter(options = {}) {
     }
     await subscribeWorld();
     state.joined = true;
+    state.lastInputSignature = "";
+    state.lastCheckpoint = 0;
+    state.stepInFlight = false;
+    void setPlayerVisibility(document.visibilityState === "visible");
     return { ok: true, player };
   } catch (error) {
     console.error("KTK online:", error);
@@ -604,6 +600,8 @@ async function enter(options = {}) {
     state.remote.clear();
     state.lastPosition = null;
     state.lastIntentSignature = "";
+    state.lastInputSignature = "";
+    state.stepInFlight = false;
     updateRemotes();
     const code = error?.code || error?.error_code || "";
     const message = String(error?.message || "");
@@ -662,6 +660,8 @@ async function markDead() {
   state.remote.clear();
   state.lastPosition = null;
   state.lastIntentSignature = "";
+  state.lastInputSignature = "";
+  state.stepInFlight = false;
   updateRemotes();
   setStatus("○ Personagem morto · fora do mundo", false);
 }
@@ -694,6 +694,8 @@ async function leaveWorld() {
     state.remote.clear();
     state.lastPosition = null;
     state.lastIntentSignature = "";
+    state.lastInputSignature = "";
+    state.stepInFlight = false;
     state.lastAppearanceSignature = "";
     state.lastDbHeartbeat = 0;
     state.lastTrack = 0;
@@ -710,7 +712,23 @@ async function leaveWorld() {
   }
 }
 
+async function setPlayerVisibility(visible) {
+  if (state.leaving || !state.online || !state.joined || !state.user) return;
+  try {
+    const { error } = await supabase.rpc("ktk_set_player_visibility", {
+      p_visible: Boolean(visible)
+    });
+    if (error) console.warn("KTK player visibility:", error.message);
+  } catch (error) {
+    console.warn("KTK player visibility:", error?.message || error);
+  }
+}
+
 function startHeartbeat() {
+  document.addEventListener("visibilitychange", () => {
+    if (!state.online || !state.joined || state.leaving) return;
+    void setPlayerVisibility(document.visibilityState === "visible");
+  });
   setInterval(() => {
     if (!state.online || !state.joined) return;
     void sendPosition(false).catch(error=>console.warn("KTK position heartbeat:",error));
