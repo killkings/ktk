@@ -758,7 +758,7 @@ $$;
 -- player movement on the server instead of being cosmetic client objects.
 do $$
 declare
-  v_uid uuid := '10000000-0000-4000-8000-000000000011';
+  v_uid uuid := '10000000-0000-4000-8000-000000000013';
   v_player public.ktk_v2_players;
   v_before double precision;
   v_step jsonb;
@@ -802,8 +802,8 @@ $$;
 -- eventually die and leave their server-owned inventory as public loot.
 do $$
 declare
-  v_paused_uid uuid := '10000000-0000-4000-8000-000000000011';
-  v_disconnected_uid uuid := '10000000-0000-4000-8000-000000000012';
+  v_paused_uid uuid := '10000000-0000-4000-8000-000000000013';
+  v_disconnected_uid uuid := '10000000-0000-4000-8000-000000000014';
   v_paused public.ktk_v2_players;
   v_disconnected public.ktk_v2_players;
   v_skeleton public.ktk_v2_entities;
@@ -857,6 +857,38 @@ begin
     v_failed:=sqlerrm='PLAYER_SUSPENDED';
   end;
   if not v_failed then raise exception 'V2_SUSPENDED_CHARACTER_COULD_MOVE'; end if;
+
+  v_failed:=false;
+  begin
+    perform public.ktk_v2_item_action('select_slot','{"slot":0}'::jsonb);
+  exception when others then
+    v_failed:=sqlerrm='PLAYER_SUSPENDED';
+  end;
+  if not v_failed then raise exception 'V2_SUSPENDED_CHARACTER_COULD_MUTATE_INVENTORY'; end if;
+
+  v_failed:=false;
+  begin
+    perform public.ktk_v2_attack();
+  exception when others then
+    v_failed:=sqlerrm='PLAYER_SUSPENDED';
+  end;
+  if not v_failed then raise exception 'V2_SUSPENDED_CHARACTER_COULD_ATTACK'; end if;
+
+  v_failed:=false;
+  begin
+    perform public.ktk_v2_launch_projectile();
+  exception when others then
+    v_failed:=sqlerrm='PLAYER_SUSPENDED';
+  end;
+  if not v_failed then raise exception 'V2_SUSPENDED_CHARACTER_COULD_LAUNCH_PROJECTILE'; end if;
+
+  v_failed:=false;
+  begin
+    perform public.ktk_v2_interact();
+  exception when others then
+    v_failed:=sqlerrm='PLAYER_SUSPENDED';
+  end;
+  if not v_failed then raise exception 'V2_SUSPENDED_CHARACTER_COULD_INTERACT'; end if;
 
   update public.ktk_v2_entities
   set state=state||jsonb_build_object(
