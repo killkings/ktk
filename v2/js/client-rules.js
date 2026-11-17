@@ -13,7 +13,7 @@ export function normalizeControls(input = {}) {
     x,
     y,
     running: Boolean(input.running) && moving,
-    guarding: Boolean(input.guarding) && !moving
+    guarding: Boolean(input.guarding)
   };
 }
 
