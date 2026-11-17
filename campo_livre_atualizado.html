@@ -617,7 +617,6 @@
     });
   }
   equipStartingWearables();
-  let equipmentItemsArranged = false;
   let armorDamageCursor = 0;
   function getInnateMagicProfile(level=playerStats?.stats.magicLevel.value||0) {
     const wand=equipmentCatalog?.items.find(item=>item.id==='equipment-wand');
@@ -1917,7 +1916,7 @@
 
   function getWorldEntities() {
     const skeleton=window.KTKEnemySkeleton.entity;
-    const entities=skeleton.defeated?[]:[skeleton];
+    const entities=skeleton.lastServerRevision>0&&!skeleton.defeated?[skeleton]:[];
     worldItems.forEach(item=>{if(!item.collected) entities.push(item);});
     serverWorldEntities.forEach(entity=>entities.push(entity));
     remotePlayers.forEach(remote=>{
@@ -1926,12 +1925,6 @@
     return entities;
   }
 
-  function addWorldItem(item) {
-    if(!item||item.type!=='item'||!Number.isFinite(item.x)||!Number.isFinite(item.y)) return false;
-    item.collected=false;
-    worldItems.add(item);
-    return true;
-  }
   function makeServerDropItem(itemId, serverData={}) {
     const definitions={
       'resource-wood':{displayName:'Madeira',itemType:'material',iconEmoji:'🪵'},
@@ -2907,7 +2900,7 @@
   }
 
   window.KTKWorldEntities={
-    setRemotePlayers,entities:getWorldEntities,addItem:addWorldItem,applyServerState,
+    setRemotePlayers,entities:getWorldEntities,applyServerState,
     getLocalControls:()=>({
       inputX:playerInputX,
       inputY:playerInputY,
@@ -3041,17 +3034,6 @@
       if(button) button.textContent='Entrar no mundo →';
       showScreen('game');
 
-      if(!equipmentItemsArranged&&equipmentCatalog) {
-        try {
-          const wearableDrops=[];
-          equipmentCatalog.arrangeFirstMap(canvas.clientWidth,canvas.clientHeight,wearableDrops);
-          wearableDrops.forEach(item=>worldItems.add(item));
-          equipmentItemsArranged=true;
-        } catch(error) {
-          console.error('KTK map initialization:',error);
-          toast('Você entrou no mundo, mas alguns itens do mapa não carregaram.');
-        }
-      }
       updateKingStatus();
     } catch(error) {
       console.error('KTK startGame:',error);
