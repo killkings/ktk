@@ -617,7 +617,6 @@
     });
   }
   equipStartingWearables();
-  let equipmentItemsArranged = false;
   let armorDamageCursor = 0;
   function getInnateMagicProfile(level=playerStats?.stats.magicLevel.value||0) {
     const wand=equipmentCatalog?.items.find(item=>item.id==='equipment-wand');
@@ -1751,10 +1750,6 @@
         : playerMoving?Math.floor(walkTime*10)%WALK_COLUMNS:Math.floor(idleTime*2)%IDLE_COLUMNS;
       const renderables=[
         ...getWorldEntities().map(entity=>({entity,depth:entity.y})),
-        ...(boomerangProjectile.active?[{entity:boomerangProjectile,depth:boomerangProjectile.y}]:[]),
-        ...(arrowProjectile.active?[{entity:arrowProjectile,depth:arrowProjectile.y}]:[]),
-        ...(stoneProjectile.active?[{entity:stoneProjectile,depth:stoneProjectile.y}]:[]),
-        ...(magicProjectile.active?[{entity:magicProjectile,depth:magicProjectile.y}]:[]),
         {entity:{type:'local-player'},depth:camera.y*h+playerVisual.y}
       ].sort((a,b)=>a.depth-b.depth);
       const playerWorldX=camera.x*w+player.x;
@@ -1885,10 +1880,6 @@
     }
     idleTime+=dt;
     updatePunch(dt);
-    updateBoomerangProjectile(dt);
-    updateArrowProjectile(dt);
-    updateStoneProjectile(dt);
-    updateMagicProjectile(dt);
     let dx=0,dy=0;
     if(keys.has('w')||keys.has('arrowup')) dy-=1;
     if(keys.has('s')||keys.has('arrowdown')) dy+=1;
@@ -1925,22 +1916,15 @@
 
   function getWorldEntities() {
     const skeleton=window.KTKEnemySkeleton.entity;
-    const entities=skeleton.defeated?[]:[skeleton];
+    const entities=skeleton.lastServerRevision>0&&!skeleton.defeated?[skeleton]:[];
     worldItems.forEach(item=>{if(!item.collected) entities.push(item);});
     serverWorldEntities.forEach(entity=>entities.push(entity));
     remotePlayers.forEach(remote=>{
       entities.push({type:'player',radius:COLLISION_RADIUS,...remote});
-      (remote.remoteProjectiles||[]).forEach(projectile=>entities.push(projectile));
     });
     return entities;
   }
 
-  function addWorldItem(item) {
-    if(!item||item.type!=='item'||!Number.isFinite(item.x)||!Number.isFinite(item.y)) return false;
-    item.collected=false;
-    worldItems.add(item);
-    return true;
-  }
   function makeServerDropItem(itemId, serverData={}) {
     const definitions={
       'resource-wood':{displayName:'Madeira',itemType:'material',iconEmoji:'🪵'},
@@ -2113,7 +2097,7 @@
   }
 
   function startPunch() {
-    if(!gameStarted || !screens.game.classList.contains('active') || punch.cooldown>0 || boomerangProjectile.active || arrowProjectile.active || stoneProjectile.active || magicProjectile.active) return;
+    if(!gameStarted || !screens.game.classList.contains('active') || punch.cooldown>0) return;
     const selectedItem=inventory[selectedInventorySlot];
     const selectableWeaponClasses=new Set(['melee','ranged','magic','tool']);
     const selectedWeapon=selectedItem&&!selectedItem.wearSlot&&selectableWeaponClasses.has(selectedItem.equipmentClass)
@@ -2166,37 +2150,6 @@
     if(punch.elapsed>=PUNCH_ANIMATION_SECONDS) punch.active=false;
   }
 
-  function findRemotePlayerInAttackArc(direction,rangeInTiles=PUNCH_RANGE) {
-    const vector=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}][direction];
-    if(!vector) return null;
-    const origin=getEntityWorldPosition(player);
-    let nearest=null,nearestDistance=Infinity;
-    remotePlayers.forEach(remote=>{
-      const position=getEntityWorldPosition(remote);
-      const dx=position.x-origin.x,dy=position.y-origin.y;
-      const forward=dx*vector.x+dy*vector.y;
-      const sideways=Math.abs(dx*vector.y-dy*vector.x);
-      const radius=Number(remote.radius)||COLLISION_RADIUS;
-      const maxRange=rangeInTiles*TILE+radius;
-      const distance=Math.hypot(dx,dy);
-      if(forward<=0||forward>maxRange||sideways>radius+14) return;
-      if(distance<nearestDistance) { nearest=remote; nearestDistance=distance; }
-    });
-    return nearest;
-  }
-
-  function findRemotePlayerAtPosition(x,y,projectileRadius=0) {
-    let nearest=null,nearestDistance=Infinity;
-    remotePlayers.forEach(remote=>{
-      const position=getEntityWorldPosition(remote);
-      const distance=Math.hypot(position.x-x,position.y-y);
-      if(distance<=(Number(remote.radius)||COLLISION_RADIUS)+projectileRadius&&distance<nearestDistance) {
-        nearest=remote; nearestDistance=distance;
-      }
-    });
-    return nearest;
-  }
-
   function resolvePunchHit() {
     // O servidor escolhe o alvo real pela posição oficial dos jogadores e inimigos.
     applyCombatHit(player,null,punch.direction);
@@ -2218,104 +2171,6 @@
     return inventory.find(isArrowAmmo)||null;
   }
 
-  function getArrowAmmoCount(item) {
-    const quantity=Math.floor(Number(item?.quantity));
-    return Number.isFinite(quantity)&&quantity>0?quantity:1;
-  }
-
-  function addArrowToExistingStack(item) {
-    const arrowStack=getArrowAmmoStack();
-    if(!arrowStack) return false;
-    arrowStack.itemType='ammo';
-    arrowStack.ammoKey='arrow';
-    arrowStack.quantity=getArrowAmmoCount(arrowStack)+getArrowAmmoCount(item);
-    item.collected=true;
-    renderInventory();
-    toast(`Flechas: ${arrowStack.quantity}.`);
-    return true;
-  }
-
-  function collectNearbyArrowIntoStack() {
-    if(!getArrowAmmoStack()) return false;
-    const worldX=camera.x*canvas.clientWidth+player.x;
-    const worldY=camera.y*canvas.clientHeight+player.y;
-    let nearestArrow=null;
-    let nearestDistance=Infinity;
-    worldItems.forEach(item=>{
-      if(item.collected||!isArrowAmmo(item)) return;
-      const distance=Math.hypot(worldX-item.x,worldY-item.y);
-      if(distance<nearestDistance) {
-        nearestArrow=item;
-        nearestDistance=distance;
-      }
-    });
-    return nearestArrow&&nearestDistance<=64?addArrowToExistingStack(nearestArrow):false;
-  }
-
-  function consumeArrowAmmo(stack,amount) {
-    const current=Math.max(1,Math.floor(Number(stack.quantity)||1));
-    const remaining=Math.max(0,current-Math.max(1,Math.floor(Number(amount)||1)));
-    if(remaining===0) {
-      const slot=inventory.indexOf(stack);
-      if(slot>=0) inventory[slot]=null;
-    } else {
-      stack.quantity=remaining;
-    }
-    renderInventory();
-    if(remaining===1) toast('Última flecha no inventário.');
-  }
-
-  function getRangedProjectilePath(item,direction,handOffset,projectileRadius) {
-    const facingVector=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}][direction]||{x:0,y:1};
-    const origin=getEntityWorldPosition(player);
-    const range=(Number(item.range)>0?Number(item.range):1)*TILE;
-    const target=window.KTKEnemySkeleton.entity;
-    let vector=facingVector;
-    let maxDistance=range;
-    let launchOffset=handOffset;
-    if(!target.defeated) {
-      const dx=target.x-origin.x;
-      const dy=target.y-origin.y;
-      const forward=dx*facingVector.x+dy*facingVector.y;
-      const sideways=Math.abs(dx*facingVector.y-dy*facingVector.x);
-      const targetDistance=Math.hypot(dx,dy);
-      const targetRadius=target.radius||COLLISION_RADIUS;
-      if(forward>0&&forward<=range+targetRadius&&sideways<=targetRadius+14&&targetDistance<=range+targetRadius+projectileRadius) {
-        vector={x:dx/targetDistance,y:dy/targetDistance};
-        launchOffset=Math.min(handOffset,Math.max(0,targetDistance-projectileRadius));
-        maxDistance=Math.min(range,targetDistance);
-      }
-    }
-    return {origin,vector,launchOffset,maxDistance:Math.max(0,maxDistance-launchOffset)};
-  }
-
-  function launchRangedProjectile(projectile,item,direction,path,speed) {
-    projectile.active=true;
-    projectile.weaponItem=item;
-    projectile.vectorX=path.vector.x;
-    projectile.vectorY=path.vector.y;
-    projectile.angle=Math.atan2(path.vector.y,path.vector.x);
-    projectile.x=path.origin.x+path.vector.x*path.launchOffset;
-    projectile.y=path.origin.y+path.vector.y*path.launchOffset;
-    projectile.direction=direction;
-    projectile.elapsed=0;
-    projectile.distance=0;
-    projectile.maxDistance=path.maxDistance;
-    projectile.speed=speed;
-    projectile.phase='outbound';
-    projectile.impactElapsed=0;
-    projectile.hitApplied=false;
-    const projectileType=projectile===arrowProjectile?'arrow':projectile===stoneProjectile?'stone':'magic';
-    window.KTKOnline?.broadcastCombat({
-      kind:'projectile_start',
-      projectile_type:projectileType,
-      projectile_x:projectile.x,projectile_y:projectile.y,
-      vector_x:projectile.vectorX,vector_y:projectile.vectorY,
-      speed:projectile.speed,max_distance:projectile.maxDistance,
-      direction,weapon_id:item?.id||null
-    });
-  }
-
   function requestServerProjectile(item,direction) {
     void window.KTKOnline?.gameAction?.('launch_projectile',{
       weapon_id:String(item?.id||''),
@@ -2335,103 +2190,8 @@
     requestServerProjectile(item,direction);
   }
 
-  function updateRangedProjectile(projectile,deltaSeconds,projectileRadius) {
-    if(!projectile.active) return;
-    projectile.elapsed+=deltaSeconds;
-    if(projectile.phase==='impact') {
-      projectile.impactElapsed+=deltaSeconds;
-      if(projectile.impactElapsed>=RANGED_PROJECTILE_IMPACT_SECONDS) {
-        projectile.active=false;
-        projectile.weaponItem=null;
-      }
-      return;
-    }
-
-    const step=projectile.speed*deltaSeconds;
-    const travel=Math.min(step,projectile.maxDistance-projectile.distance);
-    projectile.distance+=travel;
-    projectile.x+=projectile.vectorX*travel;
-    projectile.y+=projectile.vectorY*travel;
-
-    const remoteTarget=findRemotePlayerAtPosition(projectile.x,projectile.y,projectileRadius);
-    if(!projectile.hitApplied&&remoteTarget) {
-      projectile.hitApplied=true;
-      applyCombatHit(player,remoteTarget,projectile.direction,true,projectile.weaponItem);
-      projectile.phase='impact';
-      projectile.impactElapsed=0;
-      return;
-    }
-    const target=window.KTKEnemySkeleton.entity;
-    if(!projectile.hitApplied&&!target.defeated&&Math.hypot(target.x-projectile.x,target.y-projectile.y)<=(target.radius||COLLISION_RADIUS)+projectileRadius) {
-      projectile.hitApplied=true;
-      applyCombatHit(player,target,projectile.direction,true,projectile.weaponItem);
-      projectile.phase='impact';
-      projectile.impactElapsed=0;
-      return;
-    }
-    if(projectile.distance>=projectile.maxDistance) {
-      projectile.active=false;
-      projectile.weaponItem=null;
-    }
-  }
-
-  function updateArrowProjectile(deltaSeconds) {
-    updateRangedProjectile(arrowProjectile,deltaSeconds,ARROW_PROJECTILE_RADIUS);
-  }
-
-  function updateStoneProjectile(deltaSeconds) {
-    updateRangedProjectile(stoneProjectile,deltaSeconds,STONE_PROJECTILE_RADIUS);
-  }
-
-  function updateMagicProjectile(deltaSeconds) {
-    updateRangedProjectile(magicProjectile,deltaSeconds,MAGIC_PROJECTILE_RADIUS);
-  }
-
   function launchBoomerang(item,direction) {
     requestServerProjectile(item,direction);
-  }
-
-  function updateBoomerangProjectile(deltaSeconds) {
-    if(!boomerangProjectile.active) return;
-    boomerangProjectile.elapsed+=deltaSeconds;
-    const step=boomerangProjectile.speed*deltaSeconds;
-
-    if(boomerangProjectile.phase==='outbound') {
-      const travel=Math.min(step,boomerangProjectile.maxDistance-boomerangProjectile.distance);
-      boomerangProjectile.distance+=travel;
-      boomerangProjectile.x=boomerangProjectile.startX+boomerangProjectile.vectorX*boomerangProjectile.distance;
-      boomerangProjectile.y=boomerangProjectile.startY+boomerangProjectile.vectorY*boomerangProjectile.distance;
-
-      const remoteTarget=findRemotePlayerAtPosition(
-        boomerangProjectile.x,boomerangProjectile.y,BOOMERANG_PROJECTILE_RADIUS
-      );
-      if(!boomerangProjectile.hitApplied&&remoteTarget) {
-        boomerangProjectile.hitApplied=true;
-        applyCombatHit(player,remoteTarget,boomerangProjectile.direction,true,boomerangProjectile.item);
-        boomerangProjectile.phase='returning';
-      } else {
-        const target=window.KTKEnemySkeleton.entity;
-        if(!boomerangProjectile.hitApplied&&!target.defeated&&Math.hypot(target.x-boomerangProjectile.x,target.y-boomerangProjectile.y)<=(target.radius||COLLISION_RADIUS)+BOOMERANG_PROJECTILE_RADIUS) {
-          boomerangProjectile.hitApplied=true;
-          applyCombatHit(player,target,boomerangProjectile.direction,true,boomerangProjectile.item);
-          boomerangProjectile.phase='returning';
-        }
-      }
-      if(boomerangProjectile.distance>=boomerangProjectile.maxDistance) boomerangProjectile.phase='returning';
-      return;
-    }
-
-    const playerPosition=getEntityWorldPosition(player);
-    const dx=playerPosition.x-boomerangProjectile.x;
-    const dy=playerPosition.y-boomerangProjectile.y;
-    const distance=Math.hypot(dx,dy);
-    if(distance<=Math.max(step,BOOMERANG_PROJECTILE_RADIUS)) {
-      boomerangProjectile.active=false;
-      boomerangProjectile.item=null;
-      return;
-    }
-    boomerangProjectile.x+=dx/distance*step;
-    boomerangProjectile.y+=dy/distance*step;
   }
 
   function getEntityWorldPosition(entity) {
@@ -2486,114 +2246,21 @@
   }
 
   function applyCombatHit(attacker,target,direction,confirmedProjectileContact=false,weaponItemOverride=null) {
-    if(attacker===player) {
-      const weapon=weaponItemOverride||punch.weaponItem;
-      const weaponId=weapon?.id||null;
-      void window.KTKOnline?.gameAction?.('attack',{direction:Number(direction),weapon_id:weaponId})
-        .then(result=>{
-          if(!result?.ok) return;
-          if(result.target_dead && result.target_type==='enemy') toast('Esqueleto derrotado.');
-          if(result.hit) {
-            const hitTarget=result.target_type==='enemy'?window.KTKEnemySkeleton.entity:remotePlayers.get(String(result.target_id));
-            if(hitTarget===window.KTKEnemySkeleton.entity) {
-              startKnockback(hitTarget,{x:[0,-1,0,1][direction],y:[-1,0,1,0][direction]});
-              hitTarget.knockback.authoritative=true;
-            }
-          }
-          if(result.state) applyServerState(result.state);
-        })
-        .catch(error=>toast(error?.message||'O servidor recusou o ataque.'));
-      return true;
-    }
-    // Nenhum cliente pode aplicar dano, desgaste ou knockback a outro
-    // jogador/inimigo. Os impactos de todas as entidades são confirmados pelo banco.
-    if(attacker!==player) return false;
-    if(target===window.KTKEnemySkeleton.entity && target.defeated) return false;
-    if(target?.type==='player'&&target.id&&target.combatStats?.health===0) return false;
-    const vector=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}][direction];
-    if(!vector) return false;
-    const attackerPosition=getEntityWorldPosition(attacker);
-    const targetPosition=getEntityWorldPosition(target);
-    const dx=targetPosition.x-attackerPosition.x;
-    const dy=targetPosition.y-attackerPosition.y;
-    const forward=dx*vector.x+dy*vector.y;
-    const sideways=Math.abs(dx*vector.y-dy*vector.x);
-    const range=(attacker===player?punch.range:PUNCH_RANGE)*TILE+(target.radius||COLLISION_RADIUS);
-    if(!confirmedProjectileContact&&(forward<=0||forward>range||sideways>(target.radius||COLLISION_RADIUS)+14)) return false;
-
-    const weaponItem=attacker===player?(weaponItemOverride||punch.weaponItem):null;
-    const weaponAttack=attacker===player&&Boolean(weaponItemOverride||punch.weaponAttack);
-    const itemAttackBonus=Number(weaponItem?.attackBonus);
-    const attackBonus=attacker===player
-      ? (weaponAttack?(Number.isFinite(itemAttackBonus)?itemAttackBonus:punch.attackBonus):0)
-      : undefined;
-    const attack=getEffectiveEntityStats(attacker,attackBonus).attack;
-    const defense=getEffectiveEntityStats(target).defense;
-    const defenseFactor=10/(10+Math.max(0,defense));
-    const baseDamage=Math.max(1,Math.round(attack*defenseFactor));
-    const damageMultiplier=attacker===player&&weaponItem?.id==='level-six-innate-magic'
-      ? Math.max(1,Number(punch.damageMultiplier)||1)
-      : 1;
-    const materialDamageMultiplier=attacker===player
-      ? Math.max(1,Number(weaponItem?.materialDamageBonuses?.[target.creatureType])||1)
-      : 1;
-    const damage=Math.floor(baseDamage*damageMultiplier*materialDamageMultiplier);
-    let targetHealth=null;
-    if(weaponAttack&&weaponItem&&weaponItem.durabilityUnit!=='blocks') {
-      weaponItem.durability=Math.max(0,weaponItem.durability-1);
-      if(weaponItem.durability===0) {
-        const slot=inventory.indexOf(weaponItem);
-        if(slot>=0) inventory[slot]=null;
-        toast(`${weaponItem.displayName||'Item'} quebrou.`);
+    if(attacker!==player || !gameStarted || !Number.isInteger(Number(direction))) return false;
+    const weapon=weaponItemOverride||punch.weaponItem;
+    void window.KTKOnline?.gameAction?.('attack',{
+      direction:Number(direction),
+      weapon_id:weapon?.id||null
+    }).then(result=>{
+      if(!result?.ok) return;
+      if(result.target_dead && result.target_type==='enemy') toast('Esqueleto derrotado.');
+      if(result.hit && result.target_type==='enemy') {
+        const enemy=window.KTKEnemySkeleton.entity;
+        startKnockback(enemy,{x:[0,-1,0,1][Number(direction)],y:[-1,0,1,0][Number(direction)]});
+        if(enemy.knockback) enemy.knockback.authoritative=true;
       }
-      renderInventory();
-    }
-    if(target===player) {
-      const health=window.KTKPlayerStats.stats.health;
-      wearEquippedArmor();
-      health.value=Math.max(health.min,health.value-damage);
-      window.KTKPlayerStats.render();
-      window.KTKOnline?.broadcastCombat({
-        kind:'player_damaged',damage,
-        knockback_x:vector.x,knockback_y:vector.y
-      });
-      if(health.value<=health.min) handlePlayerDeath();
-    } else if(target?.type==='player'&&target.id) {
-      const previousHealth=Number(target.combatStats?.health);
-      targetHealth=Number.isFinite(previousHealth)?Math.max(0,previousHealth-damage):null;
-      target.combatStats={
-        ...(target.combatStats||{}),
-        ...(targetHealth===null?{}:{health:targetHealth})
-      };
-    } else {
-      target.attacking=false;
-      target.attackElapsed=0;
-      target.health=Math.max(0,target.health-damage);
-      if(target.health===0) {
-        target.defeated=true;
-        toast('Esqueleto derrotado.');
-      }
-      refreshSkeletonCombatStats();
-    }
-    startKnockback(target,vector);
-    if(target?.type==='player'&&target.id) {
-      window.KTKOnline?.broadcastCombat({
-        kind:'pvp_hit',
-        target_user_id:String(target.id),
-        target_health:Number.isFinite(targetHealth)?targetHealth:null,
-        damage,
-        target_x:targetPosition.x,target_y:targetPosition.y,
-        knockback_x:vector.x,knockback_y:vector.y
-      });
-      return true;
-    }
-    if(target===window.KTKEnemySkeleton.entity) {
-      window.KTKOnline?.broadcastCombat({
-        kind:'skeleton_hit',damage,
-        target_x:targetPosition.x,target_y:targetPosition.y,
-        knockback_x:vector.x,knockback_y:vector.y
-      });
-    }
+      if(result.state) applyServerState(result.state);
+    }).catch(error=>toast(error?.message||'O servidor recusou o ataque.'));
     return true;
   }
 
@@ -2664,24 +2331,6 @@
 
   function wearableSlotLabel(slot) {
     return ({head:'cabeca',chest:'peito',waist:'costas',legs:'pernas',feet:'pes'})[slot]||slot;
-  }
-
-  function wearEquippedArmor() {
-    const wornArmor=wearableSlotOrder.filter(slot=>{
-      const item=equippedWearables[slot];
-      return item?.wearCategory==='armor'&&item.durability>0;
-    });
-    if(!wornArmor.length) return;
-    const slot=wornArmor[armorDamageCursor%wornArmor.length];
-    armorDamageCursor++;
-    const item=equippedWearables[slot];
-    item.durability=Math.max(0,item.durability-1);
-    if(item.durability===0) {
-      equippedWearables[slot]=null;
-      toast(`${item.displayName||'Armadura'} quebrou.`);
-      rebuildCharacterLayers();
-    }
-    renderInventory();
   }
 
   function describeEquipment(item) {
@@ -2764,9 +2413,7 @@
   }
 
   function selectInventorySlot(index) {
-    if(index<0||index>=inventory.length) return;
-    selectedInventorySlot=index;
-    renderInventory();
+    if(!Number.isInteger(index)||index<0||index>=inventory.length) return;
     void window.KTKOnline?.gameAction?.('select_slot',{slot:index})
       .catch(error=>toast(error?.message||'O servidor não confirmou o espaço selecionado.'));
   }
@@ -2878,6 +2525,8 @@
   }
 
   async function collectNearbyItem() {
+    // This is only target selection for the interaction button. The server
+    // rechecks distance, capacity, stack rules and the actual pickup operation.
     const worldX=camera.x*canvas.clientWidth+player.x;
     const worldY=camera.y*canvas.clientHeight+player.y;
     const hasArrowStack=Boolean(getArrowAmmoStack());
@@ -2906,55 +2555,26 @@
       if(!inventory[selectedInventorySlot]) toast(`Chegue mais perto de ${itemToCollect.displayName||'item'} para coletar.`);
       return false;
     }
-    if(itemToCollect.equipmentClass==='shield'&&inventory.some(item=>item?.equipmentClass==='shield')) {
-      toast('Você só pode carregar um escudo no inventário.');
+
+    if(itemToCollect.isKingCrown) {
+      if(itemToCollect.wearSlot) {
+        await equipCollectedWearable(itemToCollect);
+      } else {
+        const claim=await window.KTKOnline?.claimKingCrown?.();
+        if(!claim?.ok) toast(claim?.error||'O servidor não confirmou a posse da Coroa Real.');
+        else if(claim.data?.state) applyServerState(claim.data.state);
+      }
       return true;
     }
-    if(itemToCollect.isKingCrown) {
-      if(itemToCollect.wearSlot&&await equipCollectedWearable(itemToCollect)) return true;
-    } else {
-      try {
-        await window.KTKOnline?.gameAction?.('pickup',{entity_id:itemToCollect.entityId});
-        return true;
-      } catch(error) {
-        toast(error?.message||'O servidor recusou a coleta.');
-        return true;
-      }
-    }
 
-    const previousItem=inventory[selectedInventorySlot];
-    if(previousItem&&previousItem!==itemToCollect) {
-      dropItemAtPlayer(previousItem,(player.direction+2)%4);
+    try {
+      const result=await window.KTKOnline?.gameAction?.('pickup',{entity_id:itemToCollect.entityId});
+      if(result?.ok===false) toast(result?.error||'O servidor recusou a coleta.');
+      return true;
+    } catch(error) {
+      toast(error?.message||'O servidor recusou a coleta.');
+      return true;
     }
-    inventory[selectedInventorySlot]=itemToCollect;
-    itemToCollect.collected=true;
-    renderInventory();
-    [itemToCollect.image,itemToCollect.iconImage].filter(Boolean).forEach(image=>{
-      if(!image.complete) image.addEventListener('load',renderInventory,{once:true});
-    });
-    toast(previousItem&&previousItem!==itemToCollect
-      ? `${itemToCollect.displayName||'Item'} coletado; ${previousItem.displayName||'item anterior'} solto.`
-      : `${itemToCollect.displayName||'Item'} coletado.`);
-    return true;
-  }
-
-  function dropItemAtPlayer(item,directionIndex=player.direction) {
-    const directions=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}];
-    const direction=directions[directionIndex]||directions[2];
-    item.x=camera.x*canvas.clientWidth+player.x+direction.x*48;
-    item.y=camera.y*canvas.clientHeight+player.y+direction.y*48;
-    item.collected=false;
-    item.isStartingWearable=false;
-    if(item.isKingCrown) {
-      item.collected=true;
-      worldItems.delete(item);
-      void window.KTKOnline?.dropKingCrown?.(item.x,item.y).then(result=>{
-        if(!result?.ok) toast(result?.error||'O servidor não confirmou a devolução da coroa.');
-      });
-    } else {
-      worldItems.add(item);
-    }
-    updateKingStatus();
   }
 
   function drawResourceEntity(g,resource,x,y) {
@@ -3280,47 +2900,12 @@
   }
 
   window.KTKWorldEntities={
-    setRemotePlayers,entities:getWorldEntities,addItem:addWorldItem,applyServerState,
-    getLocalState:()=>({
-      x:camera.x*(canvas.clientWidth||0)+player.x,
-      y:camera.y*(canvas.clientHeight||0)+player.y,
-      direction:player.direction,
+    setRemotePlayers,entities:getWorldEntities,applyServerState,
+    getLocalControls:()=>({
       inputX:playerInputX,
       inputY:playerInputY,
       running:Boolean(playerRunning),
-      moving:Boolean(playerMoving),
-      guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield()),
-      character:{...character},
-      combatStats:(()=>{
-        const stats=window.KTKPlayerStats.stats;
-        const combat=window.KTKPlayerStats.getEffectiveCombatStats();
-        return {
-          health:stats.health.value,maxHealth:stats.health.max,
-          satiety:stats.satiety.value,maxSatiety:stats.satiety.max,
-          hydration:stats.hydration.value,maxHydration:stats.hydration.max,
-          stamina:stats.stamina.value,maxStamina:stats.stamina.max,
-          attack:combat.attack,defense:combat.defense
-        };
-      })(),
-      wearables:Object.fromEntries(wearableSlotOrder.map(slot=>{
-        const item=equippedWearables[slot];
-        if(!item) return [slot,null];
-        return [slot,{
-          displayName:item.displayName||slot,
-          itemId:item.id||null,
-          isKingCrown:Boolean(item.isKingCrown),
-          wearCategory:item.wearCategory||'cosmetic',
-          durability:Number.isFinite(Number(item.durability))?Number(item.durability):1,
-          appearanceLayers:Array.isArray(item.appearanceLayers)
-            ? item.appearanceLayers.map(layer=>({
-                path:String(layer.path||''),
-                z:Number(layer.z)||0,
-                mode:layer.mode||null,
-                palette:layer.palette||null
-              })).filter(layer=>layer.path)
-            : []
-        }];
-      }))
+      guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield())
     }),
     applyServerKnockback:(event,x,y,direction)=>{
       if(playerDead) return false;
@@ -3340,6 +2925,65 @@
     setLocalState:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,true),
     reconcileLocalPosition:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,false)
   };
+  function clearClientWorldReplica() {
+    // Descarta somente cópias de renderização/estado recebidas do servidor.
+    // Nenhuma dessas estruturas é usada para persistir ou decidir o mundo.
+    playerDead=true;
+    newCharacterRequired=true;
+    gameStarted=false;
+    keys.clear();
+    playerInputX=0; playerInputY=0; playerMoving=false; playerRunning=false;
+    rightMouseHeld=false;
+    shieldStaminaExhausted=false;
+    remotePlayers.clear();
+    remoteLayerCache.clear();
+    serverWorldEntities.clear();
+    serverEntityRevisions.clear();
+    worldItems.clear();
+    crownRealtimeSeen=false;
+    kingCrownClaimedBy=null;
+    inventory.fill(null);
+    wearableSlotOrder.forEach(slot=>{equippedWearables[slot]=null;});
+    selectedInventorySlot=0;
+    lastServerInventorySignature=null;
+    lastServerWearablesSignature=null;
+    lastServerSelectedSlot=null;
+    player.x=0; player.y=0; player.direction=2;
+    player.knockback=null; player.knockbackHeight=0;
+    playerVisual.x=0; playerVisual.y=0;
+    playerVisual.targetX=0; playerVisual.targetY=0;
+    playerVisual.initialized=false;
+    camera.x=0; camera.y=0;
+    walkTime=0; idleTime=0;
+    punch.active=false; punch.elapsed=0; punch.cooldown=0;
+    punch.hitApplied=false; punch.weaponAttack=false; punch.weaponItem=null;
+    boomerangProjectile.active=false;
+    arrowProjectile.active=false;
+    stoneProjectile.active=false;
+    magicProjectile.active=false;
+    const skeleton=window.KTKEnemySkeleton?.entity;
+    if(skeleton) {
+      skeleton.lastServerRevision=0;
+      skeleton.attacking=false;
+      skeleton.attackElapsed=0;
+      skeleton.attackHitApplied=false;
+      skeleton.knockback=null;
+      skeleton.knockbackHeight=0;
+    }
+    equipmentCatalog?.items?.forEach(item=>{if(item) item.collected=false;});
+    Object.assign(character,{
+      gender:'male',skin:'brown',eyes:'brown',hairstyle:'hair_pixie',
+      hair:'dark_brown',beard:'none',mustache:'none'
+    });
+    window.KTKPlayerStats?.resetForNewCharacter?.();
+    equipStartingWearables();
+    renderInventory();
+    renderWearableSlots();
+    rebuildCharacterLayers();
+    setRemotePlayers([]);
+    updateKingStatus();
+  }
+
   function handlePlayerDeath(serverConfirmed=false) {
     if(playerDead) return;
     playerDead=true;
@@ -3352,16 +2996,7 @@
     player.knockback=null;
     player.knockbackHeight=0;
 
-    wearableSlotOrder.forEach(slot=>{equippedWearables[slot]=null;});
-    inventory.forEach((item,index)=>{inventory[index]=null;});
-
-    boomerangProjectile.active=false;
-    arrowProjectile.active=false;
-    stoneProjectile.active=false;
-    magicProjectile.active=false;
-    selectedInventorySlot=0;
-    renderInventory();
-    rebuildCharacterLayers();
+    clearClientWorldReplica();
     document.getElementById('enter-world').textContent='Criar novo personagem';
     showScreen('death');
     // mark_dead agora é idempotente: o servidor já descartou o personagem quando esta confirmação chega.
@@ -3415,8 +3050,7 @@
         );
       }
       if(newCharacterRequired) {
-        equipStartingWearables();
-        playerStats?.resetForNewCharacter?.();
+        // Os equipamentos e atributos iniciais já foram confirmados pelo servidor.
         player.knockback=null; player.knockbackHeight=0;
         camera.x=0; camera.y=0; walkTime=0; idleTime=0;
         keys.clear();
@@ -3450,17 +3084,6 @@
       if(button) button.textContent='Entrar no mundo →';
       showScreen('game');
 
-      if(!equipmentItemsArranged&&equipmentCatalog) {
-        try {
-          const wearableDrops=[];
-          equipmentCatalog.arrangeFirstMap(canvas.clientWidth,canvas.clientHeight,wearableDrops);
-          wearableDrops.forEach(item=>worldItems.add(item));
-          equipmentItemsArranged=true;
-        } catch(error) {
-          console.error('KTK map initialization:',error);
-          toast('Você entrou no mundo, mas alguns itens do mapa não carregaram.');
-        }
-      }
       updateKingStatus();
     } catch(error) {
       console.error('KTK startGame:',error);
@@ -3497,6 +3120,7 @@
 
       // Esc encerra a vida atual. A próxima entrada obrigatoriamente cria
       // outra identidade anônima e recebe estado inicial no servidor.
+      clearClientWorldReplica();
       playerDead=true;
       newCharacterRequired=true;
       gameStarted=false;
@@ -3675,6 +3299,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-server-movement-v3"></script>
+<script type="module" src="./js/online.js?v=20261117-authoritative-session-v4"></script>
 </body>
 </html>
