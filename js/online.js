@@ -14,7 +14,8 @@ const state = {
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
   lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
-  remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(), connecting: false
+  remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(),
+  lastLocalKnockbackAt: "", connecting: false
 };
 
 function setStatus(message, connected = false) {
@@ -70,6 +71,13 @@ function acceptDatabaseChange(payload) {
   if (!row?.user_id) return;
   if (row.user_id === state.user?.id) {
     if (row.state) window.KTKWorldEntities?.applyServerState?.(row.state);
+    const knockbackAt=String(row.state?.last_knockback_at||"");
+    if (row.is_alive !== false && knockbackAt && knockbackAt!==state.lastLocalKnockbackAt) {
+      state.lastLocalKnockbackAt=knockbackAt;
+      window.KTKWorldEntities?.applyServerKnockback?.(
+        row.state?.last_knockback, row.x, row.y, row.direction
+      );
+    }
     if (row.is_alive === false) window.KTKWorldEntities?.serverDeath?.();
     return;
   }
@@ -90,7 +98,9 @@ function acceptDatabaseChange(payload) {
     }
   }, "database");
   const changedRemote=state.remote.get(String(row.user_id));
-  if(changedRemote&&serverState.last_knockback) {
+  const knockbackAt=String(serverState.last_knockback_at||"");
+  if(changedRemote&&serverState.last_knockback&&knockbackAt&&knockbackAt!==changedRemote.lastServerKnockbackAt) {
+    changedRemote.lastServerKnockbackAt=knockbackAt;
     changedRemote.knockback={
       x:Number(serverState.last_knockback.x)||0,
       y:Number(serverState.last_knockback.y)||0,
