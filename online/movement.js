@@ -2,6 +2,10 @@
 import { state } from "./state.js?v=20261117-online-separation-001";
 import { supabase } from "./supabase-client.js?v=20261117-online-separation-001";
 
+state.lastMovementLatencyMs = Math.max(
+  0, Math.min(750, Number(state.lastMovementLatencyMs) || 150)
+);
+
 function readControlInput() {
   const data = window.KTKWorldEntities?.getLocalControls?.();
   if (!data) return null;
@@ -9,7 +13,8 @@ function readControlInput() {
     inputX: Number.isFinite(Number(data.inputX)) ? Math.max(-1, Math.min(1, Math.trunc(Number(data.inputX)))) : 0,
     inputY: Number.isFinite(Number(data.inputY)) ? Math.max(-1, Math.min(1, Math.trunc(Number(data.inputY)))) : 0,
     running: Boolean(data.running),
-    guarding: Boolean(data.guarding)
+    guarding: Boolean(data.guarding),
+    inputAgeMs: Math.max(0, Math.min(750, Math.trunc(Number(data.inputAgeMs) || 0)))
   };
 }
 
@@ -39,7 +44,7 @@ function compareServerTimestamps(a, b) {
   return leftText === rightText ? 0 : (leftText < rightText ? -1 : 1);
 }
 
-export function applyOwnServerPosition(position, latencyMs = 0) {
+export function applyOwnServerPosition(position, latencyMs = 0, requestInput = null) {
   const x = Number(position?.x);
   const y = Number(position?.y);
   const positionUpdatedAt = String(position?.position_updated_at || position?.positionUpdatedAt || "");
@@ -63,7 +68,7 @@ export function applyOwnServerPosition(position, latencyMs = 0) {
     positionUpdatedAt,
     receivedAt: Date.now()
   };
-  window.KTKWorldEntities?.reconcileLocalPosition?.(x, y, direction, latencyMs);
+  window.KTKWorldEntities?.reconcileLocalPosition?.(x, y, direction, latencyMs, requestInput);
   return true;
 }
 
@@ -80,9 +85,14 @@ export async function sendPosition(force = false) {
   const guarding = Boolean(payload.guarding);
   const inputSignature = JSON.stringify({ inputX, inputY, running, guarding });
   const inputChanged = inputSignature !== state.lastInputSignature;
+  const requestInput = { inputX, inputY, running, guarding };
+  const inputAgeAtServer = Math.max(0, Math.min(
+    750,
+    Math.round(payload.inputAgeMs + (Number(state.lastMovementLatencyMs) || 150) / 2)
+  ));
 
-  // O cliente envia somente a intenção de movimento. A posição, a velocidade
-  // e as colisões são calculadas no banco, a partir da posição já registrada.
+  // O navegador envia controles e a idade aproximada da intenção; posição,
+  // velocidade de equipamento e colisões permanecem autoritativas no SQL.
   const shouldStep = inputChanged || (moving && now - state.lastCheckpoint >= 90) || force;
   if (!shouldStep || state.stepInFlight) return;
   if (state.leaving || !state.online || !state.joined) return;
@@ -95,16 +105,23 @@ export async function sendPosition(force = false) {
   state.stepController = stepController;
   const stepTimeout = setTimeout(() => stepController.abort(), 900);
 
+  let stepAccepted = false;
   try {
     const requestStartedAt = Date.now();
     const { data: step, error } = await supabase.rpc("ktk_step_player", {
       p_input_x: inputX,
       p_input_y: inputY,
       p_running: running,
-      p_guarding: guarding
+      p_guarding: guarding,
+      p_input_age_ms: inputAgeAtServer
     }).abortSignal(stepController.signal);
 
     if (stepId !== state.stepSequence) return;
+    const requestLatencyMs = Date.now() - requestStartedAt;
+    state.lastMovementLatencyMs = Math.max(0, Math.min(
+      750,
+      (Number(state.lastMovementLatencyMs) || 150) * 0.75 + requestLatencyMs * 0.25
+    ));
     if (error) {
       state.lastInputSignature = "";
       console.warn("KTK server movement:", error.message);
@@ -113,6 +130,7 @@ export async function sendPosition(force = false) {
     if (state.leaving || !state.online || !state.joined) return;
 
     state.lastInputSignature = inputSignature;
+    stepAccepted = Boolean(step && step.accepted !== false);
     if (step && Number.isFinite(Number(step.x)) && Number.isFinite(Number(step.y))) {
       const serverX = Number(step.x);
       const serverY = Number(step.y);
@@ -124,7 +142,7 @@ export async function sendPosition(force = false) {
         y: serverY,
         direction,
         position_updated_at: step.position_updated_at
-      }, Date.now() - requestStartedAt);
+      }, requestLatencyMs, requestInput);
     }
   } catch (error) {
     if (stepId === state.stepSequence) {
@@ -154,7 +172,9 @@ export async function sendPosition(force = false) {
             running: Boolean(latest.running) && latestMoving,
             guarding: Boolean(latest.guarding)
           });
-          if (latestSignature !== inputSignature) void sendPosition(false);
+          if (latestSignature !== inputSignature || (stepAccepted && latestMoving)) {
+            void sendPosition(false);
+          }
         }
       }
     }
