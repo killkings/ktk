@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 const state = {
   user: null, channel: null, joined: false, online: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
-  lastPosition: null, lastAppearanceSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
+  lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(), connecting: false
 };
@@ -40,6 +40,8 @@ function readLocal() {
     character: data.character || {},
     wearables: data.wearables || {},
     combat_stats: data.combatStats || {},
+    running: Boolean(data.running),
+    guarding: Boolean(data.guarding),
     is_alive: true,
     updated_at: Date.now()
   };
@@ -68,6 +70,7 @@ function acceptDatabaseChange(payload) {
   if (!row?.user_id) return;
   if (row.user_id === state.user?.id) {
     if (row.state) window.KTKWorldEntities?.applyServerState?.(row.state);
+    if (row.is_alive === false) window.KTKWorldEntities?.serverDeath?.();
     return;
   }
   if (row.is_alive === false) {
@@ -378,6 +381,20 @@ async function sendPosition(force = false) {
       if(error) console.warn("KTK world heartbeat:",error.message);
     });
   }
+  const intentSignature = JSON.stringify({ running: payload.running, guarding: payload.guarding });
+  if (intentSignature !== state.lastIntentSignature) {
+    state.lastIntentSignature = intentSignature;
+    void supabase.rpc("ktk_game_action", {
+      p_action: "intent",
+      p_payload: { running: Boolean(payload.running), guarding: Boolean(payload.guarding) }
+    }).then(({ error }) => {
+      if (error) {
+        console.warn("KTK authoritative intent:", error.message);
+        state.lastIntentSignature = "";
+      }
+    });
+  }
+
   if ((moved || force) && now - state.lastCheckpoint >= 90 && !state.positionInFlight) {
     state.lastCheckpoint = now;
     state.positionInFlight = true;
@@ -412,12 +429,30 @@ async function enter(options = {}) {
     state.displayName = displayName;
     localStorage.setItem("ktk-display-name", displayName);
 
-    let { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    if (sessionError) throw sessionError;
-    if (!sessionData.session) {
+    let sessionData;
+    if (options.newCharacter) {
+      // Morte é permanente: a nova tentativa recebe um auth.uid() totalmente novo.
+      // A identidade antiga e seu registro de morte permanecem no banco.
+      if (state.channel) {
+        try { await supabase.removeChannel(state.channel); } catch (cleanupError) {
+          console.warn("KTK old session cleanup:", cleanupError);
+        }
+        state.channel = null;
+      }
+      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+      if (signOutError) throw signOutError;
       const result = await supabase.auth.signInAnonymously();
-      if (result.error) throw new Error("Não foi possível criar sua conta de jogador. Confira se o login anônimo está ativado no Supabase: " + result.error.message);
+      if (result.error) throw new Error("Não foi possível criar outra conta de jogador. Confira se o login anônimo está ativado no Supabase: " + result.error.message);
       sessionData = { session: result.data.session };
+    } else {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      sessionData = data;
+      if (!sessionData.session) {
+        const result = await supabase.auth.signInAnonymously();
+        if (result.error) throw new Error("Não foi possível criar sua conta de jogador. Confira se o login anônimo está ativado no Supabase: " + result.error.message);
+        sessionData = { session: result.data.session };
+      }
     }
     state.user = sessionData.session.user;
 
@@ -455,6 +490,8 @@ async function enter(options = {}) {
     state.online = false;
     state.joined = false;
     state.remote.clear();
+    state.lastPosition = null;
+    state.lastIntentSignature = "";
     updateRemotes();
     const code = error?.code || error?.error_code || "";
     const message = String(error?.message || "");
@@ -499,6 +536,8 @@ async function markDead() {
   state.online = false;
   state.joined = false;
   state.remote.clear();
+  state.lastPosition = null;
+  state.lastIntentSignature = "";
   updateRemotes();
   setStatus("○ Personagem morto · fora do mundo", false);
 }
