@@ -1,0 +1,44 @@
+name: Validate LPC catalog
+
+on:
+  pull_request:
+    paths:
+      - "personagem.js"
+      - "tools/gerar_catalogo_lpc.mjs"
+      - "js/lpc-config.js"
+      - ".github/workflows/lpc-catalog.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "personagem.js"
+      - "tools/gerar_catalogo_lpc.mjs"
+      - "js/lpc-config.js"
+      - ".github/workflows/lpc-catalog.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regenerate:
+    name: Regenerate catalog from a clean checkout
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out KTK without the LPC source repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Regenerate personagem.js from the pinned LPC revision
+        shell: bash
+        run: |
+          test ! -e Universal-LPC-Spritesheet-Character-Generator-master
+          node tools/gerar_catalogo_lpc.mjs
+
+      - name: Ensure the generated catalog is reproducible
+        run: git diff --exit-code -- personagem.js
