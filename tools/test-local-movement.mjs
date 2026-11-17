@@ -87,11 +87,11 @@ const intentTimeline = replicaContext.window.KTKWorldEntities.getLocalIntentTime
   { inputX:1,inputY:0,running:false,guarding:false }
 );
 assert.deepEqual(
-  intentTimeline.map(segment => ({
+  JSON.parse(JSON.stringify(intentTimeline.map(segment => ({
     inputX:segment.inputX,
     inputY:segment.inputY,
     durationMs:Math.round(segment.durationMs)
-  })),
+  })))),
   [
     {inputX:1,inputY:0,durationMs:50},
     {inputX:-1,inputY:0,durationMs:50}
