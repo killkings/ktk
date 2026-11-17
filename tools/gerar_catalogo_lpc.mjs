@@ -1,15 +1,136 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+/*
+ * Execute com: node tools/gerar_catalogo_lpc.mjs
+ * Se a fonte LPC não estiver ao lado do jogo, o script baixa somente as pastas
+ * necessárias, na revisão imutável definida em js/lpc-config.js, para uma pasta
+ * temporária e a remove no final. KTK_LPC_SOURCE_DIR permite apontar para uma
+ * cópia já existente, desde que esteja na mesma revisão fixada.
+ */
 const GAME_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const LPC_ROOT = path.join(
-  GAME_ROOT,
-  "Universal-LPC-Spritesheet-Character-Generator-master",
-);
+const CONFIG_FILE = path.join(GAME_ROOT, "js", "lpc-config.js");
+const configSource = await fs.readFile(CONFIG_FILE, "utf8");
+const configMatch = configSource.match(/const LPC_SOURCE_CONFIG = (\{[\s\S]*?\});/);
+if (!configMatch) throw new Error("Não foi possível ler a configuração LPC em js/lpc-config.js.");
+const LPC_SOURCE_CONFIG = JSON.parse(configMatch[1]);
+
+function runGit(cwd, args) {
+  try {
+    return execFileSync("git", args, {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+  } catch (error) {
+    const detail = error.stderr?.toString().trim() || error.message;
+    throw new Error("Falha no Git (" + args.join(" ") + "): " + detail, { cause: error });
+  }
+}
+
+async function hasRequiredLpcFolders(root) {
+  try {
+    await Promise.all([
+      fs.access(path.join(root, "sheet_definitions")),
+      fs.access(path.join(root, "spritesheets", "hair")),
+      fs.access(path.join(root, "spritesheets", "beards")),
+    ]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isPinnedLpcSource(root) {
+  if (!(await hasRequiredLpcFolders(root))) return false;
+  try {
+    return runGit(root, ["rev-parse", "HEAD"]).trim() === LPC_SOURCE_CONFIG.revision;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveLpcSource() {
+  const override = process.env.KTK_LPC_SOURCE_DIR;
+  if (override) {
+    const root = path.resolve(override);
+    if (!(await isPinnedLpcSource(root))) {
+      throw new Error(
+        "KTK_LPC_SOURCE_DIR precisa ser um checkout Git válido na revisão " +
+          LPC_SOURCE_CONFIG.revision + ": " + root,
+      );
+    }
+    return { root, cleanup: null, downloaded: false };
+  }
+
+  const existing = path.join(
+    GAME_ROOT,
+    "Universal-LPC-Spritesheet-Character-Generator-master",
+  );
+  if (await isPinnedLpcSource(existing)) {
+    return { root: existing, cleanup: null, downloaded: false };
+  }
+
+  const temporaryRoot = await fs.mkdtemp(path.join(os.tmpdir(), "ktk-lpc-catalog-"));
+  try {
+    runGit(GAME_ROOT, ["init", "--quiet", temporaryRoot]);
+    runGit(temporaryRoot, ["remote", "add", "origin", LPC_SOURCE_CONFIG.repository]);
+    runGit(temporaryRoot, ["sparse-checkout", "init", "--cone"]);
+    runGit(temporaryRoot, [
+      "sparse-checkout",
+      "set",
+      "sheet_definitions",
+      "spritesheets/hair",
+      "spritesheets/beards",
+    ]);
+
+    try {
+      runGit(temporaryRoot, [
+        "fetch",
+        "--depth=1",
+        "--filter=blob:none",
+        "origin",
+        LPC_SOURCE_CONFIG.revision,
+      ]);
+    } catch {
+      // Compatibilidade com instalações de Git que não aceitem partial clone.
+      runGit(temporaryRoot, ["fetch", "--depth=1", "origin", LPC_SOURCE_CONFIG.revision]);
+    }
+    runGit(temporaryRoot, ["checkout", "--quiet", "--detach", "FETCH_HEAD"]);
+
+    if (!(await isPinnedLpcSource(temporaryRoot))) {
+      throw new Error("O checkout LPC não corresponde à revisão fixada ou está incompleto.");
+    }
+    return {
+      root: temporaryRoot,
+      downloaded: true,
+      cleanup: () => fs.rm(temporaryRoot, { recursive: true, force: true }),
+    };
+  } catch (error) {
+    await fs.rm(temporaryRoot, { recursive: true, force: true });
+    throw new Error(
+      "Não consegui preparar a fonte LPC na revisão " +
+        LPC_SOURCE_CONFIG.revision +
+        ". Verifique se Git e acesso ao GitHub estão disponíveis. " +
+        error.message,
+      { cause: error },
+    );
+  }
+}
+
+const lpcSource = await resolveLpcSource();
+const LPC_ROOT = lpcSource.root;
 const DEFINITIONS_ROOT = path.join(LPC_ROOT, "sheet_definitions");
 const SPRITES_ROOT = path.join(LPC_ROOT, "spritesheets");
 const OUTPUT_FILE = path.join(GAME_ROOT, "personagem.js");
+
+try {
+  if (lpcSource.downloaded) {
+    console.log("Fonte LPC preparada na revisão " + LPC_SOURCE_CONFIG.revision + ".");
+  }
 const BODY_TYPES = ["male", "female"];
 
 // Rótulos traduzidos a partir dos nomes oficiais em sheet_definitions.
@@ -118,6 +239,7 @@ const PORTUGUESE_NAMES = {
   beards_mustache: "Bigode básico",
   beards_walrus: "Bigode morsa",
 };
+
 
 async function listFiles(directory) {
   const result = [];
@@ -376,3 +498,6 @@ console.log(
     referencedFaceHairFiles.size +
     " caminhos referenciados pelas opções.",
 );
+} finally {
+  await lpcSource.cleanup?.();
+}

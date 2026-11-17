@@ -2,7 +2,8 @@
 (function () {
   'use strict';
   window.KTKEquipmentModules = window.KTKEquipmentModules || {};
-  const SPRITE_ROOT = 'https://raw.githubusercontent.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator/04140673ec02906f8233523639733c83690df750/spritesheets/';
+  const SPRITE_ROOT = window.KTKLPC_CONFIG?.spritesRoot;
+  if (!SPRITE_ROOT) throw new Error('A configuração central do LPC não foi carregada.');
   const FRAME_SIZE = 64;
   const MATERIAL_ORDER = [
   "brass",

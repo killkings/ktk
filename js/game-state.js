@@ -12,8 +12,6 @@ var  screens = {
     game: document.getElementById('game-ui')
   };
 
-  // Os PNGs são carregados da pasta que fica ao lado deste arquivo HTML.
-var  LPC_ROOT = 'https://raw.githubusercontent.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator/04140673ec02906f8233523639733c83690df750/spritesheets/';
 var  FRAME_SIZE = 64;
 var  WALK_COLUMNS = 9;
 var  WALK_ROWS = 4;
@@ -143,7 +141,6 @@ var  stoneSpriteContext=stoneProjectileSprite.getContext('2d');
   stoneSpriteContext.fillRect(5,5,3,1);
   stoneSpriteContext.fillRect(4,6,4,1);
 var  fileColorFallback = false;
-var  imageCache = new Map();
 var  damageTintCache = new WeakMap();
 var  arrowProjectileBoundsCache = new Map();
 var  keys = new Set();

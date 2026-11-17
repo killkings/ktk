@@ -2,10 +2,9 @@
 (() => {
   'use strict';
 
-  const LPC_ROOT = 'https://raw.githubusercontent.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator/04140673ec02906f8233523639733c83690df750/spritesheets/';
   const image = new Image();
   image.crossOrigin = 'anonymous';
-  image.src = LPC_ROOT + 'weapon/sword/longsword/attack_thrust/behind/longsword.png';
+  image.src = window.KTKLPC_CONFIG.spritesRoot + 'weapon/sword/longsword/attack_thrust/behind/longsword.png';
 
   const sword = {
     id: 'longsword-1',
