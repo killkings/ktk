@@ -67,6 +67,38 @@ assert.equal(replicaContext.window.KTKWorldEntities.getLocalControls().guarding,
 replicaContext.shieldStaminaExhausted = true;
 assert.equal(replicaContext.window.KTKWorldEntities.getLocalControls().guarding, false);
 
+// Registra todas as mudanças de controle feitas durante uma RPC pendente,
+// inclusive retornar ao vetor inicial após uma mudança intermediária.
+clock = 1300;
+keys.delete("d");
+keys.delete("shift");
+keys.add("a");
+replicaContext.rightMouseHeld = false;
+replicaContext.shieldStaminaExhausted = false;
+const leftIntent = replicaContext.window.KTKWorldEntities.getLocalControls();
+assert.equal(leftIntent.inputX, -1);
+clock = 1350;
+keys.delete("a");
+keys.add("d");
+const returnedIntent = replicaContext.window.KTKWorldEntities.getLocalControls();
+assert.equal(returnedIntent.inputX, 1);
+const intentTimeline = replicaContext.window.KTKWorldEntities.getLocalIntentTimeline(
+  1250,
+  { inputX:1,inputY:0,running:false,guarding:false }
+);
+assert.deepEqual(
+  intentTimeline.map(segment => ({
+    inputX:segment.inputX,
+    inputY:segment.inputY,
+    durationMs:Math.round(segment.durationMs)
+  })),
+  [
+    {inputX:1,inputY:0,durationMs:50},
+    {inputX:-1,inputY:0,durationMs:50}
+  ],
+  "O histórico precisa preservar todas as direções intermediárias e suas durações."
+);
+
 // Timing split: for a 400ms DB interval with 180ms of the new intent,
 // the previous input owns 220ms and the new input owns 180ms.
 const elapsedMs = 400;
@@ -328,6 +360,12 @@ assert.match(gameState,/errorDistance\/correctionSpeed/);
 assert.match(gameState,/maxBackward/);
 assert.match(gameState,/Math\.min\(oneWayLatencyMs,intentAgeMs\)/);
 assert.match(gameState,/requestInput\.intentRevision===controls\.intentRevision/);
+assert.match(gameState,/Array\.isArray\(intentTimeline\)/);
+assert.match(gameState,/maxBackward=Math\.hypot\(actualMoveX,actualMoveY\)\*0\.25/);
+assert.match(replica,/localMovementIntentHistory/);
+assert.match(replica,/function getLocalMovementIntentTimeline\(/);
+assert.match(movement,/getLocalIntentTimeline/);
+assert.match(movement,/applyServerState\?\.\(step\.state\)/);
 assert.match(movement,/intentRevision: payload\.intentRevision/);
 assert.match(replica,/localMovementIntentRevision/);
 assert.match(gameState,/remote\?\.targetX/);
