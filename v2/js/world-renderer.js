@@ -153,9 +153,32 @@ function drawEntity(ctx, entity, cameraX, cameraY) {
   }
 
   if (entity.entity_type === "obstacle") {
-    ctx.fillStyle="#74664c";
-    ctx.beginPath();ctx.ellipse(x,y,18,12,0,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle="#403c31";ctx.lineWidth=2;ctx.stroke();
+    const kind=String(state.kind||"boulder");
+    ctx.save();
+    if(kind==="tree") {
+      ctx.fillStyle="#60432d";
+      ctx.fillRect(x-5,y-2,10,27);
+      ctx.fillStyle="#254e32";
+      ctx.beginPath();ctx.arc(x,y-10,23,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="#347143";
+      ctx.beginPath();ctx.arc(x-11,y-13,14,0,Math.PI*2);ctx.arc(x+11,y-15,13,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="#518b4c";
+      ctx.beginPath();ctx.arc(x+2,y-23,9,0,Math.PI*2);ctx.fill();
+    } else if(kind==="bush") {
+      ctx.fillStyle="#2e6638";
+      ctx.beginPath();ctx.arc(x-8,y,11,0,Math.PI*2);ctx.arc(x+7,y-3,12,0,Math.PI*2);ctx.arc(x,y-9,10,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle="#b84c51";
+      ctx.beginPath();ctx.arc(x-6,y-5,2,0,Math.PI*2);ctx.arc(x+7,y-2,2,0,Math.PI*2);ctx.fill();
+    } else {
+      ctx.fillStyle="#6e7775";
+      ctx.beginPath();
+      ctx.moveTo(x-19,y+7);ctx.lineTo(x-14,y-9);ctx.lineTo(x-2,y-16);
+      ctx.lineTo(x+13,y-10);ctx.lineTo(x+19,y+6);ctx.lineTo(x+7,y+14);ctx.lineTo(x-11,y+13);
+      ctx.closePath();ctx.fill();
+      ctx.strokeStyle="#424c49";ctx.lineWidth=2;ctx.stroke();
+      ctx.fillStyle="#a8b0a9";ctx.fillRect(x-7,y-7,5,3);ctx.fillRect(x+5,y-2,4,2);
+    }
+    ctx.restore();
     return;
   }
 
