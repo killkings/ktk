@@ -2274,6 +2274,22 @@
   }
 
   function applyCombatHit(attacker,target,direction,confirmedProjectileContact=false,weaponItemOverride=null) {
+    if(attacker===player) {
+      const weapon=weaponItemOverride||punch.weaponItem;
+      const weaponId=weapon?.id||null;
+      void window.KTKOnline?.gameAction?.('attack',{direction:Number(direction),weapon_id:weaponId})
+        .then(result=>{
+          if(!result?.ok) return;
+          if(result.target_dead && result.target_type==='enemy') toast('Esqueleto derrotado.');
+          if(result.hit) {
+            const hitTarget=result.target_type==='enemy'?window.KTKEnemySkeleton.entity:remotePlayers.get(String(result.target_id));
+            if(hitTarget) startKnockback(hitTarget,{x:[0,-1,0,1][direction],y:[-1,0,1,0][direction]});
+          }
+          if(result.state) applyServerState(result.state);
+        })
+        .catch(error=>toast(error?.message||'O servidor recusou o ataque.'));
+      return true;
+    }
     if(target===window.KTKEnemySkeleton.entity && target.defeated) return false;
     if(target?.type==='player'&&target.id&&target.combatStats?.health===0) return false;
     const vector=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}][direction];
@@ -2395,6 +2411,8 @@
   }
 
   function updateEnemyCombat(deltaSeconds) {
+    // A IA e os ataques do inimigo são executados pela simulação do Postgres.
+    return;
     const enemy=window.KTKEnemySkeleton.entity;
     if(enemy.defeated) return;
     enemy.attackCooldown=Math.max(0,enemy.attackCooldown-deltaSeconds);
@@ -2964,8 +2982,40 @@
     for(const id of remotePlayers.keys()) if(!incoming.has(id)) remotePlayers.delete(id);
     updateKingStatus();
   }
+  function applyServerState(serverState) {
+    if(!serverState || typeof serverState!=='object') return false;
+    const stats=window.KTKPlayerStats?.stats;
+    if(stats) {
+      ['health','satiety','hydration','stamina','mana','magicLevel'].forEach(key=>{
+        const source=key==='magicLevel'?'magic_level':key;
+        if(serverState[source]!==undefined && stats[key]) stats[key].value=Math.max(stats[key].min,Math.min(stats[key].max,Number(serverState[source])||0));
+      });
+      window.KTKPlayerStats.render();
+    }
+    if(Array.isArray(serverState.inventory)) {
+      inventory.splice(0,inventory.length,...serverState.inventory.slice(0,2).map(entry=>{
+        if(!entry || entry==='null') return null;
+        const id=entry.item_id;
+        const item=id==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(candidate=>candidate.id===id);
+        return item?{...item,...entry,id,collected:true}:null;
+      }));
+    }
+    if(serverState.wearables) {
+      wearableSlotOrder.forEach(slot=>{
+        const entry=serverState.wearables[slot];
+        if(!entry || entry==='null') { equippedWearables[slot]=null; return; }
+        const id=entry.item_id;
+        const item=equipmentCatalog?.items.find(candidate=>candidate.id===id);
+        equippedWearables[slot]=item?{...item,...entry,id,collected:true}:null;
+      });
+    }
+    renderInventory();
+    rebuildCharacterLayers();
+    return true;
+  }
+
   window.KTKWorldEntities={
-    setRemotePlayers,entities:getWorldEntities,addItem:addWorldItem,
+    setRemotePlayers,entities:getWorldEntities,addItem:addWorldItem,applyServerState,
     getLocalState:()=>({
       x:camera.x*(canvas.clientWidth||0)+player.x,
       y:camera.y*(canvas.clientHeight||0)+player.y,
