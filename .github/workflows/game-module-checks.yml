@@ -6,7 +6,10 @@ on:
       - "campo_livre_atualizado.html"
       - "game/game-lifecycle.js"
       - "js/online.js"
+      - "online/**"
+      - "equipment/catalog-sync.js"
       - "tools/test-entry-flow.mjs"
+      - "tools/test-online-timeouts.mjs"
       - "mapa/fallback/**"
       - "mapa/player/stats*.js"
       - "render/world-renderer.js"
@@ -17,7 +20,10 @@ on:
       - "campo_livre_atualizado.html"
       - "game/game-lifecycle.js"
       - "js/online.js"
+      - "online/**"
+      - "equipment/catalog-sync.js"
       - "tools/test-entry-flow.mjs"
+      - "tools/test-online-timeouts.mjs"
       - "mapa/fallback/**"
       - "mapa/player/stats*.js"
       - "render/world-renderer.js"
@@ -39,8 +45,15 @@ jobs:
           node --check render/world-renderer.js
           node --check game/game-lifecycle.js
           node --input-type=module --check < js/online.js
+          node --input-type=module --check < online/request-timeout.js
+          node --input-type=module --check < online/session.js
+          node --input-type=module --check < online/realtime.js
+          node --input-type=module --check < online/player-sync.js
+          node --input-type=module --check < equipment/catalog-sync.js
       - name: Check world-entry button flow
         run: node tools/test-entry-flow.mjs
+      - name: Check online entry deadlines
+        run: node tools/test-online-timeouts.mjs
       - name: Check module boundaries and script order
         run: |
           node <<'NODE'

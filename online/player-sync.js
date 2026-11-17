@@ -271,15 +271,17 @@ export function rebuildPresence() {
   updateRemotes();
 }
 
-export async function loadExistingPlayers() {
+export async function loadExistingPlayers(signal) {
   const sessionId=state.sessionId;
   const cutoff = new Date(Date.now() - 30000).toISOString();
-  const { data, error } = await supabase
+  let request = supabase
     .from("ktk_world_players")
     .select("user_id,x,y,direction,is_alive,last_seen_at,position_updated_at,state")
     .eq("world_id", WORLD_ID)
     .eq("is_alive", true)
     .gte("last_seen_at", cutoff);
+  if (signal) request = request.abortSignal(signal);
+  const { data, error } = await request;
   if (error) throw error;
   if(sessionId!==state.sessionId||!state.user||state.leaving) return;
   const rows = data || [];
