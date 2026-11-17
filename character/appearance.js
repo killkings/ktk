@@ -217,6 +217,11 @@ var  hairColorSources=new Map();
   }
 
   function buildLayerDefinitions(characterData=character, wearables=equippedWearables) {
+    const normalizedAppearance=window.KTKRemoteAppearance?.normalize({character:characterData,wearables});
+    if(normalizedAppearance) {
+      characterData=normalizedAppearance.character;
+      wearables=normalizedAppearance.wearables;
+    }
     const gender=characterData.gender || 'male';
     const pantsGender=gender==='female'?'thin':'male';
     const shoeGender=gender==='female'?'thin':'male';
@@ -335,103 +340,4 @@ var  hairColorSources=new Map();
         : 'Sprites LPC carregados · prévia animada ao caminhar e correr';
     }
     drawPreview();
-  }
-
-  function scheduleRemoteAppearanceRetry(remote,signature) {
-    if(remote.appearanceRetryTimer) clearTimeout(remote.appearanceRetryTimer);
-    const attempt=Number(remote.appearanceRetryCount)||0;
-    const delays=[1000,2500,5000,10000,20000,30000];
-    const delay=delays[Math.min(attempt,delays.length-1)];
-    remote.appearanceRetryCount=attempt+1;
-    remote.appearanceRetryAt=Date.now()+delay;
-    remote.appearanceRetryTimer=setTimeout(()=>{
-      remote.appearanceRetryTimer=null;
-      if(remotePlayers.get(String(remote.id))!==remote) return;
-      if(remote.appearanceSignature!==signature) return;
-      void loadRemoteCharacterLayers(remote);
-    },delay);
-  }
-
-  async function loadRemoteCharacterLayers(remote) {
-    const characterData=remote.character||{};
-    const wearables=remote.wearables||{};
-    const signature=JSON.stringify({characterData,wearables});
-
-    if(remote.appearanceSignature!==signature) {
-      if(remote.appearanceRetryTimer) clearTimeout(remote.appearanceRetryTimer);
-      remote.appearanceRetryTimer=null;
-      remote.appearanceSignature=signature;
-      remote.appearanceLoadedSignature='';
-      remote.layersReady=false;
-      remote.appearanceRetryCount=0;
-      remote.appearanceRetryAt=0;
-    }
-    if(remote.appearanceLoading && remote.appearanceLoadingSignature===signature) {
-      return remote.appearanceLoading;
-    }
-    if(remote.layersReady && remote.appearanceLoadedSignature===signature) return;
-    if(Date.now()<(Number(remote.appearanceRetryAt)||0)) return;
-
-    const definitions=buildLayerDefinitions(characterData,wearables);
-    const loadSet=defs=>Promise.all(defs.map(def=>loadLayer(def.path,def.mode,def.palette).then(result=>({
-      ...result,definition:def,fallbackMotion:result.path!==def.path
-    }))));
-    const loadMotion=motion=>loadSet(definitions.map(def=>({
-      ...def,path:def.path.replace(/\/walk\.png$/,'/'+motion+'.png')
-    })));
-
-    const task=(async()=>{
-      const [walk,idle,punch,slash,thrust,shoot]=await Promise.all([
-        loadSet(definitions),
-        loadMotion('idle'),
-        loadMotion('halfslash'),
-        loadMotion('slash'),
-        loadMotion('thrust'),
-        loadMotion('shoot')
-      ]);
-      if(remote.appearanceSignature!==signature) return;
-
-      const usable=layers=>layers.filter(layer=>layer.image&&!layer.missing);
-      remote.walkLayers=usable(walk);
-      remote.idleLayers=usable(idle);
-      remote.attackLayers={
-        punch:usable(punch),
-        slash:usable(slash),
-        thrust:usable(thrust),
-        shoot:usable(shoot)
-      };
-      // A missing idle sheet must not make a successfully loaded walk sprite invisible.
-      if(!remote.idleLayers.length) remote.idleLayers=remote.walkLayers;
-      if(!remote.walkLayers.length) remote.walkLayers=remote.idleLayers;
-      remote.layers=remote.idleLayers;
-
-      const failed=[...walk,...idle,...punch,...slash,...thrust,...shoot]
-        .filter(layer=>layer.missing||!layer.image);
-      remote.layersReady=failed.length===0;
-      remote.appearanceLoadedSignature=signature;
-
-      if(failed.length) {
-        scheduleRemoteAppearanceRetry(remote,signature);
-        console.warn('KTK remote appearance incomplete; retry scheduled:',remote.id,failed.map(layer=>layer.definition?.path||layer.path));
-      } else {
-        remote.appearanceRetryCount=0;
-        remote.appearanceRetryAt=0;
-        if(remote.appearanceRetryTimer) clearTimeout(remote.appearanceRetryTimer);
-        remote.appearanceRetryTimer=null;
-      }
-    })();
-
-    remote.appearanceLoadingSignature=signature;
-    remote.appearanceLoading=task;
-    try {
-      await task;
-    } catch(error) {
-      if(remote.appearanceSignature===signature) scheduleRemoteAppearanceRetry(remote,signature);
-      console.warn('KTK remote appearance load failed:',remote.id,error);
-    } finally {
-      if(remote.appearanceLoading===task) {
-        remote.appearanceLoading=null;
-        remote.appearanceLoadingSignature='';
-      }
-    }
   }
