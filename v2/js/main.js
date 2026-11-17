@@ -179,15 +179,16 @@ function renderCharacterPanel(local) {
 
   const inventory = Array.isArray(stats.inventory) ? stats.inventory : [null, null];
   const selectedSlot = Math.max(0, Math.min(1, Number(stats.selected_slot) || 0));
+  const canAct = state.joined && !state.actionBusy && !state.connectionSuspended;
   ui.slots.forEach((button, index) => {
     button.textContent = (index + 1) + " · " + itemLabel(inventory[index]);
     button.classList.toggle("selected", selectedSlot === index);
-    button.disabled = !state.joined || state.actionBusy;
+    button.disabled = !canAct;
   });
   const selectedItem = inventory[selectedSlot];
-  ui.itemUse.disabled = !state.joined || state.actionBusy || !selectedItem || !["food", "drink"].includes(String(selectedItem.itemType || selectedItem.item_type || ""));
-  ui.itemEquip.disabled = !state.joined || state.actionBusy || !selectedItem || !selectedItem.wearSlot && !selectedItem.wear_slot;
-  ui.itemDrop.disabled = !state.joined || state.actionBusy || !selectedItem;
+  ui.itemUse.disabled = !canAct || !selectedItem || !["food", "drink"].includes(String(selectedItem.itemType || selectedItem.item_type || ""));
+  ui.itemEquip.disabled = !canAct || !selectedItem || !selectedItem.wearSlot && !selectedItem.wear_slot;
+  ui.itemDrop.disabled = !canAct || !selectedItem;
 
   const wearables = stats.wearables && typeof stats.wearables === "object" ? stats.wearables : {};
   const names = {head:"Cabeça",chest:"Peito",waist:"Cintura",legs:"Pernas",feet:"Pés"};
@@ -195,13 +196,13 @@ function renderCharacterPanel(local) {
     const slot = button.dataset.wearSlot;
     const item = wearables[slot];
     button.textContent = names[slot] + " · " + itemLabel(item);
-    button.disabled = !state.joined || state.actionBusy || !item || item === "null";
+    button.disabled = !canAct || !item || item === "null";
   });
 
   const clanColor = String(local?.clanColor || "");
   ui.clanChoice.value = clanColor || "";
-  ui.clanChoice.disabled = Boolean(clanColor) || !state.joined || state.actionBusy;
-  ui.clanChoose.disabled = Boolean(clanColor) || !state.joined || state.actionBusy || !ui.clanChoice.value;
+  ui.clanChoice.disabled = Boolean(clanColor) || !canAct;
+  ui.clanChoose.disabled = Boolean(clanColor) || !canAct || !ui.clanChoice.value;
   ui.clanStatus.textContent = clanColor ? "Clã definido" : "Escolha uma cor";
   ui.clanStatus.style.color = clanColor || "";
 }
@@ -274,6 +275,7 @@ async function setConnectionSuspended(suspended) {
     if (!isCurrentSession(generation) || state.userId !== userId) return;
     if (data?.user_id) upsertPlayer(data);
     state.connectionSuspended = Boolean(suspended);
+    updateHud();
     if (!suspended) void pumpMovement();
   } catch (error) {
     if (isCurrentSession(generation) && state.userId === userId) {
@@ -539,7 +541,7 @@ async function pumpMovement() {
     if (isCurrentSession(generation) && state.userId === userId) {
       state.nextMovementRetryAt = performance.now() + 500;
       const message = error?.message || "Falha ao sincronizar o movimento.";
-      if (!message.includes("PLAYER_NOT_ACTIVE")) showError(message);
+      if (!message.includes("PLAYER_NOT_ACTIVE") && !message.includes("PLAYER_SUSPENDED")) showError(message);
     }
   } finally {
     clearTimeout(movementTimeout);
