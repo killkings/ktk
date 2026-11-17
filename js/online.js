@@ -502,6 +502,12 @@ async function enter(options = {}) {
     updateRemotes();
     const code = error?.code || error?.error_code || "";
     const message = String(error?.message || "");
+    if (message.includes("CHARACTER_DEAD_NEW_ACCOUNT_REQUIRED")) {
+      return {
+        ok: false, dead: true,
+        error: "Este personagem morreu permanentemente. Crie outra conta para começar do zero."
+      };
+    }
     if (code === "anonymous_provider_disabled" || message.includes("Anonymous sign-ins are disabled")) {
       return {
         ok: false,
