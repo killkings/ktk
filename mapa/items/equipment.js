@@ -443,7 +443,7 @@
     image.src = SPRITE_ROOT + config.sprite;
     if (config.iconSprite) {
       const iconImage = new Image();
-    image.crossOrigin = 'anonymous';
+      iconImage.crossOrigin = 'anonymous';
       item.iconImage = iconImage;
       iconImage.onload = () => { item.iconCanvas = createConfiguredIcon(iconImage, config, item); };
       iconImage.onerror = () => console.warn('Sprite de icone nao encontrado:', config.iconSprite);
@@ -451,7 +451,7 @@
     }
     if (config.attackSprite) {
       const attackImage = new Image();
-    image.crossOrigin = 'anonymous';
+      attackImage.crossOrigin = 'anonymous';
       item.attackImage = attackImage;
       attackImage.onload = () => {
         item.attackFrameSize = inferredFrameSize(attackImage, config.attackFrameSize);
@@ -461,7 +461,7 @@
     }
     if (config.attackBackgroundSprite) {
       const attackBackgroundImage = new Image();
-    image.crossOrigin = 'anonymous';
+      attackBackgroundImage.crossOrigin = 'anonymous';
       item.attackBackgroundImage = attackBackgroundImage;
       attackBackgroundImage.onload = () => { item.attackFrameSize = inferredFrameSize(attackBackgroundImage, config.attackFrameSize); };
       attackBackgroundImage.onerror = () => console.warn('Sprite de ataque nao encontrado:', config.attackBackgroundSprite);
@@ -469,7 +469,7 @@
     }
     if (config.heldBackgroundSprite) {
       const heldBackgroundImage = new Image();
-    image.crossOrigin = 'anonymous';
+      heldBackgroundImage.crossOrigin = 'anonymous';
       item.heldBackgroundImage = heldBackgroundImage;
       heldBackgroundImage.onload = () => { item.heldFrameSize = inferredFrameSize(heldBackgroundImage, config.heldFrameSize); };
       heldBackgroundImage.onerror = () => console.warn('Sprite de equipamento nao encontrado:', config.heldBackgroundSprite);
@@ -689,7 +689,7 @@
           displayName
         });
         const iconImage = new Image();
-    image.crossOrigin = 'anonymous';
+        iconImage.crossOrigin = 'anonymous';
         longsword.iconImage = iconImage;
         iconImage.onload = () => { longsword.iconCanvas = fitIcon(iconImage, FRAME_SIZE); };
         iconImage.onerror = () => console.warn('Sprite de equipamento nao encontrado:', sprite);
