@@ -2479,13 +2479,32 @@
       const id=String(remote.id);
       incoming.add(id);
       const existing=remotePlayers.get(id);
+      // A orientação remota é conferida pelo deslocamento entre pacotes.
+      // Isso evita que um campo direction atrasado ou incorreto mostre a
+      // frente do personagem quando ele está realmente caminhando para cima.
+      let remoteDirection=Number.isFinite(remote.direction)
+        ? Math.max(0,Math.min(3,remote.direction))
+        : (existing?.direction??2);
+      if(existing) {
+        const previousTargetX=Number.isFinite(existing.targetX)?existing.targetX:existing.x;
+        const previousTargetY=Number.isFinite(existing.targetY)?existing.targetY:existing.y;
+        const movementX=remote.x-previousTargetX;
+        const movementY=remote.y-previousTargetY;
+        if(Math.hypot(movementX,movementY)>0.35) {
+          if(Math.abs(movementX)>Math.abs(movementY)) {
+            remoteDirection=movementX>0?3:1;
+          } else {
+            remoteDirection=movementY>0?2:0;
+          }
+        }
+      }
       const entity=existing||{
         id,type:'player',x:remote.x,y:remote.y,targetX:remote.x,targetY:remote.y,
-        direction:Number.isFinite(remote.direction)?remote.direction:2,radius:COLLISION_RADIUS,walkTime:0
+        direction:remoteDirection,radius:COLLISION_RADIUS,walkTime:0
       };
       entity.targetX=remote.x;
       entity.targetY=remote.y;
-      entity.direction=Number.isFinite(remote.direction)?remote.direction:2;
+      entity.direction=remoteDirection;
       entity.displayName=remote.displayName||remote.display_name||entity.displayName||'Aventureiro';
       entity.character=remote.character||entity.character||{};
       entity.wearables=remote.wearables||entity.wearables||{};
