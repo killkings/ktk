@@ -209,12 +209,17 @@
   }
   window.KTKWorldEntities={
     setRemotePlayers,entities:getWorldEntities,applyServerState,
-    getLocalControls:()=>({
-      inputX:playerInputX,
-      inputY:playerInputY,
-      running:Boolean(playerRunning),
-      guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield())
-    }),
+    getLocalControls:()=>{
+      // Lê as teclas diretamente para não aguardar o próximo frame de renderização.
+      const inputX=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
+      const inputY=Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));
+      const moving=inputX!==0||inputY!==0;
+      return {
+        inputX,inputY,
+        running:Boolean(moving&&keys.has('shift')&&(Number(playerStats?.stats?.stamina?.value)||0)>0),
+        guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield())
+      };
+    },
     applyServerKnockback:(event,x,y,direction)=>{
       if(playerDead) return false;
       if(Number.isFinite(Number(x))&&Number.isFinite(Number(y))) {
@@ -231,5 +236,5 @@
     applyWorldEntity,applyWorldState,
     serverDeath:()=>handlePlayerDeath(true),
     setLocalState:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,true),
-    reconcileLocalPosition:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,false)
+    reconcileLocalPosition:(x,y,direction,latencyMs=0)=>setAuthoritativePlayerPosition(x,y,direction,false,latencyMs)
   };

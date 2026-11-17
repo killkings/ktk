@@ -39,7 +39,7 @@ function compareServerTimestamps(a, b) {
   return leftText === rightText ? 0 : (leftText < rightText ? -1 : 1);
 }
 
-export function applyOwnServerPosition(position) {
+export function applyOwnServerPosition(position, latencyMs = 0) {
   const x = Number(position?.x);
   const y = Number(position?.y);
   const positionUpdatedAt = String(position?.position_updated_at || position?.positionUpdatedAt || "");
@@ -63,7 +63,7 @@ export function applyOwnServerPosition(position) {
     positionUpdatedAt,
     receivedAt: Date.now()
   };
-  window.KTKWorldEntities?.reconcileLocalPosition?.(x, y, direction);
+  window.KTKWorldEntities?.reconcileLocalPosition?.(x, y, direction, latencyMs);
   return true;
 }
 
@@ -96,6 +96,7 @@ export async function sendPosition(force = false) {
   const stepTimeout = setTimeout(() => stepController.abort(), 900);
 
   try {
+    const requestStartedAt = Date.now();
     const { data: step, error } = await supabase.rpc("ktk_step_player", {
       p_input_x: inputX,
       p_input_y: inputY,
@@ -123,7 +124,7 @@ export async function sendPosition(force = false) {
         y: serverY,
         direction,
         position_updated_at: step.position_updated_at
-      });
+      }, Date.now() - requestStartedAt);
     }
   } catch (error) {
     if (stepId === state.stepSequence) {

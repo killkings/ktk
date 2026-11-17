@@ -14,6 +14,10 @@ on:
       - "mapa/fallback/**"
       - "mapa/player/stats*.js"
       - "render/world-renderer.js"
+      - "input/input-controller.js"
+      - "multiplayer/player-replica.js"
+      - "js/game-state.js"
+      - "tools/test-local-movement.mjs"
       - ".github/workflows/game-module-checks.yml"
   push:
     branches: [main]
@@ -29,6 +33,10 @@ on:
       - "mapa/fallback/**"
       - "mapa/player/stats*.js"
       - "render/world-renderer.js"
+      - "input/input-controller.js"
+      - "multiplayer/player-replica.js"
+      - "js/game-state.js"
+      - "tools/test-local-movement.mjs"
       - ".github/workflows/game-module-checks.yml"
 
 jobs:
@@ -45,6 +53,10 @@ jobs:
           node --check mapa/player/stats-ui.js
           node --check mapa/fallback/grass-renderer.js
           node --check render/world-renderer.js
+          node --check input/input-controller.js
+          node --check multiplayer/player-replica.js
+          node --check js/game-state.js
+          node --input-type=module --check < online/movement.js
           node --check game/game-lifecycle.js
           node --input-type=module --check < js/online.js
           node --input-type=module --check < online/request-timeout.js
@@ -58,6 +70,8 @@ jobs:
         run: node tools/test-online-timeouts.mjs
       - name: Check Realtime entry and snapshot independence
         run: node tools/test-realtime-entry.mjs
+      - name: Check immediate local movement prediction
+        run: node tools/test-local-movement.mjs
       - name: Check module boundaries and script order
         run: |
           node <<'NODE'

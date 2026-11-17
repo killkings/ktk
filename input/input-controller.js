@@ -1,6 +1,26 @@
 /* Controles de teclado, mouse e inicialização do ciclo de jogo. */
 'use strict';
 
+  const MOVEMENT_KEYS = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
+
+  function refreshLocalMovementInput() {
+    let dx=0,dy=0;
+    if(keys.has('w')||keys.has('arrowup')) dy-=1;
+    if(keys.has('s')||keys.has('arrowdown')) dy+=1;
+    if(keys.has('a')||keys.has('arrowleft')) dx-=1;
+    if(keys.has('d')||keys.has('arrowright')) dx+=1;
+    playerInputX=dx;
+    playerInputY=dy;
+    playerMoving=dx!==0||dy!==0;
+  }
+
+  function sendImmediateMovementIntent() {
+    const request=window.KTKOnline?.sendPosition?.(false);
+    if(request&&typeof request.catch==='function') {
+      void request.catch(error=>console.warn('KTK immediate movement intent:',error?.message||error));
+    }
+  }
+
   window.addEventListener('keydown',event=>{
     const key=event.key.toLowerCase();
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) event.preventDefault();
@@ -10,7 +30,12 @@
       return;
     }
     if(screens.game.classList.contains('active')) {
+      const wasPressed=keys.has(key);
       keys.add(key);
+      if(!wasPressed) {
+        refreshLocalMovementInput();
+        if(MOVEMENT_KEYS.has(key)||key==='shift') sendImmediateMovementIntent();
+      }
       if(key==='e'&&!event.repeat) interactWithSelectedItem();
       if((key==='1'||key==='2')&&!event.repeat) selectInventorySlot(Number(key)-1);
       if(key==='m'&&!event.repeat) {
@@ -22,7 +47,12 @@
       }
     }
   },{passive:false});
-  window.addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
+  window.addEventListener('keyup',event=>{
+    const key=event.key.toLowerCase();
+    if(!keys.delete(key)) return;
+    refreshLocalMovementInput();
+    if(MOVEMENT_KEYS.has(key)||key==='shift') sendImmediateMovementIntent();
+  });
   canvas.addEventListener('mousedown',event=>{
     if(event.button===0) {
       startPunch();
@@ -32,6 +62,7 @@
       rightMouseHeld=true;
       shieldStaminaExhausted=false;
       window.KTKPlayerStats.render();
+      sendImmediateMovementIntent();
     }
   });
   canvas.addEventListener('contextmenu',event=>event.preventDefault());
@@ -40,6 +71,7 @@
       rightMouseHeld=false;
       shieldStaminaExhausted=false;
       window.KTKPlayerStats.render();
+      sendImmediateMovementIntent();
     }
   });
   document.querySelectorAll('.inventory-slot:not(.is-locked)').forEach(slot=>{
@@ -97,21 +129,27 @@
     });
   });
   window.addEventListener('blur',()=>{
+    const hadMovementIntent=playerMoving||rightMouseHeld||keys.has('shift');
     keys.clear();
-    playerInputX=0; playerInputY=0; playerMoving=false; playerRunning=false;
+    refreshLocalMovementInput();
+    playerRunning=false;
     if(rightMouseHeld) {
       rightMouseHeld=false;
       shieldStaminaExhausted=false;
       window.KTKPlayerStats.render();
     }
+    if(hadMovementIntent) sendImmediateMovementIntent();
   });
 
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden') {
+      const hadMovementIntent=playerMoving||rightMouseHeld||keys.has('shift');
       keys.clear();
-      playerInputX=0; playerInputY=0; playerMoving=false; playerRunning=false;
+      refreshLocalMovementInput();
+      playerRunning=false;
       rightMouseHeld=false;
       shieldStaminaExhausted=false;
+      if(hadMovementIntent) sendImmediateMovementIntent();
     }
   });
   window.addEventListener('resize',resize);
