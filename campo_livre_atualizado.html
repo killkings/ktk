@@ -2481,7 +2481,7 @@
       const existing=remotePlayers.get(id);
       const entity=existing||{
         id,type:'player',x:remote.x,y:remote.y,targetX:remote.x,targetY:remote.y,
-        direction:remote.direction||2,radius:COLLISION_RADIUS,walkTime:0
+        direction:Number.isFinite(remote.direction)?remote.direction:2,radius:COLLISION_RADIUS,walkTime:0
       };
       entity.targetX=remote.x;
       entity.targetY=remote.y;
@@ -2640,7 +2640,7 @@
       if(onlinePlayer) {
         player.x=Number(onlinePlayer.x)||0;
         player.y=Number(onlinePlayer.y)||96;
-        player.direction=Number(onlinePlayer.direction)||2;
+        player.direction=Number.isFinite(Number(onlinePlayer.direction))?Math.max(0,Math.min(3,Number(onlinePlayer.direction))):2;
         camera.x=0; camera.y=0;
       }
       if(button) button.textContent='Entrar no mundo →';
@@ -2823,6 +2823,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-7"></script>
+<script type="module" src="./js/online.js?v=20261117-8"></script>
 </body>
 </html>
