@@ -2967,6 +2967,10 @@
       skeleton.knockbackHeight=0;
     }
     equipmentCatalog?.items?.forEach(item=>{if(item) item.collected=false;});
+    Object.assign(character,{
+      gender:'male',skin:'brown',eyes:'brown',hairstyle:'hair_pixie',
+      hair:'dark_brown',beard:'none',mustache:'none'
+    });
     window.KTKPlayerStats?.resetForNewCharacter?.();
     equipStartingWearables();
     renderInventory();
