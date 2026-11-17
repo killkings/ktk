@@ -224,7 +224,7 @@
           <div class="group-head"><label>ROUPA INICIAL</label><span>Equipamento padrão</span></div>
           <p>Camisa branca de manga curta, calça preta e tênis preto. Sem armas ou ferramentas.</p>
         </div>
-        <p class="small-note"><a href="./Universal-LPC-Spritesheet-Character-Generator-master/CREDITS.csv" target="_blank" rel="noopener">Créditos dos artistas dos sprites (LPC)</a></p>
+        <p class="small-note"><a href="./creditos-lpc.html" target="_blank" rel="noopener">Créditos e licenças dos sprites (LPC)</a></p>
 
         <div class="creator-actions">
           <button class="secondary" id="back-welcome">Voltar</button>
@@ -310,7 +310,7 @@
     const context = preview && preview.getContext('2d');
     if (!preview || !context) return;
 
-    const root = './Universal-LPC-Spritesheet-Character-Generator-master/spritesheets/';
+    const root = 'https://raw.githubusercontent.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator/04140673ec02906f8233523639733c83690df750/spritesheets/';
     const paths = [
       'body/bodies/male/walk.png',
       'legs/pants2/male/walk.png',
@@ -321,6 +321,7 @@
     ];
     const images = paths.map(path => {
       const image = new Image();
+      image.crossOrigin = 'anonymous';
       image.src = root + path;
       return image;
     });
@@ -377,9 +378,9 @@
 <script src="./personagem.js?v=stable-20261115-13"></script>
 <script src="./mapa/player/stats.js?v=stable-20261116-38"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
-<script src="./enemy/skeleton/skeleton.js?v=stable-20261116-14"></script>
-<script src="./mapa/items/longsword.js?v=stable-20261115-13"></script>
-<script src="./mapa/items/equipment.js?v=stable-20261116-35"></script>
+<script src="./enemy/skeleton/skeleton.js?v=stable-20261117-lpc1"></script>
+<script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
+<script src="./mapa/items/equipment.js?v=stable-20261117-lpc1"></script>
 <script>
 (() => {
   'use strict';
@@ -396,7 +397,7 @@
   };
 
   // Os PNGs são carregados da pasta que fica ao lado deste arquivo HTML.
-  const LPC_ROOT = './Universal-LPC-Spritesheet-Character-Generator-master/spritesheets/';
+  const LPC_ROOT = 'https://raw.githubusercontent.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator/04140673ec02906f8233523639733c83690df750/spritesheets/';
   const FRAME_SIZE = 64;
   const WALK_COLUMNS = 9;
   const WALK_ROWS = 4;
@@ -823,6 +824,7 @@
     if (imageCache.has(cacheKey)) return imageCache.get(cacheKey);
     const promise = new Promise(resolve => {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       let actualPath=path;
       const requestedMotion=path.match(/\/(walk|run|idle|thrust|shoot|halfslash|slash)\.png$/)?.[1];
       const fallbackMotions=requestedMotion==='halfslash'?['slash','walk']:(requestedMotion&&requestedMotion!=='walk'?['walk']:[]);

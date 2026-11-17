@@ -2,7 +2,7 @@
 (() => {
   'use strict';
 
-  const SPRITE_ROOT = './Universal-LPC-Spritesheet-Character-Generator-master/spritesheets/';
+  const SPRITE_ROOT = 'https://raw.githubusercontent.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator/04140673ec02906f8233523639733c83690df750/spritesheets/';
   const FRAME_SIZE = 64;
 
   const MATERIAL_ORDER = ['brass', 'bronze', 'ceramic', 'copper', 'gold', 'iron', 'silver', 'steel'];
@@ -428,6 +428,7 @@
     };
 
     const image = new Image();
+    image.crossOrigin = 'anonymous';
     item.image = image;
     image.onload = () => {
       const iconSource = recolorItemSprite(image, config.recolorMode);
@@ -442,6 +443,7 @@
     image.src = SPRITE_ROOT + config.sprite;
     if (config.iconSprite) {
       const iconImage = new Image();
+      iconImage.crossOrigin = 'anonymous';
       item.iconImage = iconImage;
       iconImage.onload = () => { item.iconCanvas = createConfiguredIcon(iconImage, config, item); };
       iconImage.onerror = () => console.warn('Sprite de icone nao encontrado:', config.iconSprite);
@@ -449,6 +451,7 @@
     }
     if (config.attackSprite) {
       const attackImage = new Image();
+      attackImage.crossOrigin = 'anonymous';
       item.attackImage = attackImage;
       attackImage.onload = () => {
         item.attackFrameSize = inferredFrameSize(attackImage, config.attackFrameSize);
@@ -458,6 +461,7 @@
     }
     if (config.attackBackgroundSprite) {
       const attackBackgroundImage = new Image();
+      attackBackgroundImage.crossOrigin = 'anonymous';
       item.attackBackgroundImage = attackBackgroundImage;
       attackBackgroundImage.onload = () => { item.attackFrameSize = inferredFrameSize(attackBackgroundImage, config.attackFrameSize); };
       attackBackgroundImage.onerror = () => console.warn('Sprite de ataque nao encontrado:', config.attackBackgroundSprite);
@@ -465,6 +469,7 @@
     }
     if (config.heldBackgroundSprite) {
       const heldBackgroundImage = new Image();
+      heldBackgroundImage.crossOrigin = 'anonymous';
       item.heldBackgroundImage = heldBackgroundImage;
       heldBackgroundImage.onload = () => { item.heldFrameSize = inferredFrameSize(heldBackgroundImage, config.heldFrameSize); };
       heldBackgroundImage.onerror = () => console.warn('Sprite de equipamento nao encontrado:', config.heldBackgroundSprite);
@@ -684,6 +689,7 @@
           displayName
         });
         const iconImage = new Image();
+        iconImage.crossOrigin = 'anonymous';
         longsword.iconImage = iconImage;
         iconImage.onload = () => { longsword.iconCanvas = fitIcon(iconImage, FRAME_SIZE); };
         iconImage.onerror = () => console.warn('Sprite de equipamento nao encontrado:', sprite);
