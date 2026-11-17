@@ -497,6 +497,9 @@
   let assetErrors = [];
   let playerMoving = false;
   let playerRunning = false;
+  // Vetor bruto do teclado; a posição oficial é calculada pelo servidor.
+  let playerInputX = 0;
+  let playerInputY = 0;
   const punch = {active:false,elapsed:0,cooldown:0,direction:2,hitApplied:false,weaponAttack:false,weaponItem:null,range:PUNCH_RANGE,attackBonus:0,damageMultiplier:1};
   const boomerangProjectile = {type:'boomerang-projectile',active:false,item:null,x:0,y:0,startX:0,startY:0,direction:2,vectorX:0,vectorY:0,elapsed:0,distance:0,maxDistance:0,speed:0,phase:'outbound',hitApplied:false};
   const arrowProjectile = {type:'arrow-projectile',active:false,weaponItem:null,x:0,y:0,direction:2,vectorX:0,vectorY:0,angle:Math.PI/2,elapsed:0,distance:0,maxDistance:0,speed:720,phase:'outbound',impactElapsed:0,hitApplied:false};
@@ -1852,6 +1855,8 @@
     if(keys.has('a')||keys.has('arrowleft')) dx-=1;
     if(keys.has('d')||keys.has('arrowright')) dx+=1;
     playerMoving=dx!==0||dy!==0;
+    playerInputX=dx;
+    playerInputY=dy;
     const shieldHeld=rightMouseHeld && Boolean(getBlockingShield());
     const defending=shieldHeld && !shieldStaminaExhausted;
     const movement=window.KTKPlayerStats.updateStamina(dt,playerMoving,keys.has('shift'),defending);
@@ -3273,6 +3278,8 @@
       x:camera.x*(canvas.clientWidth||0)+player.x,
       y:camera.y*(canvas.clientHeight||0)+player.y,
       direction:player.direction,
+      inputX:playerInputX,
+      inputY:playerInputY,
       running:Boolean(playerRunning),
       moving:Boolean(playerMoving),
       guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield()),
@@ -3331,6 +3338,22 @@
       player.x=Number(x); player.y=Number(y);
       player.direction=Number.isFinite(Number(direction))?Math.max(0,Math.min(3,Number(direction))):2;
       return true;
+    },
+    reconcileLocalPosition:(x,y,direction)=>{
+      if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
+      const currentX=camera.x*(canvas.clientWidth||0)+player.x;
+      const currentY=camera.y*(canvas.clientHeight||0)+player.y;
+      const errorX=Number(x)-currentX;
+      const errorY=Number(y)-currentY;
+      if(Math.hypot(errorX,errorY)>96) {
+        camera.x=0; camera.y=0;
+        player.x=Number(x); player.y=Number(y);
+      } else {
+        player.x+=errorX*0.35;
+        player.y+=errorY*0.35;
+      }
+      if(Number.isFinite(Number(direction))) player.direction=Math.max(0,Math.min(3,Number(direction)));
+      return true;
     }
   };
   function handlePlayerDeath(serverConfirmed=false) {
@@ -3338,6 +3361,7 @@
     playerDead=true;
     newCharacterRequired=true;
     keys.clear();
+    playerInputX=0; playerInputY=0; playerMoving=false; playerRunning=false;
     rightMouseHeld=false;
     shieldStaminaExhausted=false;
     punch.active=false;
@@ -3423,6 +3447,8 @@
         if(enemy) {
           enemy.attacking=false; enemy.attackElapsed=0; enemy.attackHitApplied=false; enemy.attackCooldown=0.5;
         }
+        playerInputX=0; playerInputY=0;
+        playerMoving=false; playerRunning=false;
         playerDead=false;
         newCharacterRequired=false;
         gameStarted=true;
@@ -3438,8 +3464,8 @@
       }
 
       if(onlinePlayer) {
-        player.x=Number(onlinePlayer.x)||0;
-        player.y=Number(onlinePlayer.y)||96;
+        player.x=Number.isFinite(serverSpawnX)?serverSpawnX:0;
+        player.y=Number.isFinite(serverSpawnY)?serverSpawnY:96;
         player.direction=Number.isFinite(Number(onlinePlayer.direction))?Math.max(0,Math.min(3,Number(onlinePlayer.direction))):2;
         camera.x=0; camera.y=0;
       }
@@ -3476,6 +3502,7 @@
     if(leavingGame || startingGame || !gameStarted || !screens.game.classList.contains('active')) return;
     leavingGame=true;
     keys.clear();
+    playerInputX=0; playerInputY=0; playerMoving=false; playerRunning=false;
     rightMouseHeld=false;
     shieldStaminaExhausted=false;
 
@@ -3665,6 +3692,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-remote-appearance-retry1"></script>
+<script type="module" src="./js/online.js?v=20261117-server-movement-v2"></script>
 </body>
 </html>
