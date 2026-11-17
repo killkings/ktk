@@ -252,7 +252,7 @@ test("the shared V2 world is populated with persistent resources and obstacles",
   assert.match(populationSql, /generate_series\(2,25\)/);
   assert.match(populationSql, /generate_series\(2,19\)/);
   assert.match(populationSql, /generate_series\(2,15\)/);
-  assert.match(populationSql, /entity_type, x, y, collision_radius, state, revision/i);
+  assert.match(populationSql, /entity_type\\s*,\\s*x\\s*,\\s*y\\s*,\\s*collision_radius\\s*,\\s*state\\s*,\\s*revision/i);
   assert.match(populationSql, /obstacle-tree-/);
   assert.match(populationSql, /obstacle-rock-/);
   assert.match(populationSql, /skeleton-/);
