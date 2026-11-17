@@ -79,64 +79,33 @@
   }
 
   function updateStamina(deltaSeconds, moving, runRequested, defending) {
-    const stamina = stats.stamina;
-    const health = stats.health;
-    const running = Boolean(moving && runRequested && stamina.value > 0);
-    const shielding = Boolean(defending && stamina.value > 0);
-    // Custos e recuperação são taxas por segundo para permanecerem estáveis em diferentes taxas de quadros.
-    if (shielding) {
-      const baseDrain = moving ? (running ? 2 : 1) : 1;
-      stamina.value = clamp(stamina.value - deltaSeconds * baseDrain * 2, 0, stamina.max);
-    }
-    else if (moving) stamina.value = clamp(stamina.value - deltaSeconds * (running ? 2 : 1), 0, stamina.max);
-    else if (stamina.value < stamina.recoveryMax) {
-      stamina.value = clamp(stamina.value + deltaSeconds, stamina.min, stamina.recoveryMax);
-    }
-    if (!moving && stamina.value >= 50 && health.value >= 10 && health.value < health.recoveryMax) {
-      health.value = clamp(health.value + deltaSeconds * health.recoveryRate, health.min, health.recoveryMax);
-    }
+    // Os valores são replicados pelo Supabase; este método só calcula a animação/velocidade visual.
+    const hasStamina = stats.stamina.value > 0;
+    const running = Boolean(moving && runRequested && hasStamina);
+    const shielding = Boolean(defending && hasStamina);
     const baseSpeed = running ? 3 : 2;
-    const shieldSpeed = shielding && stamina.value > 0 ? baseSpeed * 0.5 : baseSpeed;
-    stats.speed.value = clamp(shieldSpeed - Math.max(0, Number(getEquipmentSpeedPenalty()) || 0), stats.speed.min, stats.speed.max);
+    const shieldSpeed = shielding ? baseSpeed * 0.5 : baseSpeed;
+    stats.speed.value = clamp(
+      shieldSpeed - Math.max(0, Number(getEquipmentSpeedPenalty()) || 0),
+      stats.speed.min,
+      stats.speed.max
+    );
     render();
-    return { running, speed: stats.speed.value, shielding: shielding && stamina.value > 0, stamina: stamina.value };
+    return { running, speed: stats.speed.value, shielding, stamina: stats.stamina.value };
   }
 
-  function updateMana(deltaSeconds, moving, hasEquippedMagicWeapon, hasMagicWeaponInInventory) {
-    const { mana, magicLevel, health, stamina } = stats;
-    const level = magicLevel.value;
-    if (level === 0) {
-      if (mana.value !== 0) {
-        mana.value = 0;
-        render();
-      }
-      return;
-    }
-    const manaCap = Math.min(50, level * 10);
-    if (moving || mana.value >= manaCap) return;
-    if (level === 1 && (!hasEquippedMagicWeapon || health.value < 50 || stamina.value < 50)) return;
-    if (level === 2 && (!hasMagicWeaponInInventory || health.value < 50 || stamina.value < 50)) return;
-    if (level === 3 && stamina.value < 50) return;
-    const recoveryMultiplier = level >= 8 ? 2 : 1;
-    mana.value = clamp(mana.value + Math.max(0, deltaSeconds) * mana.recoveryRate * recoveryMultiplier, mana.min, manaCap);
-    render();
+  function updateMana() {
+    // Regeneração e limites de mana pertencem à simulação do banco.
   }
 
   function cycleMagicLevel() {
-    const magicLevel = stats.magicLevel;
-    magicLevel.value = (magicLevel.value + 1) % (magicLevel.max + 1);
-    if (magicLevel.value === 0) stats.mana.value = 0;
-    render();
-    return magicLevel.value;
+    // Mantido apenas por compatibilidade; a mudança real vem de ktk_game_action.
+    return stats.magicLevel.value;
   }
 
-  function consumeStamina(amount) {
-    const stamina = stats.stamina;
-    const cost = Math.max(0, Number(amount) || 0);
-    if (stamina.value < cost) return false;
-    stamina.value = clamp(stamina.value - cost, stamina.min, stamina.max);
-    render();
-    return true;
+  function consumeStamina() {
+    // O servidor cobra o custo na ação validada.
+    return stats.stamina.value > 0;
   }
 
   function canConsumeMana(amount) {
@@ -144,13 +113,9 @@
     return stats.magicLevel.value > 0 && stats.mana.value >= cost;
   }
 
-  function consumeMana(amount) {
-    const mana = stats.mana;
-    const cost = Math.max(0, Number(amount) || 0);
-    if (stats.magicLevel.value === 0 || mana.value < cost) return false;
-    mana.value = clamp(mana.value - cost, mana.min, mana.max);
-    render();
-    return true;
+  function consumeMana() {
+    // O servidor desconta a mana quando confirma o ataque mágico.
+    return stats.mana.value > 0;
   }
 
   render();
