@@ -418,7 +418,6 @@ for(const [name,source] of Object.entries(onlineModules)) {
 }
 for(const [path,version] of [
   ["render/world-renderer.js","20261117-remote-snapshot-007"],
-  ["multiplayer/player-replica.js","20261117-remote-snapshot-007"],
   ["js/game-state.js","20261117-movement-reconcile-001"],
   ["multiplayer/player-replica.js","20261117-movement-reconcile-001"],
   ["input/input-controller.js","20261117-remote-snapshot-007"],
