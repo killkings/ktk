@@ -51,6 +51,59 @@ function readControlInput() {
   };
 }
 
+// PostgreSQL timestamptz values have microsecond precision. Date.parse()
+// truncates them to milliseconds, which is not enough to order rapid updates.
+function serverTimestampValue(value) {
+  const source = String(value || "").trim();
+  if (!source) return NaN;
+  const milliseconds = Date.parse(source);
+  if (!Number.isFinite(milliseconds)) return NaN;
+  const fraction = source.match(/\.(\d+)(?=(?:Z|[+-]\d{2}:?\d{2})$)/i)?.[1] || "";
+  const subMillisecond = Number(fraction.padEnd(6, "0").slice(3, 6) || 0) / 1000;
+  return milliseconds + subMillisecond;
+}
+
+function compareServerTimestamps(a, b) {
+  const left = serverTimestampValue(a);
+  const right = serverTimestampValue(b);
+  if (Number.isFinite(left) && Number.isFinite(right)) {
+    return left === right ? 0 : (left < right ? -1 : 1);
+  }
+  const leftText = String(a || "");
+  const rightText = String(b || "");
+  if (!leftText) return rightText ? -1 : 0;
+  if (!rightText) return 1;
+  return leftText === rightText ? 0 : (leftText < rightText ? -1 : 1);
+}
+
+function applyOwnServerPosition(position) {
+  const x = Number(position?.x);
+  const y = Number(position?.y);
+  const positionUpdatedAt = String(position?.position_updated_at || position?.positionUpdatedAt || "");
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(serverTimestampValue(positionUpdatedAt))) {
+    return false;
+  }
+
+  const previousTimestamp = String(state.lastPosition?.positionUpdatedAt || "");
+  if (previousTimestamp && compareServerTimestamps(positionUpdatedAt, previousTimestamp) <= 0) {
+    return false;
+  }
+
+  const direction = Number.isFinite(Number(position?.direction))
+    ? Math.max(0, Math.min(3, Number(position.direction)))
+    : (state.lastPosition?.direction ?? 2);
+
+  state.lastPosition = {
+    x,
+    y,
+    direction,
+    positionUpdatedAt,
+    receivedAt: Date.now()
+  };
+  window.KTKWorldEntities?.reconcileLocalPosition?.(x, y, direction);
+  return true;
+}
+
 function updateRemotes() {
   if (window.KTKWorldEntities?.setRemotePlayers) {
     window.KTKWorldEntities.setRemotePlayers([...state.remote.values()]);
@@ -161,12 +214,13 @@ function acceptDatabaseChange(payload) {
   if (!row?.user_id) return;
   if (row.user_id === state.user?.id) {
     if (row.state) window.KTKWorldEntities?.applyServerState?.(row.state);
+    if (row.is_alive !== false) applyOwnServerPosition(row);
     const knockbackAt=String(row.state?.last_knockback_at||"");
     if (row.is_alive !== false && knockbackAt && knockbackAt!==state.lastLocalKnockbackAt) {
       state.lastLocalKnockbackAt=knockbackAt;
-      window.KTKWorldEntities?.applyServerKnockback?.(
-        row.state?.last_knockback, row.x, row.y, row.direction
-      );
+      // Position was applied only if this server timestamp is newer. Knockback
+      // now affects the sprite animation, never a second competing coordinate.
+      window.KTKWorldEntities?.applyServerKnockback?.(row.state?.last_knockback);
     }
     if (row.is_alive === false) window.KTKWorldEntities?.serverDeath?.();
     return;
@@ -243,11 +297,19 @@ function acceptRemote(payload, source = "broadcast") {
   const sessionId = String(payload.session_id || "");
   const rawSequence = Number(payload.sequence);
   const hasSequence = Number.isSafeInteger(rawSequence) && rawSequence >= 0;
-  const databasePositionAt = payload.position_updated_at ? Date.parse(payload.position_updated_at) : 0;
+  const positionTimestamp = String(payload.position_updated_at || "");
+  const databasePositionAt = positionTimestamp ? Date.parse(positionTimestamp) : 0;
   const sentAt = Number(payload.sent_at) || (Number.isFinite(databasePositionAt) ? databasePositionAt : 0);
   const isDatabasePosition = source === "database" || source === "database-snapshot";
-  const staleDatabasePosition = Boolean(previous && isDatabasePosition && sentAt > 0 &&
-    previous.lastPositionAt > 0 && sentAt < previous.lastPositionAt);
+  const previousPositionTimestamp = String(previous?.lastPositionTimestamp || "");
+  const timestampOrder = positionTimestamp && previousPositionTimestamp
+    ? compareServerTimestamps(positionTimestamp, previousPositionTimestamp)
+    : null;
+  const staleDatabasePosition = Boolean(previous && isDatabasePosition && (
+    previousPositionTimestamp
+      ? (!positionTimestamp || timestampOrder <= 0)
+      : (sentAt > 0 && previous.lastPositionAt > 0 && sentAt < previous.lastPositionAt)
+  ));
 
   // Bloqueia pacotes de posição fora de ordem e pacotes atrasados de uma
   // sessão anterior do mesmo jogador. Para a mesma sessão, a sequência é a
@@ -286,7 +348,12 @@ function acceptRemote(payload, source = "broadcast") {
       (sessionId && sessionId !== previous?.sessionId ? -1 : (previous?.lastSequence ?? -1)),
     lastPositionAt: (source === "broadcast" || isDatabasePosition)
       ? Math.max(previous?.lastPositionAt || 0, sentAt || 0)
-      : (previous?.lastPositionAt || 0)
+      : (previous?.lastPositionAt || 0),
+    lastPositionTimestamp: isDatabasePosition
+      ? (staleDatabasePosition
+        ? (previous?.lastPositionTimestamp || "")
+        : (positionTimestamp || previous?.lastPositionTimestamp || ""))
+      : (previous?.lastPositionTimestamp || "")
   });
   updateRemotes();
   void loadRemoteProfile(id);
@@ -446,13 +513,12 @@ async function sendPosition(force = false) {
       const direction = Number.isFinite(Number(step.direction))
         ? Math.max(0, Math.min(3, Number(step.direction)))
         : payload.direction;
-      state.lastPosition = {
+      applyOwnServerPosition({
         x: serverX,
         y: serverY,
         direction,
-        lastPositionAt: Date.now()
-      };
-      window.KTKWorldEntities?.reconcileLocalPosition?.(serverX, serverY, direction);
+        position_updated_at: step.position_updated_at
+      });
     }
   } catch (error) {
     if (stepId === state.stepSequence) {
@@ -469,6 +535,22 @@ async function sendPosition(force = false) {
     if (state.activeStepId === stepId) {
       state.activeStepId = 0;
       state.stepInFlight = false;
+
+      // A key change made while the request was pending is sent immediately
+      // instead of waiting for the next 100 ms heartbeat.
+      if (!state.leaving && state.online && state.joined) {
+        const latest = readControlInput();
+        if (latest) {
+          const latestMoving = latest.inputX !== 0 || latest.inputY !== 0;
+          const latestSignature = JSON.stringify({
+            inputX: latest.inputX,
+            inputY: latest.inputY,
+            running: Boolean(latest.running) && latestMoving,
+            guarding: Boolean(latest.guarding)
+          });
+          if (latestSignature !== inputSignature) void sendPosition(false);
+        }
+      }
     }
   }
 }
@@ -477,6 +559,7 @@ async function enter(options = {}) {
   if (state.connecting) return { ok: false, error: "A conexão já está sendo iniciada." };
   state.connecting = true;
   state.sessionId = window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2));
+  state.lastPosition = null;
   try {
     const displayName = String(options.displayName || "").trim().slice(0, 24);
     if (displayName.length < 2) throw new Error("Escolha um nome com pelo menos 2 caracteres.");
