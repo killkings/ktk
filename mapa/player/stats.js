@@ -14,12 +14,30 @@
     speed:       { value: 2, min: 1, max: 3 }
   };
   const initialValues = Object.fromEntries(Object.entries(stats).map(([name, stat]) => [name, stat.value]));
+  const changeListeners = new Set();
 
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   let getEquipmentAttackBonus = () => 0;
   let getEquipmentDefenseMultiplier = () => 1;
   let getEquipmentArmorDefense = () => 0;
   let getEquipmentSpeedPenalty = () => 0;
+
+  // O modelo publica mudanças sem conhecer DOM, seletores ou elementos HTML.
+  function notifyChange() {
+    changeListeners.forEach(listener => {
+      try {
+        listener(stats);
+      } catch (error) {
+        console.error('Erro ao atualizar a interface de atributos:', error);
+      }
+    });
+  }
+
+  function subscribe(listener) {
+    if (typeof listener !== 'function') return () => {};
+    changeListeners.add(listener);
+    return () => changeListeners.delete(listener);
+  }
 
   function getEffectiveCombatStats(attackBonusOverride) {
     const resources = ['health', 'satiety', 'hydration', 'stamina'];
@@ -41,41 +59,27 @@
 
   function setEquipmentAttackBonusProvider(provider) {
     getEquipmentAttackBonus = typeof provider === 'function' ? provider : () => 0;
-    render();
+    notifyChange();
   }
 
   function setEquipmentDefenseMultiplierProvider(provider) {
     getEquipmentDefenseMultiplier = typeof provider === 'function' ? provider : () => 1;
-    render();
+    notifyChange();
   }
 
   function setEquipmentArmorDefenseProvider(provider) {
     getEquipmentArmorDefense = typeof provider === 'function' ? provider : () => 0;
-    render();
+    notifyChange();
   }
 
   function setEquipmentSpeedPenaltyProvider(provider) {
     getEquipmentSpeedPenalty = typeof provider === 'function' ? provider : () => 0;
-    render();
-  }
-
-  function render() {
-    const combat = getEffectiveCombatStats();
-    for (const [name, stat] of Object.entries(stats)) {
-      const value = document.querySelector(`[data-stat="${name}"]`);
-      const shownValue = name === 'attack' ? combat.attack : name === 'defense' ? combat.defense : name === 'magicLevel' ? `${stat.value}/${stat.max}` : stat.value;
-      if (value) value.textContent = `${typeof shownValue === 'number'&&!Number.isInteger(shownValue) ? shownValue.toFixed(1) : shownValue}${stat.unit || ''}`;
-      const meter = document.querySelector(`[data-meter="${name}"]`);
-      if (meter) {
-        const percent = name === 'temperature' ? 50 : ((stat.value - stat.min) / (stat.max - stat.min)) * 100;
-        meter.style.setProperty('--fill', `${clamp(percent, 0, 100)}%`);
-      }
-    }
+    notifyChange();
   }
 
   function resetForNewCharacter() {
     Object.entries(stats).forEach(([name, stat]) => { stat.value = initialValues[name]; });
-    render();
+    notifyChange();
   }
 
   function updateStamina(deltaSeconds, moving, runRequested, defending) {
@@ -90,7 +94,7 @@
       stats.speed.min,
       stats.speed.max
     );
-    render();
+    notifyChange();
     return { running, speed: stats.speed.value, shielding, stamina: stats.stamina.value };
   }
 
@@ -118,6 +122,22 @@
     return stats.mana.value > 0;
   }
 
-  render();
-  window.KTKPlayerStats = { stats, updateStamina, updateMana, cycleMagicLevel, consumeStamina, canConsumeMana, consumeMana, getEffectiveCombatStats, setEquipmentAttackBonusProvider, setEquipmentDefenseMultiplierProvider, setEquipmentArmorDefenseProvider, setEquipmentSpeedPenaltyProvider, resetForNewCharacter, render };
+  window.KTKPlayerStats = {
+    stats,
+    updateStamina,
+    updateMana,
+    cycleMagicLevel,
+    consumeStamina,
+    canConsumeMana,
+    consumeMana,
+    getEffectiveCombatStats,
+    setEquipmentAttackBonusProvider,
+    setEquipmentDefenseMultiplierProvider,
+    setEquipmentArmorDefenseProvider,
+    setEquipmentSpeedPenaltyProvider,
+    resetForNewCharacter,
+    subscribe,
+    // Compatibilidade: chamadas antigas de render() agora notificam a interface inscrita.
+    render: notifyChange
+  };
 })();
