@@ -41,6 +41,7 @@ function readLocal() {
     character: data.character || {},
     wearables: data.wearables || {},
     combat_stats: data.combatStats || {},
+    moving: Boolean(data.moving),
     running: Boolean(data.running),
     guarding: Boolean(data.guarding),
     is_alive: true,
@@ -89,6 +90,7 @@ function acceptDatabaseChange(payload) {
   const serverState=row.state&&typeof row.state==="object"?row.state:{};
   const remote=acceptRemote({
     user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
+    position_updated_at: row.position_updated_at,
     display_name: row.display_name, character: row.character,
     combat_stats: {
       health:serverState.health,maxHealth:serverState.max_health,
@@ -149,7 +151,11 @@ function acceptRemote(payload, source = "broadcast") {
   const sessionId = String(payload.session_id || "");
   const rawSequence = Number(payload.sequence);
   const hasSequence = Number.isSafeInteger(rawSequence) && rawSequence >= 0;
-  const sentAt = Number(payload.sent_at) || 0;
+  const databasePositionAt = payload.position_updated_at ? Date.parse(payload.position_updated_at) : 0;
+  const sentAt = Number(payload.sent_at) || (Number.isFinite(databasePositionAt) ? databasePositionAt : 0);
+  const isDatabasePosition = source === "database" || source === "database-snapshot";
+  const staleDatabasePosition = Boolean(previous && isDatabasePosition && sentAt > 0 &&
+    previous.lastPositionAt > 0 && sentAt < previous.lastPositionAt);
 
   // Bloqueia pacotes de posição fora de ordem e pacotes atrasados de uma
   // sessão anterior do mesmo jogador. Para a mesma sessão, a sequência é a
@@ -164,13 +170,18 @@ function acceptRemote(payload, source = "broadcast") {
     if (previous.sessionId && !sessionId && !hasSequence && !sentAt) return;
   }
 
+  const acceptedX = staleDatabasePosition ? (previous.targetX ?? previous.x) : x;
+  const acceptedY = staleDatabasePosition ? (previous.targetY ?? previous.y) : y;
+  const acceptedDirection = staleDatabasePosition
+    ? previous.direction
+    : (Number.isFinite(Number(payload.direction)) ? Math.max(0, Math.min(3, Number(payload.direction))) : 2);
   const hasCharacter = payload.character && Object.keys(payload.character).length > 0;
   state.remote.set(id, {
     id,
     display_name: String(payload.display_name || payload.displayName || previous?.display_name || "Aventureiro").slice(0, 24),
     displayName: String(payload.display_name || payload.displayName || previous?.displayName || "Aventureiro").slice(0, 24),
-    x, y, targetX: x, targetY: y,
-    direction: Number.isFinite(Number(payload.direction)) ? Math.max(0, Math.min(3, Number(payload.direction))) : 2,
+    x: acceptedX, y: acceptedY, targetX: acceptedX, targetY: acceptedY,
+    direction: acceptedDirection,
     character: hasCharacter ? payload.character : (previous?.character || {}),
     wearables: payload.wearables && Object.keys(payload.wearables).length
       ? payload.wearables
@@ -181,7 +192,9 @@ function acceptRemote(payload, source = "broadcast") {
     sessionId: sessionId || previous?.sessionId || "",
     lastSequence: hasSequence ? rawSequence :
       (sessionId && sessionId !== previous?.sessionId ? -1 : (previous?.lastSequence ?? -1)),
-    lastPositionAt: source === "broadcast" ? sentAt : (previous?.lastPositionAt || 0)
+    lastPositionAt: (source === "broadcast" || isDatabasePosition)
+      ? Math.max(previous?.lastPositionAt || 0, sentAt || 0)
+      : (previous?.lastPositionAt || 0)
   });
   updateRemotes();
 }
@@ -235,7 +248,7 @@ async function loadExistingPlayers() {
   const cutoff = new Date(Date.now() - 30000).toISOString();
   const { data, error } = await supabase
     .from("ktk_world_players")
-    .select("user_id,x,y,direction,is_alive,last_seen_at")
+    .select("user_id,x,y,direction,is_alive,last_seen_at,position_updated_at")
     .eq("world_id", WORLD_ID)
     .eq("is_alive", true)
     .gte("last_seen_at", cutoff);
@@ -255,6 +268,7 @@ async function loadExistingPlayers() {
     state.profileCache.set(String(row.user_id), true);
     acceptRemote({
       user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
+      position_updated_at: row.position_updated_at,
       display_name: profile.display_name, character: profile.character
     }, "database-snapshot");
   });
@@ -348,12 +362,16 @@ async function sendPosition(force = false) {
       if(error) console.warn("KTK world heartbeat:",error.message);
     });
   }
-  const intentSignature = JSON.stringify({ running: payload.running, guarding: payload.guarding });
+  const intentSignature = JSON.stringify({ moving: payload.moving, running: payload.running, guarding: payload.guarding });
   if (intentSignature !== state.lastIntentSignature) {
     state.lastIntentSignature = intentSignature;
     void supabase.rpc("ktk_game_action", {
       p_action: "intent",
-      p_payload: { running: Boolean(payload.running), guarding: Boolean(payload.guarding) }
+      p_payload: {
+        moving: Boolean(payload.moving),
+        running: Boolean(payload.running),
+        guarding: Boolean(payload.guarding)
+      }
     }).then(({ error }) => {
       if (error) {
         console.warn("KTK authoritative intent:", error.message);
