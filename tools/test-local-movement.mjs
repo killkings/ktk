@@ -160,7 +160,7 @@ assert.equal(remoteEntity.moving,false,
 
 const noRollbackAfterLongGap={
   remotePlayers:new Map([["late",{
-    x:70,y:0,targetX:20,targetY:0,velocityX:0,velocityY:0,
+    x:150,y:0,targetX:20,targetY:0,velocityX:0,velocityY:0,
     direction:3,renderDirection:3,moving:true,
     motionSnapshots:[{timestamp:"late-stop",receivedAt:2000,x:20,y:0,moving:false,direction:3}]
   }]]),
@@ -170,7 +170,7 @@ const noRollbackAfterLongGap={
 vm.createContext(noRollbackAfterLongGap);
 vm.runInContext(replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",noRollbackAfterLongGap);
 noRollbackAfterLongGap.stepRemoteMotion(0.016);
-assert.equal(noRollbackAfterLongGap.remotePlayers.get("late").x,70,
+assert.equal(noRollbackAfterLongGap.remotePlayers.get("late").x,150,
   "Uma posição de parada atrasada não pode puxar para trás o personagem que já foi exibido à frente.");
 
 const staleMotionContext={
@@ -346,7 +346,6 @@ assert.match(replica,/remote\.positionUpdatedAt/);
 assert.doesNotMatch(replica,/Math\.min\(450,packetAgeMs\)/);
 assert.match(playerSync,/moving:serverState\.moving/);
 assert.match(playerSync,/moving:row\.state\?\.moving/);
-assert.match(replica,/const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
 assert.match(replica,/const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
 assert.match(replica,/const extrapolationMs=Math\.min\(REMOTE_MOTION_MAX_EXTRAPOLATION_MS,elapsed\)/);
 assert.match(replica,/const previousDirection=Number\.isFinite\(remote\.renderDirection\)/);
