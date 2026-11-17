@@ -3261,6 +3261,7 @@
   }
 
   let startingGame = false;
+  let leavingGame = false;
 
   async function startGame() {
     const button=document.getElementById('enter-world');
@@ -3370,6 +3371,46 @@
     }
   }
 
+  async function leaveGameToCreator() {
+    if(leavingGame || startingGame || !gameStarted || !screens.game.classList.contains('active')) return;
+    leavingGame=true;
+    keys.clear();
+    rightMouseHeld=false;
+    shieldStaminaExhausted=false;
+
+    const button=document.getElementById('enter-world');
+    const previousText=button?.textContent||'Entrar no mundo →';
+    if(button) {
+      button.disabled=true;
+      button.textContent='Encerrando personagem…';
+    }
+
+    try {
+      const result=await window.KTKOnline?.leaveWorld?.();
+      if(!result?.ok) throw new Error(result?.error||'O servidor não confirmou a saída.');
+
+      // Esc encerra a vida atual. A próxima entrada obrigatoriamente cria
+      // outra identidade anônima e recebe estado inicial no servidor.
+      playerDead=true;
+      newCharacterRequired=true;
+      gameStarted=false;
+      if(button) button.textContent='Criar novo personagem';
+      showScreen('creator');
+      updateCreator();
+      toast('Você saiu do mundo. Seu personagem morreu; a próxima entrada começará do zero.');
+    } catch(error) {
+      console.error('KTK leaveGameToCreator:',error);
+      toast(error?.message||'Não foi possível encerrar o personagem. Tente novamente.');
+    } finally {
+      leavingGame=false;
+      if(button) {
+        button.disabled=false;
+        if(newCharacterRequired) button.textContent='Criar novo personagem';
+        else button.textContent=previousText;
+      }
+    }
+  }
+
   function toast(message) {
     const el=document.getElementById('toast');
     el.textContent=message;
@@ -3415,6 +3456,11 @@
   window.addEventListener('keydown',event=>{
     const key=event.key.toLowerCase();
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) event.preventDefault();
+    if(key==='escape'&&!event.repeat&&gameStarted&&screens.game.classList.contains('active')) {
+      event.preventDefault();
+      void leaveGameToCreator();
+      return;
+    }
     if(screens.game.classList.contains('active')) {
       keys.add(key);
       if(key==='e'&&!event.repeat) interactWithSelectedItem();
@@ -3426,11 +3472,6 @@
           toast(`Nível mágico: ${level}/${maxLevel}.`);
         }).catch(error=>toast(error?.message||'O servidor não alterou o nível mágico.'));
       }
-    }
-    if(key==='escape'&&gameStarted&&screens.game.classList.contains('active')) {
-      document.getElementById('enter-world').textContent='Voltar ao mundo →';
-      showScreen('creator');
-      updateCreator();
     }
   },{passive:false});
   window.addEventListener('keyup',event=>keys.delete(event.key.toLowerCase()));
