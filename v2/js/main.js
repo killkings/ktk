@@ -276,6 +276,7 @@ async function runGameAction(rpcName, args = {}) {
   try {
     const { data, error } = await supabase.rpc(rpcName, args);
     if (error) throw error;
+    if (data?.user_id) upsertPlayer(data);
     if (data?.player) upsertPlayer(data.player);
     if (data?.attacker) upsertPlayer(data.attacker);
     if (data?.target_type === "player" && data?.target) upsertPlayer(data.target);
@@ -513,6 +514,7 @@ async function cleanupLocalSession() {
   state.worldRevision = 0;
   state.keys.clear();
   state.localInput = normalizeControls();
+  state.rightMouseHeld = false;
   state.lastInputSignature = "";
   state.lastAttemptSignature = "";
   state.nextMovementRetryAt = 0;
@@ -523,6 +525,7 @@ async function cleanupLocalSession() {
   state.movementTimer = 0;
   cancelAnimationFrame(state.animationFrame);
   state.animationFrame = 0;
+  renderCharacterPanel(null);
 }
 
 async function leaveWorld(fromPageHide = false) {
