@@ -70,18 +70,22 @@
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     skeleton.layers.slice().sort((a, b) => a.z - b.z).forEach(layer => {
-      const animation = skeleton.attacking ? 'slash' : 'idle';
+      const remoteAttackActive=Boolean(skeleton.remoteAttacking);
+      const attacking=skeleton.attacking||remoteAttackActive;
+      const attackElapsed=remoteAttackActive?skeleton.remoteAttackElapsed:skeleton.attackElapsed;
+      const direction=remoteAttackActive?skeleton.remoteAttackDirection:skeleton.direction;
+      const animation = attacking ? 'slash' : 'idle';
       const image = loadImage(layer.path.replace('/idle.png', `/${animation}.png`));
       if (!image.complete || !image.naturalWidth) return;
       const sprite = skeleton.knockback ? getDamageTintedSprite(image) : image;
       const columns = Math.max(1, Math.floor(image.naturalWidth / skeleton.frameWidth));
-      const frame = skeleton.attacking
-        ? Math.min(columns - 1, Math.floor((skeleton.attackElapsed / 0.42) * columns))
+      const frame = attacking
+        ? Math.min(columns - 1, Math.floor((attackElapsed / 0.42) * columns))
         : Math.floor(time * 2) % skeleton.frameCount;
       ctx.drawImage(
         sprite,
         (frame % columns) * skeleton.frameWidth,
-        skeleton.direction * skeleton.frameHeight,
+        direction * skeleton.frameHeight,
         skeleton.frameWidth,
         skeleton.frameHeight,
         left,
