@@ -227,10 +227,16 @@ context.setAuthoritativePlayerPosition(
   { inputX:0,inputY:0,running:false,guarding:false,inputAgeMs:0 }
 );
 assert.ok(context.playerVisual.correctionRemaining > 0);
-const beforeStopCorrection = context.playerVisual.x;
+const beforeStopCorrection = {x:context.playerVisual.x,y:context.playerVisual.y};
 context.updateLocalPlayerVisual(0.05);
-assert.notEqual(context.playerVisual.x,beforeStopCorrection,
+const stopCorrectionDistance=Math.hypot(
+  context.playerVisual.x-beforeStopCorrection.x,
+  context.playerVisual.y-beforeStopCorrection.y
+);
+assert.ok(stopCorrectionDistance>0,
   "Reconciliation must continue after releasing the key.");
+assert.ok(stopCorrectionDistance<=225*0.5*0.05+0.01,
+  "A delayed correction after key release must remain speed-limited.");
 
 // SQL contract: larger intervals are processed, old/new controls are segmented,
 // equipment penalties match the client, and exit/death reset is respected.
