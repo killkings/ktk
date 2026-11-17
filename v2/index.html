@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#14241b">
+  <title>Kill the King — V2</title>
+  <link rel="stylesheet" href="./style.css?v=v2-001">
+</head>
+<body>
+  <main id="app">
+    <section id="welcome" class="screen screen-active" aria-labelledby="game-title">
+      <div class="welcome-card">
+        <p class="eyebrow">Reconstrução multiplayer</p>
+        <h1 id="game-title">KILL THE KING</h1>
+        <p class="subtitle">O mundo continua existindo, mesmo quando você sai.</p>
+        <form id="join-form">
+          <label for="display-name">Nome do personagem</label>
+          <input id="display-name" name="displayName" maxlength="24" minlength="2" autocomplete="off" required placeholder="Seu nome no mundo">
+          <div class="creator-grid">
+            <label>Tom de pele
+              <select id="skin-color" name="skin">
+                <option value="light">Claro</option><option value="tan">Moreno</option><option value="brown">Castanho</option><option value="dark">Escuro</option>
+              </select>
+            </label>
+            <label>Cor da roupa
+              <select id="clothing-color" name="clothing">
+                <option value="#e7e2c9">Linho</option><option value="#8d3030">Vermelho</option><option value="#315d9b">Azul</option><option value="#47774b">Verde</option><option value="#d3aa37">Amarelo</option>
+              </select>
+            </label>
+          </div>
+          <button id="join-button" class="primary" type="submit">Entrar no mundo</button>
+          <p id="join-error" class="error" role="alert" aria-live="polite"></p>
+        </form>
+        <p class="small-note">WASD / setas para andar · Shift para correr · Esc para sair definitivamente</p>
+      </div>
+    </section>
+
+    <section id="game" class="game-screen" aria-label="Mundo do jogo">
+      <canvas id="world" aria-label="Visão do mundo"></canvas>
+      <header class="hud">
+        <div><strong id="hud-name">Aventureiro</strong><span id="connection-state">Conectando…</span></div>
+        <div class="hud-stats"><span id="hud-position">—</span><span id="hud-players">1 jogador</span></div>
+        <button id="leave-button" class="danger" type="button">Sair · morrer</button>
+      </header>
+      <div class="controls-hint">WASD / setas · Shift corre · Esc sai</div>
+      <div id="game-error" class="game-error" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+  <script type="module" src="./js/main.js?v=v2-001"></script>
+</body>
+</html>
