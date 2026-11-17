@@ -27,12 +27,12 @@ declare
   v_index integer;
   v_defense integer:=0;
   v_damage integer;
-  v_health integer;
+  v_health numeric;
   v_stamina numeric;
   v_armor_cursor integer;
   v_worn_slot text;
   v_worn jsonb;
-  v_worn_health integer;
+  v_worn_health numeric;
   v_next_x double precision;
   v_next_y double precision;
   v_blocked boolean:=false;
@@ -76,7 +76,7 @@ begin
       v_defense:=v_defense+(2*v_shield_def.defense_bonus);
       v_stamina:=greatest(0,v_stamina-2);
       if v_shield_def.max_durability>0 then
-        v_worn_health:=greatest(0,coalesce((v_item->>'durability')::integer,v_shield_def.max_durability)-1);
+        v_worn_health:=greatest(0,coalesce((v_item->>'durability')::numeric,v_shield_def.max_durability)-1);
         if v_worn_health=0 then
           v_inventory:=jsonb_set(v_inventory,array[v_shield_index::text],'null'::jsonb,true);
         else
@@ -92,7 +92,7 @@ begin
   end if;
 
   v_damage:=greatest(1,round(greatest(1,coalesce(p_raw_damage,1))*10.0/(10.0+greatest(0,v_defense)))::integer);
-  v_health:=greatest(0,coalesce((v_state->>'health')::integer,100)-v_damage);
+  v_health:=greatest(0,coalesce((v_state->>'health')::numeric,100)-v_damage);
 
   -- Wear one armor part per confirmed hit, rotating through the five slots.
   v_armor_cursor:=greatest(0,coalesce((v_state->>'armor_damage_cursor')::integer,0))%5;
@@ -107,7 +107,7 @@ begin
     where item_id=v_worn->>'item_id' and item_type='armor';
     if not found or v_armor_def.max_durability<=0 then continue; end if;
 
-    v_worn_health:=greatest(0,coalesce((v_worn->>'durability')::integer,v_armor_def.max_durability)-1);
+    v_worn_health:=greatest(0,coalesce((v_worn->>'durability')::numeric,v_armor_def.max_durability)-1);
     if v_worn_health=0 then
       select greatest(60,least(86400,coalesce((settings->>'loot_ttl_seconds')::integer,900)))
       into v_ttl from public.ktk_v2_worlds where id='main';
