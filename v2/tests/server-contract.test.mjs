@@ -80,7 +80,8 @@ test("creator and local/remote players use the same real LPC sprite catalog", ()
   assert.match(catalog, /"id":"hair_pixie"/);
   assert.match(catalog, /hair\/pixie\/adult\/walk\.png/);
   assert.match(lpc, /Universal-LPC-Spritesheet-Character-Generator\/04140673ec02906f8233523639733c83690df750/);
-  assert.match(lpc, /body\/bodies\/\" \+ gender/);
+  assert.match(lpc, /body\/bodies\//);
+  assert.match(lpc, /path:\"body\/bodies\/\"\+gender/);
   assert.match(lpc, /mode === "skin" \? appearance\.skin/);
   assert.match(lpc, /mode === "face" \? appearance\.skin \+ ":" \+ appearance\.eyes/);
   assert.match(lpc, /mode === "hair" \? appearance\.hair/);
@@ -91,8 +92,8 @@ test("creator and local/remote players use the same real LPC sprite catalog", ()
 
 test("all V2 JavaScript modules parse as ES modules", () => {
   const stripImports = source => source
-    .replace(/^import\\s+[\\s\\S]*?from\\s+["'][^"']+["'];\\s*/gm, "")
-    .replace(/^export\\s+/gm, "");
+    .replace(/^import\s+[\s\S]*?;\s*/gm, "")
+    .replace(/^export\s+/gm, "");
   assert.doesNotThrow(() => new Function(stripImports(client)), "main.js");
   assert.doesNotThrow(() => new Function(stripImports(renderer)), "world-renderer.js");
   assert.doesNotThrow(() => new Function(stripImports(lpc)), "lpc-renderer.js");
