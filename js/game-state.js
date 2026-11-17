@@ -182,11 +182,18 @@ var  camera = {x:0,y:0};
       running:playerRunning,guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted),
       inputAgeMs:0
     };
-    const sameIntent=Boolean(requestInput
-      && Number(requestInput.inputX)===Number(controls.inputX)
-      && Number(requestInput.inputY)===Number(controls.inputY)
-      && Boolean(requestInput.running)===Boolean(controls.running)
-      && Boolean(requestInput.guarding)===Boolean(controls.guarding));
+    const hasIntentRevision=typeof requestInput?.intentRevision==="number"
+      && Number.isFinite(requestInput.intentRevision)
+      && typeof controls.intentRevision==="number"
+      && Number.isFinite(controls.intentRevision);
+    // Mesmo vetor não significa mesma intenção: o jogador pode ter mudado e
+    // voltado à direção original enquanto a RPC estava em trânsito.
+    const sameIntent=Boolean(requestInput && (hasIntentRevision
+      ? requestInput.intentRevision===controls.intentRevision
+      : Number(requestInput.inputX)===Number(controls.inputX)
+        && Number(requestInput.inputY)===Number(controls.inputY)
+        && Boolean(requestInput.running)===Boolean(controls.running)
+        && Boolean(requestInput.guarding)===Boolean(controls.guarding)));
     const oneWayLatencyMs=Math.max(0,Number(latencyMs)||0)/2;
     // A nova intenção pode ter começado antes ou depois do snapshot do servidor.
     // O tempo posterior ao snapshot é limitado ao menor entre idade e meia-RTT.

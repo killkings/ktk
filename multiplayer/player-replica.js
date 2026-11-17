@@ -3,6 +3,7 @@
 
 var localMovementIntentSignature = null;
 var localMovementIntentChangedAt = 0;
+var localMovementIntentRevision = 0;
 
 function getLocalMovementControls() {
   const inputX=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
@@ -15,9 +16,11 @@ function getLocalMovementControls() {
   if(signature!==localMovementIntentSignature) {
     localMovementIntentSignature=signature;
     localMovementIntentChangedAt=now;
+    localMovementIntentRevision++;
   }
   return {
     inputX,inputY,running,guarding,
+    intentRevision:localMovementIntentRevision,
     inputAgeMs:Math.max(0,Math.min(750,Math.round(now-localMovementIntentChangedAt)))
   };
 }

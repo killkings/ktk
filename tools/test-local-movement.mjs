@@ -41,6 +41,8 @@ let controls = replicaContext.window.KTKWorldEntities.getLocalControls();
 assert.equal(controls.inputX, 0);
 assert.equal(controls.inputY, -1);
 assert.equal(controls.inputAgeMs, 0);
+const firstIntentRevision=controls.intentRevision;
+assert.ok(firstIntentRevision>0);
 clock = 1125;
 keys.delete("w");
 keys.add("d");
@@ -48,8 +50,13 @@ controls = replicaContext.window.KTKWorldEntities.getLocalControls();
 assert.equal(controls.inputX, 1);
 assert.equal(controls.inputY, 0);
 assert.equal(controls.inputAgeMs, 0);
+const turnedIntentRevision=controls.intentRevision;
+assert.notEqual(turnedIntentRevision,firstIntentRevision);
 clock = 1250;
-assert.equal(replicaContext.window.KTKWorldEntities.getLocalControls().inputAgeMs, 125);
+const heldControls=replicaContext.window.KTKWorldEntities.getLocalControls();
+assert.equal(heldControls.inputAgeMs, 125);
+assert.equal(heldControls.intentRevision,turnedIntentRevision,
+  "Manter o mesmo vetor não pode criar uma nova geração a cada leitura.");
 keys.add("shift");
 assert.equal(replicaContext.window.KTKWorldEntities.getLocalControls().running, true);
 stamina.value = 0;
@@ -129,6 +136,21 @@ assert.ok(Math.abs(recentIntent.playerVisual.targetY-97.5)<0.01,
 const olderIntent=makeIntentTimingContext(300);
 assert.ok(Math.abs(olderIntent.playerVisual.targetY-75)<0.01,
   "Uma intenção mais antiga que a meia-RTT deve ser projetada somente pela meia-RTT.");
+const returnedDirection={
+  playerMoving:true,playerRunning:false,playerInputX:1,playerInputY:0,
+  playerStats:{stats:{speed:{value:2}}},
+  window:{KTKOnline:{connected:true}},SPEED:225,COLLISION_RADIUS:18
+};
+vm.createContext(returnedDirection);
+vm.runInContext(gameState.slice(blockStart,blockEnd),returnedDirection);
+returnedDirection.setAuthoritativePlayerPosition(100,120,3,true);
+returnedDirection.setAuthoritativePlayerPosition(
+  100,120,3,false,400,
+  {inputX:1,inputY:0,running:false,guarding:false,intentRevision:10},
+  {inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:30,intentRevision:12}
+);
+assert.ok(Math.abs(returnedDirection.playerVisual.targetX-106.75)<0.01,
+  "Voltar ao mesmo vetor com outra geração não pode ser confundido com a intenção original.");
 const sameIntent=makeIntentTimingContext(0);
 sameIntent.setAuthoritativePlayerPosition(
   100,120,0,false,400,
@@ -229,6 +251,9 @@ assert.match(renderer,/playerMoving\?playerVisual.direction:player.direction/);
 assert.match(gameState,/errorDistance\/correctionSpeed/);
 assert.match(gameState,/maxBackward/);
 assert.match(gameState,/Math\.min\(oneWayLatencyMs,intentAgeMs\)/);
+assert.match(gameState,/requestInput\.intentRevision===controls\.intentRevision/);
+assert.match(movement,/intentRevision: payload\.intentRevision/);
+assert.match(replica,/localMovementIntentRevision/);
 assert.match(gameState,/remote\?\.targetX/);
 assert.match(gameState,/remote\?\.targetY/);
 assert.match(gameState,/Math.ceil\(Math.max\(Math.abs\(wantedX\),Math.abs\(wantedY\)\)\/6\)/);
