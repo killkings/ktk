@@ -473,6 +473,7 @@
     gender:'male', skin:'brown', eyes:'brown', hairstyle:'hair_pixie',
     hair:'dark_brown', beard:'none', mustache:'none'
   };
+  const remoteLayerCache = new Map();
 
   let gameStarted = false;
   let playerDead = false;
@@ -685,7 +686,7 @@
     character.mustache=populateCatalogOptions(
       'mustache-select',window.KTKMustacheStyles || [],character.mustache,'none'
     );
-    const hairstyle=(window.KTKHairStyles || []).find(item=>item.id===character.hairstyle);
+    const hairstyle=(window.KTKHairStyles || []).find(item=>item.id===(characterData.hairstyle||'hair_pixie'));
     document.getElementById('style-name').textContent = hairstyle ? hairstyle.name : '';
   }
 
@@ -867,18 +868,18 @@
     return promise;
   }
 
-  function buildLayerDefinitions() {
-    const gender=character.gender;
+  function buildLayerDefinitions(characterData=character, wearables=equippedWearables) {
+    const gender=characterData.gender || 'male';
     const pantsGender=gender==='female'?'thin':'male';
     const shoeGender=gender==='female'?'thin':'male';
     const armGender=gender==='female'?'thin':'male';
     const layers=[
-      {z:0,path:'body/bodies/'+gender+'/walk.png',mode:'skin',palette:character.skin,name:'corpo'},
-      {z:100,path:'head/heads/human/'+gender+'/walk.png',mode:'skin',palette:character.skin,name:'cabeca'},
-      {z:105,path:'head/faces/'+gender+'/neutral/walk.png',mode:'face',palette:character.skin+':'+character.eyes,name:'rosto'}
+      {z:0,path:'body/bodies/'+gender+'/walk.png',mode:'skin',palette:characterData.skin||'brown',name:'corpo'},
+      {z:100,path:'head/heads/human/'+gender+'/walk.png',mode:'skin',palette:characterData.skin||'brown',name:'cabeca'},
+      {z:105,path:'head/faces/'+gender+'/neutral/walk.png',mode:'face',palette:(characterData.skin||'brown')+':'+(characterData.eyes||'brown'),name:'rosto'}
     ];
     wearableSlotOrder.forEach(slot=>{
-      const item=equippedWearables[slot];
+      const item=wearables[slot];
       if(!item||(item.wearCategory==='armor'&&item.durability<=0)) return;
       (item.appearanceLayers||[]).forEach(layer=>{
         const path=String(layer.path||'')
@@ -901,17 +902,17 @@
         });
       });
     });
-    const beard=(window.KTKBeardStyles || []).find(item=>item.id===character.beard);
+    const beard=(window.KTKBeardStyles || []).find(item=>item.id===(characterData.beard||'none'));
     (beard?.layers[gender] || []).forEach(layer=>layers.push({
-      z:layer.z,path:layer.path,mode:'hair',palette:character.hair,name:'barba'
+      z:layer.z,path:layer.path,mode:'hair',palette:characterData.hair||'dark_brown',name:'barba'
     }));
-    const mustache=(window.KTKMustacheStyles || []).find(item=>item.id===character.mustache);
+    const mustache=(window.KTKMustacheStyles || []).find(item=>item.id===(characterData.mustache||'none'));
     (mustache?.layers[gender] || []).forEach(layer=>layers.push({
-      z:layer.z,path:layer.path,mode:'hair',palette:character.hair,name:'bigode'
+      z:layer.z,path:layer.path,mode:'hair',palette:characterData.hair||'dark_brown',name:'bigode'
     }));
     const hairstyle=(window.KTKHairStyles || []).find(item=>item.id===character.hairstyle);
     (hairstyle?.layers[gender] || []).forEach(hair=>layers.push({
-      z:hair.z,path:hair.path,mode:'hair',palette:character.hair,name:'cabelo'
+      z:hair.z,path:hair.path,mode:'hair',palette:characterData.hair||'dark_brown',name:'cabelo'
     }));
     return layers.sort((a,b)=>a.z-b.z);
   }
@@ -986,6 +987,47 @@
         : 'Sprites LPC carregados · prévia animada ao caminhar e correr';
     }
     drawPreview();
+  }
+
+  async function loadRemoteCharacterLayers(remote) {
+    const characterData=remote.character||{};
+    const signature=JSON.stringify(characterData);
+    if(remote.appearanceSignature===signature && remote.layersReady) return;
+    remote.appearanceSignature=signature;
+    remote.layersReady=false;
+    const definitions=buildLayerDefinitions(characterData,{});
+    const loadSet=defs=>Promise.all(defs.map(def=>loadLayer(def.path,def.mode,def.palette).then(result=>({
+      ...result,definition:def,fallbackMotion:result.path!==def.path
+    }))));
+    const [walk,idle]=await Promise.all([
+      loadSet(definitions),
+      loadSet(definitions.map(def=>({...def,path:def.path.replace(/\/walk\.png$/,'/idle.png')})))
+    ]);
+    if(remote.appearanceSignature!==signature) return;
+    remote.walkLayers=walk.filter(layer=>layer.image&&!layer.missing);
+    remote.idleLayers=idle.filter(layer=>layer.image&&!layer.missing);
+    remote.layers=remote.idleLayers;
+    remote.layersReady=true;
+  }
+
+  function updateRemotePlayerMotion(dt) {
+    remotePlayers.forEach(remote=>{
+      const targetX=Number.isFinite(remote.targetX)?remote.targetX:remote.x;
+      const targetY=Number.isFinite(remote.targetY)?remote.targetY:remote.y;
+      const dx=targetX-remote.x,dy=targetY-remote.y;
+      const distance=Math.hypot(dx,dy);
+      if(distance>0.01) {
+        const blend=1-Math.exp(-Math.max(0,dt)*18);
+        const step=Math.min(1,blend);
+        remote.x+=dx*step;
+        remote.y+=dy*step;
+        remote.moving=distance>1.2;
+        if(remote.moving) remote.walkTime=(remote.walkTime||0)+dt;
+      } else {
+        remote.x=targetX; remote.y=targetY;
+        remote.moving=false; remote.walkTime=0;
+      }
+    });
   }
 
   function drawLayeredCharacter(g, x, y, layers, scale, direction, frame, damaged=false, syncFrameColumns=0) {
@@ -1398,6 +1440,7 @@
 
     try {
       update(dt,w,h);
+      updateRemotePlayerMotion(dt);
       if(window.KTKWorldMap) window.KTKWorldMap.setViewport(w,h);
 
       // camera.x/y identificam a sala. O retângulo desenhado é sempre uma tela 16:9.
@@ -1469,7 +1512,9 @@
           else drawWorldItem(ctx,entity,screenX,screenY);
           if(entity===focusedItem) drawWorldItemLabel(ctx,entity,screenX,screenY);
         } else if(entity.type==='player') {
-          drawLayeredCharacter(ctx,screenX,screenY-(entity.knockbackHeight||0),entity.layers,WORLD_SCALE,entity.direction,0,Boolean(entity.knockback));
+          const remoteLayers=entity.moving&&entity.walkLayers?.length?entity.walkLayers:(entity.idleLayers?.length?entity.idleLayers:entity.layers);
+          const remoteFrame=entity.moving?Math.floor((entity.walkTime||0)*10)%WALK_COLUMNS:0;
+          drawLayeredCharacter(ctx,screenX,screenY-(entity.knockbackHeight||0),remoteLayers,WORLD_SCALE,entity.direction,remoteFrame,Boolean(entity.knockback));
           drawNearbyEntityStats(ctx,entity,screenX,screenY);
         } else if(entity.type==='boomerang-projectile') {
           drawBoomerangProjectile(ctx,screenX,screenY);
@@ -2424,11 +2469,29 @@
 
   // Entrada para sincronização futura de posições vindas do servidor online.
   function setRemotePlayers(players) {
-    remotePlayers.clear();
+    const incoming=new Set();
     (players||[]).forEach(remote=>{
       if(!remote || remote.id==null || !Number.isFinite(remote.x) || !Number.isFinite(remote.y)) return;
-      remotePlayers.set(String(remote.id),{...remote,type:'player',layers:idleLayers.length?idleLayers:currentLayers,radius:COLLISION_RADIUS});
+      const id=String(remote.id);
+      incoming.add(id);
+      const existing=remotePlayers.get(id);
+      const entity=existing||{
+        id,type:'player',x:remote.x,y:remote.y,targetX:remote.x,targetY:remote.y,
+        direction:remote.direction||2,radius:COLLISION_RADIUS,walkTime:0
+      };
+      entity.targetX=remote.x;
+      entity.targetY=remote.y;
+      entity.direction=Number.isFinite(remote.direction)?remote.direction:2;
+      entity.displayName=remote.displayName||remote.display_name||entity.displayName||'Aventureiro';
+      entity.character=remote.character||entity.character||{};
+      entity.type='player';
+      entity.radius=COLLISION_RADIUS;
+      remotePlayers.set(id,entity);
+      if(!entity.layersReady || entity.appearanceSignature!==JSON.stringify(entity.character)) {
+        void loadRemoteCharacterLayers(entity).catch(error=>console.warn('KTK remote appearance:',error));
+      }
     });
+    for(const id of remotePlayers.keys()) if(!incoming.has(id)) remotePlayers.delete(id);
     updateKingStatus();
   }
   window.KTKWorldEntities={
@@ -2736,6 +2799,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-2"></script>
+<script type="module" src="./js/online.js?v=20261117-3"></script>
 </body>
 </html>
