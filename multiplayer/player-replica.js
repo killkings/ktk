@@ -26,25 +26,37 @@ function getLocalMovementControls() {
 }
 
   function updateRemotePlayerMotion(dt) {
+    const now=performance.now();
     remotePlayers.forEach(remote=>{
       const targetX=Number.isFinite(remote.targetX)?remote.targetX:remote.x;
       const targetY=Number.isFinite(remote.targetY)?remote.targetY:remote.y;
-      const dx=targetX-remote.x,dy=targetY-remote.y;
+      const receivedAt=Number(remote.positionReceivedAt);
+      const packetAgeMs=Number.isFinite(receivedAt)?Math.max(0,now-receivedAt):1000;
+      // Os snapshots oficiais chegam em intervalos próximos à latência da RPC.
+      // Mantém a velocidade medida entre duas posições do servidor e projeta
+      // no máximo 450ms; assim a réplica não para entre pacotes nem desliza
+      // indefinidamente quando a conexão realmente perde atualizações.
+      const extrapolationMs=Math.min(450,packetAgeMs);
+      const velocityX=Number(remote.velocityX)||0;
+      const velocityY=Number(remote.velocityY)||0;
+      const predictedX=targetX+velocityX*extrapolationMs/1000;
+      const predictedY=targetY+velocityY*extrapolationMs/1000;
+      const dx=predictedX-remote.x,dy=predictedY-remote.y;
       const distance=Math.hypot(dx,dy);
       if(distance>0.01) {
-        // Interpolação com limite de velocidade: pacotes atrasados ou saltos
-        // de rede não podem deslocar o sprite vários pixels num único frame.
-        const blend=1-Math.exp(-Math.max(0,dt)*12);
-        const maxStep=SPEED*1.8*Math.max(0,dt);
+        const blend=1-Math.exp(-Math.max(0,dt)*18);
+        const maxStep=SPEED*2*Math.max(0,dt);
         const step=Math.min(1,blend,maxStep/Math.max(distance,0.001));
         remote.x+=dx*step;
         remote.y+=dy*step;
-        remote.moving=distance>1.2;
-        if(remote.moving) remote.walkTime=(remote.walkTime||0)+dt;
       } else {
-        remote.x=targetX; remote.y=targetY;
-        remote.moving=false; remote.walkTime=0;
+        remote.x=predictedX; remote.y=predictedY;
       }
+      const hasFreshServerMotion=Boolean(remote.serverMoving)&&packetAgeMs<700
+        &&Math.hypot(velocityX,velocityY)>4;
+      remote.moving=distance>1.2||hasFreshServerMotion;
+      if(remote.moving) remote.walkTime=(remote.walkTime||0)+Math.max(0,dt);
+      else remote.walkTime=0;
       if(remote.knockback) {
         remote.knockback.progress=Math.min(1,(remote.knockback.progress||0)+Math.max(0,dt)/KNOCKBACK_SECONDS);
         remote.knockbackHeight=Math.sin(remote.knockback.progress*Math.PI)*KNOCKBACK_HEIGHT;
@@ -151,6 +163,11 @@ function getLocalMovementControls() {
       };
       entity.targetX=remote.x;
       entity.targetY=remote.y;
+      entity.velocityX=Number.isFinite(Number(remote.velocityX))?Number(remote.velocityX):0;
+      entity.velocityY=Number.isFinite(Number(remote.velocityY))?Number(remote.velocityY):0;
+      entity.positionReceivedAt=Number.isFinite(Number(remote.positionReceivedAt))
+        ? Number(remote.positionReceivedAt) : (entity.positionReceivedAt||performance.now());
+      entity.serverMoving=Boolean(remote.serverMoving);
       entity.direction=remoteDirection;
       entity.displayName=remote.displayName||remote.display_name||entity.displayName||'Aventureiro';
       entity.character=remote.character||entity.character||{};

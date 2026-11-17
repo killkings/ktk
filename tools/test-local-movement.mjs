@@ -112,6 +112,64 @@ assert.equal(context.playerVisual.x,100,
   "The visual prediction must not walk through another player's collision radius.");
 context.remotePlayers.clear();
 
+// Réplica remota: continua avançando entre snapshots oficiais e para quando
+// o servidor confirma a interrupção do movimento.
+const remoteMotionStart=replica.indexOf("function updateRemotePlayerMotion(dt)");
+const remoteMotionEnd=replica.indexOf("\n  function normalizeRemoteWearables",remoteMotionStart);
+assert.ok(remoteMotionStart>=0&&remoteMotionEnd>remoteMotionStart);
+let remoteClock=1000;
+const remoteMotionContext={
+  remotePlayers:new Map([["other",{
+    x:0,y:0,targetX:0,targetY:0,velocityX:225,velocityY:0,
+    positionReceivedAt:1000,serverMoving:true,walkTime:0
+  }]]),
+  window:{},performance:{now:()=>remoteClock},SPEED:225,
+  KNOCKBACK_SECONDS:0.28,KNOCKBACK_HEIGHT:12,PUNCH_ANIMATION_SECONDS:0.42
+};
+vm.createContext(remoteMotionContext);
+vm.runInContext(
+  replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",
+  remoteMotionContext
+);
+const remoteEntity=remoteMotionContext.remotePlayers.get("other");
+remoteClock=1100;
+remoteMotionContext.stepRemoteMotion(0.1);
+const remoteXAfterFirstStep=remoteEntity.x;
+remoteClock=1200;
+remoteMotionContext.stepRemoteMotion(0.1);
+assert.ok(remoteEntity.x>remoteXAfterFirstStep+10,
+  "O jogador remoto deve continuar avançando entre pacotes do servidor.");
+assert.equal(remoteEntity.moving,true);
+remoteEntity.targetX=45;
+remoteEntity.velocityX=0;
+remoteEntity.velocityY=0;
+remoteEntity.serverMoving=false;
+remoteEntity.positionReceivedAt=remoteClock;
+for(let i=0;i<20;i++) {
+  remoteClock+=50;
+  remoteMotionContext.stepRemoteMotion(0.05);
+}
+assert.ok(Math.abs(remoteEntity.x-45)<0.75,
+  "A réplica deve convergir para a posição oficial quando o servidor confirma que parou.");
+assert.equal(remoteEntity.moving,false,
+  "A animação remota deve parar depois da confirmação de parada do servidor.");
+const staleMotionContext={
+  remotePlayers:new Map([["stale",{
+    x:0,y:0,targetX:0,targetY:0,velocityX:225,velocityY:0,
+    positionReceivedAt:0,serverMoving:true,walkTime:0
+  }]]),
+  window:{},performance:{now:()=>1000},SPEED:225,
+  KNOCKBACK_SECONDS:0.28,KNOCKBACK_HEIGHT:12,PUNCH_ANIMATION_SECONDS:0.42
+};
+vm.createContext(staleMotionContext);
+vm.runInContext(
+  replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",
+  staleMotionContext
+);
+staleMotionContext.stepRemoteMotion(0.5);
+assert.ok(staleMotionContext.remotePlayers.get("stale").x<=102,
+  "A extrapolação remota deve ser limitada para não deslizar indefinidamente.");
+
 // A mudança de direção não pode somar a idade da tecla à meia-RTT.
 // O trecho após o snapshot é limitado ao menor desses dois intervalos.
 function makeIntentTimingContext(ageMs) {
@@ -258,11 +316,16 @@ assert.match(gameState,/remote\?\.targetX/);
 assert.match(gameState,/remote\?\.targetY/);
 assert.match(gameState,/Math.ceil\(Math.max\(Math.abs\(wantedX\),Math.abs\(wantedY\)\)\/6\)/);
 assert.match(playerSync,/function compareServerTimestamps\(/);
+assert.match(playerSync,/velocityX,velocityY,positionReceivedAt,serverMoving/);
+assert.match(playerSync,/moving:serverState\.moving/);
+assert.match(playerSync,/moving:row\.state\?\.moving/);
+assert.match(replica,/const extrapolationMs=Math\.min\(450,packetAgeMs\)/);
+assert.match(replica,/const hasFreshServerMotion/);
 assert.match(playerSync,/applyOwnServerPosition\(row,Number\(state\.lastMovementLatencyMs\)\|\|0\)/);
-assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-movement-reconciliation-005"/);
+assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-remote-motion-006"/);
 assert.match(session,/state\.lastLocalKnockbackAt=String\(player\.state\?\.last_knockback_at/);
 assert.doesNotMatch(session,/spawnTimestamp/);
-assert.match(rootHtml,/20261117-movement-reconciliation-005/);
+assert.match(rootHtml,/20261117-remote-motion-006/);
 assert.doesNotMatch(playerSync,/compareServerTimestamps is not defined/);
 const timestampHelper = playerSync.slice(
   playerSync.indexOf("function compareServerTimestamps"),
@@ -280,18 +343,18 @@ for(const [name,source] of Object.entries(onlineModules)) {
   assert.doesNotMatch(source,/20261117-(online-separation-001|movement-authority-002|realtime-entry-fix-001|entry-timeouts-001)/,
     "Módulo ESM ainda usa uma chave antiga: "+name);
   for(const match of source.matchAll(/from\s+["']([^"']+\.js\?v=[^"']+)["']/g)) {
-    assert.ok(match[1].endsWith("?v=20261117-movement-reconciliation-005"),
+    assert.ok(match[1].endsWith("?v=20261117-remote-motion-006"),
       "Dependência ESM sem a chave única em "+name+": "+match[1]);
   }
 }
 for(const [path,version] of [
-  ["render/world-renderer.js","20261117-movement-reconciliation-005"],
-  ["multiplayer/player-replica.js","20261117-movement-reconciliation-005"],
-  ["js/game-state.js","20261117-movement-reconciliation-005"],
-  ["input/input-controller.js","20261117-movement-reconciliation-005"],
-  ["js/online.js","20261117-movement-reconciliation-005"]
+  ["render/world-renderer.js","20261117-remote-motion-006"],
+  ["multiplayer/player-replica.js","20261117-remote-motion-006"],
+  ["js/game-state.js","20261117-remote-motion-006"],
+  ["input/input-controller.js","20261117-remote-motion-006"],
+  ["js/online.js","20261117-remote-motion-006"]
 ]) {
   assert.ok(html.includes("./"+path+"?v="+version),
     "Cache bust ausente: "+path);
 }
-console.log("Movement timing, authoritative collisions, cache graph, knockback reconciliation and continuous correction passed.");
+console.log("Remote player interpolation, bounded server-velocity extrapolation, confirmed stop, and local movement reconciliation passed.");
