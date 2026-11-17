@@ -1804,6 +1804,21 @@
       updateKingStatus();
       return true;
     }
+    if(row.entity_type==='item') {
+      const itemId=String(worldState.item_id||'');
+      const existing=[...worldItems].find(item=>item.entityId===entityId);
+      if(worldState.status==='ground') {
+        let base=itemId==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(item=>item.id===itemId);
+        if(!base) return false;
+        const item={...base,...worldState,id:itemId,entityId,x:Number(row.x)||0,y:Number(row.y)||0,collected:false,isStartingWearable:false};
+        if(existing) Object.assign(existing,item);
+        else worldItems.add(item);
+      } else if(existing) {
+        existing.collected=true;
+        worldItems.delete(existing);
+      }
+      return true;
+    }
     if(entityId==='skeleton-1'&&window.KTKEnemySkeleton?.entity) {
       const skeleton=window.KTKEnemySkeleton.entity;
       skeleton.x=Number(row.x)||0;
@@ -2765,7 +2780,18 @@
       toast('Flecha coletada.');
       return true;
     }
-    if(itemToCollect.wearSlot&&await equipCollectedWearable(itemToCollect)) return true;
+    if(itemToCollect.isKingCrown) {
+      if(itemToCollect.wearSlot&&await equipCollectedWearable(itemToCollect)) return true;
+    } else {
+      try {
+        await window.KTKOnline?.gameAction?.('pickup',{entity_id:itemToCollect.entityId});
+        return true;
+      } catch(error) {
+        toast(error?.message||'O servidor recusou a coleta.');
+        return true;
+      }
+    }
+
     const previousItem=inventory[selectedInventorySlot];
     if(previousItem&&previousItem!==itemToCollect) {
       dropItemAtPlayer(previousItem,(player.direction+2)%4);
@@ -2849,8 +2875,13 @@
       toast('Este item nao pode ser solto.');
       return;
     }
-    dropItemAtPlayer(selectedItem);
-    inventory[selectedInventorySlot]=null;
+    try {
+      await window.KTKOnline?.gameAction?.('drop',{slot:selectedInventorySlot,direction:player.direction});
+      return;
+    } catch(error) {
+      toast(error?.message||'O servidor recusou o descarte.');
+      return;
+    }
     renderInventory();
     toast(`${selectedItem.displayName||'Item'} solto.`);
   }
