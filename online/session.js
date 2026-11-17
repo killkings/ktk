@@ -104,19 +104,8 @@ export async function enter(options = {}) {
     if (!player?.is_alive) {
       return { ok: false, dead: true, player, error: "Este personagem morreu. Crie outro para voltar ao mundo." };
     }
-    // Semeia a ordem temporal com a posição devolvida no ingresso. Assim,
-    // um Broadcast antigo não pode sobrescrever a posição inicial da sessão.
-    const spawnTimestamp=String(player.position_updated_at||"");
-    const spawnX=Number(player.x),spawnY=Number(player.y);
-    if(spawnTimestamp&&Number.isFinite(spawnX)&&Number.isFinite(spawnY)) {
-      state.lastPosition={
-        x:spawnX,y:spawnY,
-        direction:Number.isFinite(Number(player.direction))?Math.max(0,Math.min(3,Number(player.direction))):2,
-        positionUpdatedAt:spawnTimestamp,receivedAt:Date.now()
-      };
-    } else {
-      state.lastPosition=null;
-    }
+    // Não reproduz como novo um knockback que já constava do estado inicial.
+    // A posição do ingresso não inclui position_updated_at no contrato SQL.
     state.lastLocalKnockbackAt=String(player.state?.last_knockback_at||"");
     reportEntryProgress(options, "Conectando ao canal multiplayer...");
     await subscribeWorld(message => reportEntryProgress(options, message));

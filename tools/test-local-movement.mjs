@@ -260,8 +260,8 @@ assert.match(gameState,/Math.ceil\(Math.max\(Math.abs\(wantedX\),Math.abs\(wante
 assert.match(playerSync,/function compareServerTimestamps\(/);
 assert.match(playerSync,/applyOwnServerPosition\(row,Number\(state\.lastMovementLatencyMs\)\|\|0\)/);
 assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-movement-reconciliation-005"/);
-assert.match(session,/state\.lastPosition=\{/);
 assert.match(session,/state\.lastLocalKnockbackAt=String\(player\.state\?\.last_knockback_at/);
+assert.doesNotMatch(session,/spawnTimestamp/);
 assert.match(rootHtml,/20261117-movement-reconciliation-005/);
 assert.doesNotMatch(playerSync,/compareServerTimestamps is not defined/);
 const timestampHelper = playerSync.slice(
