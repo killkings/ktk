@@ -248,8 +248,15 @@ var  camera = {x:0,y:0};
       const speedLevel=Number(playerStats?.stats?.speed?.value);
       const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
       const travel=movementSpeed*dt;
-      playerVisual.x+=(playerInputX/inputLength)*travel;
-      playerVisual.y+=(playerInputY/inputLength)*travel;
+      const movementX=(playerInputX/inputLength)*travel;
+      const movementY=(playerInputY/inputLength)*travel;
+      playerVisual.x+=movementX;
+      playerVisual.y+=movementY;
+      // O alvo reconciliado também avança com a previsão local. Sem isso, ele
+      // fica congelado no instante da resposta e puxa o personagem para trás
+      // quando a suavização termina ou quando o jogador solta a tecla.
+      playerVisual.targetX+=movementX;
+      playerVisual.targetY+=movementY;
       playerVisual.direction=Math.abs(playerInputX)>Math.abs(playerInputY)
         ? (playerInputX>0?3:1)
         : (playerInputY>0?2:0);
