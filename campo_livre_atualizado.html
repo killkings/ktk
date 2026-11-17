@@ -1349,7 +1349,7 @@
 
   function drawNearbyEntityStats(g,entity,x,y) {
     if(!['enemy','player'].includes(entity.type)||entity.id==='skeleton-1'||!isNearLocalPlayer(entity)) return;
-    const source=entity.attributes||entity.stats||entity;
+    const source=entity.combatStats||entity.attributes||entity.stats||entity;
     const rows=[];
     const name=entity.displayName||entity.playerName||entity.name;
     if(name) rows.push(String(name));
@@ -3216,6 +3216,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-9-combat"></script>
+<script type="module" src="./js/online.js?v=20261117-10-pvp"></script>
 </body>
 </html>
