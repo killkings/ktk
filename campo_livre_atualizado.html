@@ -910,7 +910,7 @@
     (mustache?.layers[gender] || []).forEach(layer=>layers.push({
       z:layer.z,path:layer.path,mode:'hair',palette:characterData.hair||'dark_brown',name:'bigode'
     }));
-    const hairstyle=(window.KTKHairStyles || []).find(item=>item.id===character.hairstyle);
+    const hairstyle=(window.KTKHairStyles || []).find(item=>item.id===(characterData.hairstyle||'hair_pixie'));
     (hairstyle?.layers[gender] || []).forEach(hair=>layers.push({
       z:hair.z,path:hair.path,mode:'hair',palette:characterData.hair||'dark_brown',name:'cabelo'
     }));
