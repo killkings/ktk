@@ -350,7 +350,7 @@ assert.match(resetPatch,/coalesce\(\(v_state->>'moving'\)::boolean, false\)/);
 assert.match(movement,/p_input_age_ms:\s*inputAgeAtServer/);
 assert.match(movement,/payload\.inputAgeMs/);
 assert.match(movement,/lastMovementLatencyMs/);
-assert.match(movement,/reconcileLocalPosition\?\.\(x, y, direction, latencyMs, requestInput\)/);
+assert.match(movement,/reconcileLocalPosition\?\.\(x, y, direction, latencyMs, requestInput, intentTimeline\)/);
 assert.match(movement,/stepAccepted && latestMoving/);
 assert.match(input,/function sendImmediateMovementIntent\(/);
 assert.match(input,/if\(!wasPressed\)[\s\S]*?sendImmediateMovementIntent\(\)/);
