@@ -94,6 +94,14 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117176000_ktk_v2_world_population.sql
+      - name: Apply V2 safe suspension and disconnect migration
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117177000_ktk_v2_safe_suspend_and_disconnect_expiry.sql
       - name: Test server lifecycle, movement and crown
         env:
           PGHOST: localhost
