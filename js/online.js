@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 const state = {
   user: null, channel: null, joined: false, online: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0,
-  lastPosition: null, remote: new Map(), connecting: false
+  lastPosition: null, remote: new Map(), profileCache: new Map(), connecting: false
 };
 
 function setStatus(message, connected = false) {
@@ -243,6 +243,16 @@ async function enter(options = {}) {
     return { ok: true, player };
   } catch (error) {
     console.error("KTK online:", error);
+    if (state.channel) {
+      try { await supabase.removeChannel(state.channel); } catch (cleanupError) {
+        console.warn("KTK channel cleanup:", cleanupError);
+      }
+    }
+    state.channel = null;
+    state.online = false;
+    state.joined = false;
+    state.remote.clear();
+    updateRemotes();
     const code = error?.code || error?.error_code || "";
     const message = String(error?.message || "");
     if (code === "anonymous_provider_disabled" || message.includes("Anonymous sign-ins are disabled")) {
