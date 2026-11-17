@@ -284,6 +284,10 @@ test("V2 suspension pauses simulation without killing the character", () => {
   assert.ok(client.includes("visibilitychange"));
   assert.ok(client.includes("setConnectionSuspended"));
   assert.ok(client.includes("sessionGeneration"));
+  assert.ok(client.includes("state.connectionSuspended"));
+  assert.ok(client.includes("ui.interact.disabled = !canAct"));
+  assert.ok(client.includes("ui.attack.disabled = !canAct"));
+  assert.match(client,/async function pumpMovement\(\) \{\s*if \(!state.joined \|\| state.leaving \|\| state.connectionSuspended \|\| state.busy\) return;/);
 });
 
 test("the V2 migration has one clean commit boundary", () => {
