@@ -2577,7 +2577,7 @@
         return;
       }
       slot.title=describeEquipment(item);
-      slot.setAttribute('aria-label',`${item.displayName||'Item'}${arrowCount>1?` (${arrowCount})`:''}`);
+      slot.setAttribute('aria-label',`${item.displayName||'Item'}${stackCount>1?` (${stackCount})`:''}`);
       drawInventoryIcon(g,item);
     });
     renderWearableSlots();
