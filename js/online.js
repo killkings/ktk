@@ -94,7 +94,8 @@ function scheduleRemoteProfileRetry(userId) {
 
 function loadRemoteProfile(userId) {
   const id=String(userId||"");
-  if(!id) return Promise.resolve(null);
+  const sessionId=state.sessionId;
+  if(!id||!state.user||state.leaving) return Promise.resolve(null);
   const cached=state.profileCache.get(id);
   if(cached) {
     applyRemoteProfile(id,cached);
@@ -110,6 +111,7 @@ function loadRemoteProfile(userId) {
         .eq("id",id)
         .maybeSingle();
       if(error) throw error;
+      if(sessionId!==state.sessionId||!state.user||state.leaving) return null;
       if(!data) throw new Error("Perfil do jogador não encontrado.");
       const profile={
         display_name:data.display_name||"",
@@ -135,14 +137,17 @@ function loadRemoteProfile(userId) {
 }
 
 function acceptWorldEntityChange(payload, deleted = false) {
+  if(!state.user||state.leaving) return;
   const row=payload?.record||payload?.new||payload?.old||payload;
   if(row?.entity_id) window.KTKWorldEntities?.applyWorldEntity?.({...row,deleted});
 }
 
 async function loadWorldState() {
+  if(!state.user||state.leaving) return null;
   const requestId=++state.worldStateRequestId;
   const {data,error}=await supabase.rpc("ktk_get_world_state");
   if(error) throw error;
+  if(!state.user||state.leaving) return null;
   // Se duas fotografias se cruzarem na rede, só aplica a última solicitada.
   if(requestId===state.worldStateRequestId) {
     window.KTKWorldEntities?.applyWorldState?.(data);
@@ -151,6 +156,7 @@ async function loadWorldState() {
 }
 
 function acceptDatabaseChange(payload) {
+  if(!state.user||state.leaving) return;
   const row = payload?.new || payload?.record || payload;
   if (!row?.user_id) return;
   if (row.user_id === state.user?.id) {
@@ -301,6 +307,7 @@ function rebuildPresence() {
 }
 
 async function loadExistingPlayers() {
+  const sessionId=state.sessionId;
   const cutoff = new Date(Date.now() - 30000).toISOString();
   const { data, error } = await supabase
     .from("ktk_world_players")
@@ -309,6 +316,7 @@ async function loadExistingPlayers() {
     .eq("is_alive", true)
     .gte("last_seen_at", cutoff);
   if (error) throw error;
+  if(sessionId!==state.sessionId||!state.user||state.leaving) return;
   const rows = data || [];
   rows.forEach(row => {
     if(row.user_id===state.user?.id) return;
@@ -590,11 +598,19 @@ async function getPlayerState() {
 }
 
 async function gameAction(action, payload = {}) {
+  const sessionId=state.sessionId;
+  const userId=state.user?.id;
+  if(!userId||!state.online||!state.joined||state.leaving) {
+    throw new Error("A sessão do personagem não está ativa.");
+  }
   const { data, error } = await supabase.rpc("ktk_game_action", {
     p_action: String(action),
     p_payload: payload || {}
   });
   if (error) throw error;
+  if(sessionId!==state.sessionId||userId!==state.user?.id||!state.joined) {
+    return {ok:false,error:"A sessão do personagem foi encerrada."};
+  }
   if (data?.state) window.KTKWorldEntities?.applyServerState?.(data.state);
   try {
     await loadWorldState();
@@ -608,6 +624,9 @@ async function gameAction(action, payload = {}) {
 
 async function clearLocalSession(statusMessage) {
   state.leaving = true;
+  state.worldStateRequestId++;
+  state.intentInFlight = false;
+  state.connecting = false;
   state.stepSequence++;
   state.activeStepId = 0;
   state.stepInFlight = false;
@@ -639,6 +658,7 @@ async function clearLocalSession(statusMessage) {
   state.profileRetryTimers.clear();
   state.profileRetryCounts.clear();
   state.seenCombatEvents.clear();
+  state.lastLocalKnockbackAt = "";
   state.sessionId = "";
 
   try {
@@ -748,8 +768,13 @@ function startHeartbeat() {
     state.displayName = "";
     state.remote.clear();
     state.profileCache.clear();
+    state.profileLoads.clear();
     state.profileRetryTimers.forEach(timer => clearTimeout(timer));
     state.profileRetryTimers.clear();
+    state.profileRetryCounts.clear();
+    state.seenCombatEvents.clear();
+    state.sessionId = "";
+    state.worldStateRequestId++;
     void supabase.auth.signOut({ scope: "local" }).catch(error => {
       console.warn("KTK pagehide session cleanup:", error?.message || error);
     });
@@ -760,8 +785,16 @@ function startHeartbeat() {
 }
 
 async function claimKingCrown() {
+  const sessionId=state.sessionId;
+  const userId=state.user?.id;
+  if(!userId||!state.online||!state.joined||state.leaving) {
+    return {ok:false,error:"A sessão do personagem não está ativa."};
+  }
   const {data,error}=await supabase.rpc("ktk_claim_king_crown");
   if(error) return {ok:false,error:error.message||"Não foi possível reivindicar a coroa."};
+  if(sessionId!==state.sessionId||userId!==state.user?.id||!state.joined) {
+    return {ok:false,error:"A sessão do personagem foi encerrada."};
+  }
   if(data?.state) window.KTKWorldEntities?.applyServerState?.(data.state);
   try { await loadWorldState(); }
   catch(snapshotError) { console.warn("KTK crown snapshot:",snapshotError); }
@@ -769,8 +802,16 @@ async function claimKingCrown() {
 }
 
 async function dropKingCrown(x,y) {
+  const sessionId=state.sessionId;
+  const userId=state.user?.id;
+  if(!userId||!state.online||!state.joined||state.leaving) {
+    return {ok:false,error:"A sessão do personagem não está ativa."};
+  }
   const {data,error}=await supabase.rpc("ktk_drop_king_crown",{p_x:Number(x),p_y:Number(y)});
   if(error) return {ok:false,error:error.message||"Não foi possível soltar a coroa."};
+  if(sessionId!==state.sessionId||userId!==state.user?.id||!state.joined) {
+    return {ok:false,error:"A sessão do personagem foi encerrada."};
+  }
   try { await loadWorldState(); }
   catch(snapshotError) { console.warn("KTK crown snapshot:",snapshotError); }
   return {ok:true,data};
