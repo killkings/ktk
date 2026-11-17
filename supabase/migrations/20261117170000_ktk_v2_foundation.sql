@@ -495,6 +495,5 @@ grant execute on function public.ktk_v2_world_state() to authenticated;
 grant execute on function public.ktk_v2_step_player(smallint,smallint,boolean,boolean) to authenticated;
 grant execute on function public.ktk_v2_leave_world() to authenticated;
 
-comment on schema public is 'Shared application schema; KTK V2 remains isolated under ktk_v2_* names.';
 
 commit;
