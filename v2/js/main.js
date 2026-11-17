@@ -50,6 +50,9 @@ const state = {
   lastStepAt: 0,
   lastFrameAt: 0,
   players: new Map(),
+  entities: new Map(),
+  worldSeed: 20261117,
+  kingUserId: null,
   keys: new Set(),
   animationFrame: 0,
   movementTimer: 0,
@@ -125,6 +128,41 @@ function applyRealtimePlayer(payload) {
   if (row?.user_id) upsertPlayer(row);
 }
 
+function upsertEntity(row, deleted = false) {
+  if (!row?.entity_id) return;
+  const id = String(row.entity_id);
+  if (deleted) {
+    state.entities.delete(id);
+    return;
+  }
+  const previous = state.entities.get(id);
+  if (previous && Number(row.revision) <= Number(previous.revision)) return;
+  if (!Number.isFinite(Number(row.x)) || !Number.isFinite(Number(row.y))) return;
+  state.entities.set(id, row);
+}
+
+function applyWorldRow(row) {
+  if (!row || row.id !== WORLD_ID) return;
+  const nextRevision = Number(row.revision) || 0;
+  if (nextRevision < (state.worldRevision || 0)) return;
+  state.worldRevision = nextRevision;
+  state.kingUserId = row.king_user_id || null;
+  state.worldSeed = Number(row.world_seed) || 20261117;
+}
+
+async function claimCrown() {
+  if (!state.joined || state.leaving) return;
+  try {
+    const { data, error } = await supabase.rpc("ktk_v2_claim_crown");
+    if (error) throw error;
+    if (data?.world) applyWorldRow(data.world);
+    await loadWorldSnapshot();
+    showError("A coroa foi reivindicada. O mundo já reconhece você como rei.");
+  } catch (error) {
+    showError(error?.message || "Não foi possível reivindicar a coroa.");
+  }
+}
+
 async function subscribeWorld() {
   const channel = supabase.channel(TOPIC, {
     config: {
@@ -140,7 +178,13 @@ async function subscribeWorld() {
       const row = payload?.old_record || payload?.old || extractRow(payload);
       if (row?.user_id) state.players.delete(String(row.user_id));
       updateHud();
-    });
+    })
+    .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => upsertEntity(extractRow(payload)))
+    .on("broadcast", { event: "ENTITY_UPDATE" }, ({ payload }) => upsertEntity(extractRow(payload)))
+    .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) =>
+      upsertEntity(payload?.old_record || payload?.old || extractRow(payload), true))
+    .on("broadcast", { event: "WORLD_UPDATE" }, ({ payload }) =>
+      applyWorldRow(extractRow(payload)));
 
   state.channel = channel;
   await new Promise((resolve, reject) => {
@@ -177,8 +221,11 @@ async function loadWorldSnapshot() {
   const { data, error } = await supabase.rpc("ktk_v2_world_state");
   if (error) throw error;
   if (!state.joined || state.leaving) return;
+  applyWorldRow(data?.world);
   const players = Array.isArray(data?.players) ? data.players : [];
   players.forEach(upsertPlayer);
+  const entities = Array.isArray(data?.entities) ? data.entities : [];
+  entities.forEach(row => upsertEntity(row));
   const ownPlayer = state.players.get(state.userId);
   if (!ownPlayer) throw new Error("O servidor não retornou o personagem recém-criado.");
 }
@@ -262,7 +309,7 @@ function frame(now) {
     state.players.set(id, advanced);
     views.push(advanced);
   }
-  renderWorld(ui.canvas, views, state.userId, dt);
+  renderWorld(ui.canvas, views, state.userId, dt, [...state.entities.values()], state.worldSeed, state.kingUserId);
   const local = state.players.get(state.userId);
   if (local) ui.position.textContent = Math.round(local.x) + ", " + Math.round(local.y);
   state.animationFrame = requestAnimationFrame(frame);
@@ -282,6 +329,9 @@ async function cleanupLocalSession() {
   state.userId = "";
   state.accessToken = "";
   state.players.clear();
+  state.entities.clear();
+  state.kingUserId = null;
+  state.worldRevision = 0;
   state.keys.clear();
   state.localInput = normalizeControls();
   state.lastInputSignature = "";
@@ -380,6 +430,11 @@ window.addEventListener("keydown", event => {
     void leaveWorld(false);
     return;
   }
+  if (state.joined && keyIsCrown(event)) {
+    event.preventDefault();
+    void claimCrown();
+    return;
+  }
   const key = event.key.toLowerCase();
   if (["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright","shift"].includes(key)) {
     event.preventDefault();
@@ -390,7 +445,14 @@ window.addEventListener("keyup", event => state.keys.delete(event.key.toLowerCas
 window.addEventListener("blur", () => state.keys.clear());
 window.addEventListener("pagehide", () => void leaveWorld(true));
 window.addEventListener("resize", () => {
-  if (state.joined) renderWorld(ui.canvas, [...state.players.values()], state.userId, 0);
+  if (state.joined) renderWorld(
+    ui.canvas, [...state.players.values()], state.userId, 0,
+    [...state.entities.values()], state.worldSeed, state.kingUserId
+  );
 });
+
+function keyIsCrown(event) {
+  return event.key.toLowerCase() === "e";
+}
 
 showGame(false);
