@@ -182,35 +182,67 @@ var  camera = {x:0,y:0};
       running:playerRunning,guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted),
       inputAgeMs:0
     };
-    const hasIntentRevision=typeof requestInput?.intentRevision==="number"
-      && Number.isFinite(requestInput.intentRevision)
-      && typeof controls.intentRevision==="number"
-      && Number.isFinite(controls.intentRevision);
+    const hasRequestIntent=Boolean(requestInput&&typeof requestInput==="object");
+    const hasIntentRevision=hasRequestIntent
+      &&typeof requestInput.intentRevision==="number"
+      &&Number.isFinite(requestInput.intentRevision)
+      &&typeof controls.intentRevision==="number"
+      &&Number.isFinite(controls.intentRevision);
     // Mesmo vetor não significa mesma intenção: o jogador pode ter mudado e
     // voltado à direção original enquanto a RPC estava em trânsito.
-    const sameIntent=Boolean(requestInput && (hasIntentRevision
+    const sameIntent=hasRequestIntent&&(hasIntentRevision
       ? requestInput.intentRevision===controls.intentRevision
       : Number(requestInput.inputX)===Number(controls.inputX)
         && Number(requestInput.inputY)===Number(controls.inputY)
         && Boolean(requestInput.running)===Boolean(controls.running)
-        && Boolean(requestInput.guarding)===Boolean(controls.guarding)));
-    const oneWayLatencyMs=Math.max(0,Number(latencyMs)||0)/2;
-    // A nova intenção pode ter começado antes ou depois do snapshot do servidor.
-    // O tempo posterior ao snapshot é limitado ao menor entre idade e meia-RTT.
+        && Boolean(requestInput.guarding)===Boolean(controls.guarding));
+    const oneWayLatencyMs=Math.max(0,Math.min(750,Number(latencyMs)||0)/2);
     const intentAgeMs=Math.max(0,Math.min(750,Number(controls.inputAgeMs)||0));
-    const extrapolationMs=sameIntent
-      ? oneWayLatencyMs
-      : Math.min(oneWayLatencyMs,intentAgeMs);
+    let expectedX=serverX,expectedY=serverY;
+
+    // Repete o mesmo cálculo de velocidade do servidor para cada trecho da
+    // intenção: corrida, escudo e penalidade das roupas alteram a velocidade.
+    const movementSpeedForIntent=intent=>{
+      const running=Boolean(intent?.running);
+      const guarding=Boolean(intent?.guarding);
+      const penalty=(wearableSlotOrder||[]).reduce((sum,slot)=>{
+        const item=equippedWearables?.[slot];
+        return sum+(item?.durability>0?Math.max(0,Number(item.speedPenalty)||0):0);
+      },0);
+      const level=(running?3:2)*(guarding?0.5:1);
+      return SPEED*Math.max(1,level-penalty)/2;
+    };
+    const applyIntentSegment=(intent,durationMs)=>{
+      if(!intent||durationMs<=0) return;
+      const inputX=Math.max(-1,Math.min(1,Math.trunc(Number(intent.inputX)||0)));
+      const inputY=Math.max(-1,Math.min(1,Math.trunc(Number(intent.inputY)||0)));
+      const inputLength=Math.hypot(inputX,inputY);
+      if(inputLength<=0) return;
+      const distance=movementSpeedForIntent(intent)*durationMs/1000;
+      expectedX+=(inputX/inputLength)*distance;
+      expectedY+=(inputY/inputLength)*distance;
+    };
+
+    if(!hasRequestIntent) {
+      // Knockback e outras correções discretas não carregam a intenção da RPC.
+      applyIntentSegment(controls,Math.min(oneWayLatencyMs,intentAgeMs));
+    } else if(sameIntent) {
+      applyIntentSegment(controls,oneWayLatencyMs);
+    } else {
+      // A resposta representa um instante anterior à chegada ao navegador.
+      // Se a tecla mudou durante a viagem, primeiro valeu a intenção enviada
+      // na RPC e só depois a intenção atual. Antes, o código aplicava apenas
+      // a intenção atual (inclusive "parado"), causando puxões para trás.
+      const currentIntentMs=Math.min(oneWayLatencyMs,intentAgeMs);
+      const requestIntentMs=Math.max(0,oneWayLatencyMs-currentIntentMs);
+      applyIntentSegment(requestInput,requestIntentMs);
+      applyIntentSegment(controls,currentIntentMs);
+    }
+
     const inputX=Math.max(-1,Math.min(1,Math.trunc(Number(controls.inputX)||0)));
     const inputY=Math.max(-1,Math.min(1,Math.trunc(Number(controls.inputY)||0)));
     const inputLength=Math.hypot(inputX,inputY);
-    let expectedX=serverX,expectedY=serverY;
     if(inputLength>0) {
-      const speedLevel=Number(playerStats?.stats?.speed?.value);
-      const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
-      const extrapolationDistance=movementSpeed*Math.min(750,extrapolationMs)/1000;
-      expectedX+=(inputX/inputLength)*extrapolationDistance;
-      expectedY+=(inputY/inputLength)*extrapolationDistance;
       playerVisual.direction=Math.abs(inputX)>Math.abs(inputY)
         ? (inputX>0?3:1)
         : (inputY>0?2:0);
@@ -312,7 +344,9 @@ var  camera = {x:0,y:0};
       if(isMoving) {
         const dirX=playerInputX/inputLength,dirY=playerInputY/inputLength;
         const parallel=correctionX*dirX+correctionY*dirY;
-        const maxBackward=Math.hypot(actualMoveX,actualMoveY);
+        // Uma correção atrasada pode reduzir a passada, mas nunca consumir
+        // todo o avanço do quadro: mantém pelo menos 75% do deslocamento local.
+        const maxBackward=Math.hypot(actualMoveX,actualMoveY)*0.25;
         if(parallel < -maxBackward) {
           const adjustment=(-maxBackward-parallel);
           correctionX+=dirX*adjustment;
