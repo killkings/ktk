@@ -87,7 +87,7 @@ begin
   end if;
 
   if v_item_def.max_durability>0 and v_item_def.durability_unit is not null then
-    v_durability:=greatest(0,coalesce((v_item->>'durability')::integer,v_item_def.max_durability)-1);
+    v_durability:=greatest(0,round(coalesce((v_item->>'durability')::numeric,v_item_def.max_durability)-1)::integer);
     if v_durability<=0 then
       v_inventory:=jsonb_set(v_inventory,array[v_slot::text],'null'::jsonb,true);
     else
