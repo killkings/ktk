@@ -213,11 +213,7 @@
     if(item.wearCategory==='armor'&&item.armorDefense>0) details.push(`Defesa +${format(item.armorDefense)}`);
     if(item.wearCategory==='cosmetic') details.push('Cosmetico, sem bonus de atributos');
     if(item.speedPenalty>0) details.push(`Velocidade -${format(item.speedPenalty)}`);
-    if(item.blockStaminaCost>0) details.push(`Estamina por bloqueio ${format(item.blockStaminaCost)}`);
-    if(item.projectileSpeed>0) details.push(`Velocidade do projetil ${format(item.projectileSpeed)}`);
     if(item.manaCost>0) details.push(`Mana ${format(item.manaCost)}`);
-    if(item.castTime>0) details.push(`Conjuracao ${format(item.castTime)} s`);
-    if(item.ammoPerAttack>0) details.push(`Consome ${item.ammoPerAttack} por disparo`);
     if(item.quantity!=null) details.push(`Quantidade ${item.quantity}`);
     if(item.durability>0) details.push(`Durabilidade ${item.durability}/${item.maxDurability} ${item.durabilityUnit}`);
     if(item.equipmentClass==='tool'&&item.workEfficiency>0) details.push(`Trabalho x${format(item.workEfficiency)}`);
