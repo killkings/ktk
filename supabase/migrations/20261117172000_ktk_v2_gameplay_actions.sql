@@ -58,6 +58,8 @@ insert into public.ktk_v2_item_catalog (
   ('equipment-bow-normal','Arco','ranged',null,7,0,8,5,1.0,120,'shots',true,'{"ammo":"arrow"}'::jsonb),
   ('equipment-crossbow','Besta','ranged',null,12,0,11,8,1.8,120,'shots',true,'{"ammo":"arrow"}'::jsonb),
   ('equipment-boomerang','Bumerangue','ranged',null,6,0,6,4,1.0,160,'throws',false,'{}'::jsonb),
+  ('equipment-wand','Varinha','magic',null,6,0,7,0,0.7,120,'casts',false,'{"mana_cost":5}'::jsonb),
+  ('equipment-simple-staff','Cajado simples','magic',null,4,0,6,0,1.0,120,'casts',false,'{"mana_cost":4}'::jsonb),
   ('equipment-arrow','Flecha','ammo',null,0,0,0,0,0.5,0,null,false,'{"stackable":true}'::jsonb)
 on conflict (item_id) do nothing;
 
