@@ -154,6 +154,8 @@ export function acceptDatabaseChange(payload) {
     moving:serverState.moving,
     running:serverState.running,
     guarding:serverState.guarding,
+    movementInputX:serverState.movement_input_x,
+    movementInputY:serverState.movement_input_y,
     combat_stats: {
       health:serverState.health,maxHealth:serverState.max_health,
       stamina:serverState.stamina,maxStamina:serverState.max_stamina,
@@ -274,12 +276,32 @@ function acceptRemote(payload, source = "broadcast") {
           velocityY*=maxSpeed/speed;
         }
       } else {
+        const inputX=Number(payload.movementInputX)||0;
+        const inputY=Number(payload.movementInputY)||0;
+        const inputLength=Math.hypot(inputX,inputY);
+        if(serverMoving&&inputLength>0) {
+          const baseSpeed=225*(payload.running?1.5:1)*(payload.guarding?0.5:1);
+          velocityX=inputX/inputLength*baseSpeed;
+          velocityY=inputY/inputLength*baseSpeed;
+        } else {
+          velocityX=0;
+          velocityY=0;
+        }
+      }
+    } else {
+      const inputX=Number(payload.movementInputX)||0;
+      const inputY=Number(payload.movementInputY)||0;
+      const inputLength=Math.hypot(inputX,inputY);
+      if(serverMoving&&inputLength>0) {
+        // Primeiro snapshot: usa a intenção do servidor até haver duas
+        // posições oficiais para medir a velocidade real.
+        const baseSpeed=225*(payload.running?1.5:1)*(payload.guarding?0.5:1);
+        velocityX=inputX/inputLength*baseSpeed;
+        velocityY=inputY/inputLength*baseSpeed;
+      } else {
         velocityX=0;
         velocityY=0;
       }
-    } else {
-      velocityX=0;
-      velocityY=0;
     }
   }
   state.remote.set(id, {
@@ -347,6 +369,8 @@ export async function loadExistingPlayers(signal) {
       moving:row.state?.moving,
       running:row.state?.running,
       guarding:row.state?.guarding,
+      movementInputX:row.state?.movement_input_x,
+      movementInputY:row.state?.movement_input_y,
       combat_stats: {
         health:row.state?.health,maxHealth:row.state?.max_health,
         stamina:row.state?.stamina,maxStamina:row.state?.max_stamina,
