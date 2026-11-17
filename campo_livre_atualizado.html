@@ -1973,14 +1973,7 @@
     punch.attackBonus=Number(weapon?.attackBonus)||0;
     punch.damageMultiplier=innateCast?magicProfile.damageMultiplier:1;
     punch.weaponItem=weapon;
-    window.KTKOnline?.broadcastCombat({
-      kind:'attack_start',
-      direction:punch.direction,
-      attack_type:!weapon?'punch':weapon.attackType==='thrust'?'thrust':weapon.attackType==='shoot'?'shoot':'slash',
-      weapon_id:weapon?.id||null,
-      duration:PUNCH_ANIMATION_SECONDS,
-      frame_count:weapon?.attackFrameCount||6
-    });
+
   }
 
   function updatePunch(deltaSeconds) {
@@ -2669,7 +2662,7 @@
     if(item.isKingCrown) {
       kingCrownClaimedBy=window.KTKOnline?.userId||'local';
       syncKingCrownWorldItem('carried');
-      window.KTKOnline?.broadcastCombat({kind:'crown_claimed'});
+
     }
     toast(item.isKingCrown
       ? 'Você pegou a Coroa Real. Você agora é o rei!'
