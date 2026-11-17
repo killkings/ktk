@@ -687,4 +687,71 @@ begin
 end
 $$;
 
+-- Shield guarding is validated by the server and reduces movement speed.
+do $$
+declare
+  v_uid uuid := '10000000-0000-4000-8000-000000000010';
+  v_player public.ktk_v2_players;
+  v_action jsonb;
+  v_step jsonb;
+  v_start_x double precision;
+  v_guarded_dx double precision;
+  v_unguarded_dx double precision;
+  v_failed boolean:=false;
+begin
+  insert into auth.users(id) values (v_uid);
+  update public.ktk_v2_players
+  set last_seen_at=clock_timestamp()-interval '1 hour'
+  where world_id='main' and is_alive;
+
+  perform set_config('request.jwt.claim.sub',v_uid::text,true);
+  perform public.ktk_v2_enter_world('Teste Escudo','{}'::jsonb);
+  update public.ktk_v2_players
+  set x=600,y=1200,direction=3,
+      state=jsonb_set(state,'{stamina}','50'::jsonb,true),
+      revision=revision+1,last_seen_at=clock_timestamp(),
+      movement_updated_at=clock_timestamp()-interval '0.2 seconds'
+  where user_id=v_uid and world_id='main';
+  select x into v_start_x from public.ktk_v2_players where user_id=v_uid;
+
+  begin
+    perform public.ktk_v2_step_player(1::smallint,0::smallint,false,true);
+  exception when others then
+    v_failed:=sqlerrm='SHIELD_REQUIRED';
+  end;
+  if not v_failed then raise exception 'V2_SERVER_ALLOWED_GUARD_WITHOUT_SHIELD'; end if;
+
+  insert into public.ktk_v2_entities(
+    world_id,entity_id,entity_type,x,y,collision_radius,state,revision
+  ) values (
+    'main','test-shield-ground','item',610,1200,4,
+    '{"status":"ground","item_id":"equipment-shield","quantity":1,"durability":100,"max_durability":100}'::jsonb,1
+  );
+  v_action:=public.ktk_v2_item_action('pickup','{"entity_id":"test-shield-ground"}'::jsonb);
+  if v_action->>'ok'<>'true' then raise exception 'V2_SHIELD_PICKUP_FAILED'; end if;
+
+  update public.ktk_v2_players
+  set movement_updated_at=clock_timestamp()-interval '0.2 seconds',last_seen_at=clock_timestamp()
+  where user_id=v_uid and world_id='main';
+  v_step:=public.ktk_v2_step_player(1::smallint,0::smallint,false,true);
+  v_guarded_dx:=(v_step->>'x')::double precision-v_start_x;
+  if v_guarded_dx<20 or v_guarded_dx>25 then
+    raise exception 'V2_SHIELD_DID_NOT_REDUCE_MOVEMENT_SPEED dx=%',v_guarded_dx;
+  end if;
+  if coalesce((v_step->'state'->>'guarding')::boolean,false) is not true then
+    raise exception 'V2_SERVER_DID_NOT_STORE_GUARDING_STATE';
+  end if;
+
+  update public.ktk_v2_players
+  set movement_updated_at=clock_timestamp()-interval '0.2 seconds',last_seen_at=clock_timestamp()
+  where user_id=v_uid and world_id='main';
+  select x into v_start_x from public.ktk_v2_players where user_id=v_uid;
+  v_step:=public.ktk_v2_step_player(1::smallint,0::smallint,false,false);
+  v_unguarded_dx:=(v_step->>'x')::double precision-v_start_x;
+  if v_unguarded_dx<=v_guarded_dx then
+    raise exception 'V2_UNGUARDED_MOVEMENT_NOT_FASTER_THAN_GUARDED';
+  end if;
+end
+$$;
+
 rollback;
