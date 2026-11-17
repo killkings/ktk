@@ -1018,8 +1018,11 @@
       const dx=targetX-remote.x,dy=targetY-remote.y;
       const distance=Math.hypot(dx,dy);
       if(distance>0.01) {
-        const blend=1-Math.exp(-Math.max(0,dt)*18);
-        const step=Math.min(1,blend);
+        // Interpolação com limite de velocidade: pacotes atrasados ou saltos
+        // de rede não podem deslocar o sprite vários pixels num único frame.
+        const blend=1-Math.exp(-Math.max(0,dt)*12);
+        const maxStep=SPEED*1.8*Math.max(0,dt);
+        const step=Math.min(1,blend,maxStep/Math.max(distance,0.001));
         remote.x+=dx*step;
         remote.y+=dy*step;
         remote.moving=distance>1.2;
@@ -2820,6 +2823,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-5"></script>
+<script type="module" src="./js/online.js?v=20261117-6"></script>
 </body>
 </html>
