@@ -305,6 +305,7 @@ declare
   v_required_tool text;
   v_drop_item_id text;
   v_drop_quantity_from_resource integer;
+  v_stacked boolean:=false;
 begin
   if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
   if p_action not in ('pickup','drop','equip','unequip','consume','select_slot','harvest') then
@@ -360,22 +361,27 @@ begin
        and coalesce(v_wearables->v_wear_slot,'null'::jsonb)='null'::jsonb then
       v_wearables:=jsonb_set(v_wearables,array[v_wear_slot],v_item,true);
     else
+      v_stacked:=false;
       if coalesce((v_item_def.metadata->>'stackable')::boolean,false) then
         for v_index in 0..jsonb_array_length(v_inventory)-1 loop
           if v_inventory->v_index<>'null'::jsonb
              and v_inventory->v_index->>'item_id'=v_item_def.item_id then
             v_old_item:=v_inventory->v_index;
+            if coalesce((v_old_item->>'quantity')::integer,1)
+               +coalesce((v_item->>'quantity')::integer,1)>99 then
+              raise exception 'STACK_LIMIT';
+            end if;
             v_item:=jsonb_set(v_old_item,'{quantity}',
-              to_jsonb(least(99,coalesce((v_old_item->>'quantity')::integer,1)+(v_item->>'quantity')::integer)),true);
+              to_jsonb(coalesce((v_old_item->>'quantity')::integer,1)
+                +coalesce((v_item->>'quantity')::integer,1)),true);
             v_inventory:=jsonb_set(v_inventory,array[v_index::text],v_item,true);
+            v_stacked:=true;
             exit;
           end if;
         end loop;
-        if v_index>=jsonb_array_length(v_inventory) then v_index:=-1; end if;
-      else
-        v_index:=-1;
       end if;
-      if v_index=-1 then
+      if not v_stacked then
+        v_free_slot:=-1;
         for v_index in 0..jsonb_array_length(v_inventory)-1 loop
           if v_inventory->v_index='null'::jsonb then v_free_slot:=v_index; exit; end if;
         end loop;
@@ -705,6 +711,36 @@ begin
   end if;
 
   return jsonb_build_object('ok',true,'hit',false,'reason','NO_TARGET','attacker',to_jsonb(v_player));
+end;
+$function$;
+
+create or replace function public.ktk_v2_leave_world()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_uid uuid:=auth.uid();
+  v_player public.ktk_v2_players;
+begin
+  if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+
+  perform pg_catalog.set_config('lock_timeout','500ms',true);
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('ktk-v2:main:movement'));
+  perform 1 from public.ktk_v2_worlds where id='main' for update;
+
+  select * into v_player
+  from public.ktk_v2_players
+  where user_id=v_uid and world_id='main'
+  for update;
+
+  if not found or not v_player.is_alive then
+    return jsonb_build_object('ok',true,'already_dead',true);
+  end if;
+
+  perform ktk_v2_private.kill_player(v_uid,'exit');
+  return jsonb_build_object('ok',true,'dead',true);
 end;
 $function$;
 
