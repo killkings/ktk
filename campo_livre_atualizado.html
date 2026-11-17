@@ -377,7 +377,7 @@
 })();
 </script>
 <script src="./personagem.js?v=stable-20261115-13"></script>
-<script src="./mapa/player/stats.js?v=20261117-final-audit-perf1"></script>
+<script src="./mapa/player/stats.js?v=20261117-final-authority-audit2"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
 <script src="./enemy/skeleton/skeleton.js?v=stable-20261117-combat1"></script>
 <script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
@@ -2684,28 +2684,15 @@
         toast(claim?.error||'O servidor não confirmou a posse da Coroa Real.');
         return true;
       }
+      // O servidor decide se a Coroa ocupa a cabeça ou vai para o inventário
+      // quando o espaço já está ocupado. O cliente apenas aplica o resultado.
+      if(claim.data?.state) applyServerState(claim.data.state);
+      toast(equippedWearables.head?.isKingCrown
+        ? 'Você pegou a Coroa Real. Você agora é o rei!'
+        : 'Coroa Real guardada no inventário.');
+      return true;
     }
-    const previous=equippedWearables[targetSlot];
-    equippedWearables[targetSlot]=item;
-    item.collected=true;
-    let displacedItemLocation='';
-    if(previous) {
-      dropItemAtPlayer(previous,(player.direction+2)%4);
-      displacedItemLocation='; a peca anterior foi solta no chao';
-    }
-    renderInventory();
-    rebuildCharacterLayers();
-    if(item.isKingCrown) {
-      kingCrownClaimedBy=window.KTKOnline?.userId||'local';
-      syncKingCrownWorldItem('carried');
-    }
-    [item.image,item.iconImage].filter(Boolean).forEach(image=>{
-      if(!image.complete) image.addEventListener('load',renderInventory,{once:true});
-    });
-    toast(item.isKingCrown
-      ? 'Você pegou a Coroa Real. Você agora é o rei!'
-      : `${item.displayName} equipado${displacedItemLocation}.`);
-    return true;
+    return false;
   }
 
   async function unequipWearable(slot) {
@@ -3159,7 +3146,7 @@
     // Posição, direção, estamina e outras atualizações frequentes do servidor
     // não alteram o inventário nem exigem recarregar dezenas de sprites LPC.
     if(inventoryChanged||wearablesChanged||selectedSlotChanged) renderInventory();
-    if(wearablesChanged) void rebuildCharacterLayers();
+    if(wearablesChanged) void rebuildCharacterLayers().catch(error=>console.warn('KTK appearance update:',error));
     return true;
   }
 
@@ -3520,6 +3507,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-final-audit-perf1"></script>
+<script type="module" src="./js/online.js?v=20261117-final-authority-audit2"></script>
 </body>
 </html>
