@@ -97,11 +97,11 @@ const rollbackContext = {
 };
 vm.createContext(rollbackContext);
 vm.runInContext(gameState.slice(blockStart, blockEnd), rollbackContext);
-rollbackContext.setAuthoritativePlayerPosition(100, 120, 2, true);
+rollbackContext.setAuthoritativePlayerPosition(200, 120, 2, true);
 rollbackContext.playerMoving = true;
 rollbackContext.playerInputX = 1;
 rollbackContext.setAuthoritativePlayerPosition(
-  103,120,3,false,750,requestInput,
+  0,120,3,false,0,requestInput,
   { inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0 }
 );
 let previousVisualX = rollbackContext.playerVisual.x;
