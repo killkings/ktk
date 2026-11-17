@@ -1,7 +1,7 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
-import { state } from "./state.js?v=20261117-remote-motion-006";
-import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-remote-motion-006";
-import { applyOwnServerPosition } from "./movement.js?v=20261117-remote-motion-006";
+import { state } from "./state.js?v=20261117-remote-snapshot-007";
+import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-remote-snapshot-007";
+import { applyOwnServerPosition } from "./movement.js?v=20261117-remote-snapshot-007";
 
 // Ordena timestamps timestamptz incluindo os microssegundos do PostgreSQL.
 function compareServerTimestamps(a, b) {
@@ -323,6 +323,11 @@ function acceptRemote(payload, source = "broadcast") {
       ? Math.max(previous?.lastPositionAt || 0, sentAt || 0)
       : (previous?.lastPositionAt || 0),
     lastPositionTimestamp: isDatabasePosition
+      ? (staleDatabasePosition
+        ? (previous?.lastPositionTimestamp || "")
+        : (positionTimestamp || previous?.lastPositionTimestamp || ""))
+      : (previous?.lastPositionTimestamp || ""),
+    positionUpdatedAt: isDatabasePosition
       ? (staleDatabasePosition
         ? (previous?.lastPositionTimestamp || "")
         : (positionTimestamp || previous?.lastPositionTimestamp || ""))
