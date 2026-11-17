@@ -299,4 +299,124 @@ begin
 end
 $$;
 
+-- Server simulation is independent of an open client loop. It advances
+-- survival, respawns resources, expires loot and runs the skeleton AI.
+do $$
+declare
+  v_uid uuid := '10000000-0000-4000-8000-000000000004';
+  v_player public.ktk_v2_players;
+  v_tree public.ktk_v2_entities;
+  v_skeleton public.ktk_v2_entities;
+  v_start_x double precision;
+  v_start_y double precision;
+  v_health numeric;
+  v_stamina numeric;
+  v_satiety numeric;
+  v_hydration numeric;
+begin
+  insert into auth.users(id) values (v_uid);
+  -- Ignore characters from the earlier rule tests; this scenario has one
+  -- active simulated character so the skeleton has an unambiguous target.
+  update public.ktk_v2_players
+  set last_seen_at=clock_timestamp()-interval '1 hour'
+  where world_id='main' and is_alive;
+
+  perform set_config('request.jwt.claim.sub',v_uid::text,true);
+  perform public.ktk_v2_enter_world('Teste Simulação','{}'::jsonb);
+
+  select * into v_tree from public.ktk_v2_entities
+  where world_id='main' and entity_id='resource-tree-1';
+  update public.ktk_v2_entities
+  set state=state||jsonb_build_object(
+    'status','depleted','health',0,
+    'respawn_at',clock_timestamp()-interval '1 second'
+  ),revision=revision+1,updated_at=clock_timestamp()
+  where world_id='main' and entity_id='resource-tree-1';
+
+  insert into public.ktk_v2_entities(
+    world_id,entity_id,entity_type,x,y,collision_radius,state,revision
+  ) values (
+    'main','test-expired-loot','item',3000,3000,0,
+    jsonb_build_object('status','ground','item_id','resource-wood',
+      'quantity',1,'expires_at',clock_timestamp()-interval '1 second'),1
+  );
+
+  select * into v_skeleton from public.ktk_v2_entities
+  where world_id='main' and entity_id='skeleton-1';
+  v_start_x:=v_skeleton.x;
+  v_start_y:=v_skeleton.y;
+
+  update public.ktk_v2_entities
+  set state=state||jsonb_build_object(
+    'health',70,'max_health',70,'defeated',false,
+    'attack',7,'attack_ready_at',clock_timestamp()-interval '1 second'
+  ),revision=revision+1,updated_at=clock_timestamp()
+  where world_id='main' and entity_id='skeleton-1';
+
+  update public.ktk_v2_players
+  set x=v_start_x-45,y=v_start_y,
+      state=jsonb_set(
+        jsonb_set(
+          jsonb_set(
+            jsonb_set(
+              jsonb_set(
+                jsonb_set(
+                  jsonb_set(state,'{stamina}','40'::jsonb,true),
+                  '{satiety}','30'::jsonb,true
+                ),
+                '{hydration}','30'::jsonb,true
+              ),
+              '{health}','80'::jsonb,true
+            ),
+            '{mana}','0'::jsonb,true
+          ),
+          '{magic_level}','0'::jsonb,true
+        ),
+        '{moving}','false'::jsonb,true
+      ) || '{"running":false,"guarding":false}'::jsonb,
+      revision=revision+1,last_seen_at=clock_timestamp(),
+      movement_updated_at=clock_timestamp()
+  where user_id=v_uid and world_id='main';
+
+  update public.ktk_v2_worlds
+  set last_simulation_at=clock_timestamp()-interval '2 seconds'
+  where id='main';
+
+  perform ktk_v2_private.simulation_tick();
+
+  select * into v_player from public.ktk_v2_players
+  where user_id=v_uid and world_id='main';
+  select * into v_tree from public.ktk_v2_entities
+  where world_id='main' and entity_id='resource-tree-1';
+  select * into v_skeleton from public.ktk_v2_entities
+  where world_id='main' and entity_id='skeleton-1';
+
+  v_health:=(v_player.state->>'health')::numeric;
+  v_stamina:=(v_player.state->>'stamina')::numeric;
+  v_satiety:=(v_player.state->>'satiety')::numeric;
+  v_hydration:=(v_player.state->>'hydration')::numeric;
+
+  if v_player.is_alive is not true then
+    raise exception 'V2_SIMULATION_KILLED_HEALTHY_TEST_PLAYER';
+  end if;
+  if v_stamina<=40 then raise exception 'V2_SIMULATION_DID_NOT_REGENERATE_STAMINA'; end if;
+  if v_satiety>=30 then raise exception 'V2_SIMULATION_DID_NOT_DECREASE_SATIETY'; end if;
+  if v_hydration>=30 then raise exception 'V2_SIMULATION_DID_NOT_DECREASE_HYDRATION'; end if;
+  if v_tree.state->>'status'<>'ready'
+     or (v_tree.state->>'health')::numeric<>3 then
+    raise exception 'V2_SIMULATION_DID_NOT_RESPAWN_RESOURCE';
+  end if;
+  if exists(select 1 from public.ktk_v2_entities where world_id='main' and entity_id='test-expired-loot') then
+    raise exception 'V2_SIMULATION_DID_NOT_EXPIRE_GROUND_LOOT';
+  end if;
+  if v_health>=80 or nullif(v_player.state->>'last_knockback_at','') is null then
+    raise exception 'V2_SKELETON_DID_NOT_ATTACK_NEARBY_PLAYER';
+  end if;
+  if v_skeleton.state->>'attack_started_at' is null
+     or v_skeleton.state->>'attack_ready_at' is null then
+    raise exception 'V2_SKELETON_ATTACK_COOLDOWN_NOT_STORED';
+  end if;
+end
+$$;
+
 rollback;
