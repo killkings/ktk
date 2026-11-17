@@ -15,7 +15,7 @@ const state = {
   lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(),
-  lastLocalKnockbackAt: "", connecting: false
+  lastLocalKnockbackAt: "", intentInFlight: false, connecting: false
 };
 
 function setStatus(message, connected = false) {
@@ -362,22 +362,28 @@ async function sendPosition(force = false) {
       if(error) console.warn("KTK world heartbeat:",error.message);
     });
   }
+  // Garante que o servidor registre caminhada/corrida antes de validar
+  // a próxima posição. Uma intenção ainda pendente nunca pode ser ultrapassada
+  // por um checkpoint que dependa dela.
+  if (state.intentInFlight) return;
   const intentSignature = JSON.stringify({ moving: payload.moving, running: payload.running, guarding: payload.guarding });
   if (intentSignature !== state.lastIntentSignature) {
     state.lastIntentSignature = intentSignature;
-    void supabase.rpc("ktk_game_action", {
+    state.intentInFlight = true;
+    const { error: intentError } = await supabase.rpc("ktk_game_action", {
       p_action: "intent",
       p_payload: {
         moving: Boolean(payload.moving),
         running: Boolean(payload.running),
         guarding: Boolean(payload.guarding)
       }
-    }).then(({ error }) => {
-      if (error) {
-        console.warn("KTK authoritative intent:", error.message);
-        state.lastIntentSignature = "";
-      }
     });
+    state.intentInFlight = false;
+    if (intentError) {
+      console.warn("KTK authoritative intent:", intentError.message);
+      state.lastIntentSignature = "";
+      return;
+    }
   }
 
   if ((moved || force) && now - state.lastCheckpoint >= 90 && !state.positionInFlight) {
