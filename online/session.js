@@ -6,6 +6,7 @@ import {
 import { sendPosition } from "./movement.js?v=20261117-online-separation-001";
 import { subscribeWorld, trackPresence } from "./realtime.js?v=20261117-online-separation-001";
 import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-online-separation-001";
+import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-authoritative-equipment-001";
 
 export function setStatus(message, connected = false) {
   let el = document.getElementById("ktk-online-status");
@@ -63,6 +64,7 @@ export async function enter(options = {}) {
         sessionData = { session: result.data.session };
       }
     }
+    await syncEquipmentCatalog(supabase);
     state.user = sessionData.session.user;
     state.accessToken = sessionData.session.access_token || state.accessToken;
     state.leaving = false;
