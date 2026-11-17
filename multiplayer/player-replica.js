@@ -67,10 +67,27 @@ function getLocalMovementControls() {
     const now=performance.now();
     remotePlayers.forEach(remote=>{
       const sample=getRemoteMotionSample(remote,now);
-      // A posição vem da linha temporal dos snapshots, sem perseguir
-      // coordenadas antigas nem inverter o movimento com correções exponenciais.
-      remote.x=sample.x; remote.y=sample.y;
-      remote.direction=sample.direction; remote.moving=sample.moving;
+      // Uma amostra atrasada pode ficar atrás do último quadro já exibido
+      // quando há perda/jitter acima do buffer. Na mesma direção, nunca volta:
+      // remove só a componente contrária; mudanças reais de direção e knockback
+      // continuam podendo deslocar o personagem normalmente.
+      const previousDirection=Number.isFinite(remote.renderDirection)
+        ? remote.renderDirection : remote.direction;
+      let nextX=sample.x,nextY=sample.y;
+      if(!remote.knockback&&sample.direction===previousDirection) {
+        const directionVector=sample.direction===0?[0,-1]
+          : sample.direction===1?[-1,0]
+          : sample.direction===2?[0,1]:[1,0];
+        const correctionX=nextX-remote.x,correctionY=nextY-remote.y;
+        const backwards=correctionX*directionVector[0]+correctionY*directionVector[1];
+        if(backwards<0&&Math.hypot(correctionX,correctionY)<96) {
+          nextX-=directionVector[0]*backwards;
+          nextY-=directionVector[1]*backwards;
+        }
+      }
+      remote.x=nextX; remote.y=nextY;
+      remote.direction=sample.direction; remote.renderDirection=sample.direction;
+      remote.moving=sample.moving;
       if(remote.moving) remote.walkTime=(remote.walkTime||0)+Math.max(0,dt);
       else remote.walkTime=0;
       if(remote.knockback) {
