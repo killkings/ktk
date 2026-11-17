@@ -27,6 +27,32 @@ const [sql, gameplaySql, simulationSql, projectileSql, movementSql, client, html
   readFile(catalogUrl, "utf8")
 ]);
 
+const worldRendererModule = await import("../js/world-renderer.js");
+const lpcRendererModule = await import("../js/lpc-renderer.js");
+
+test("browser renderer modules import and expose their public APIs", () => {
+  assert.equal(typeof worldRendererModule.renderWorld, "function");
+  assert.equal(typeof lpcRendererModule.LPCRenderer, "function");
+});
+
+test("world renderer safely paints an empty game viewport", () => {
+  const fillCalls = [];
+  const context = {
+    setTransform() {},
+    fillRect(...args) { fillCalls.push(args); }
+  };
+  const canvas = {
+    width: 0,
+    height: 0,
+    getBoundingClientRect() { return {width:320,height:180}; },
+    getContext() { return context; }
+  };
+  worldRendererModule.renderWorld(canvas, [], "no-player", 0);
+  assert.equal(canvas.width, 320);
+  assert.equal(canvas.height, 180);
+  assert.equal(fillCalls.length, 1);
+});
+
 test("V2 schema is isolated and does not rewrite V1 data", () => {
   assert.match(sql, /create table public\.ktk_v2_worlds/i);
   assert.match(sql, /create table public\.ktk_v2_players/i);
