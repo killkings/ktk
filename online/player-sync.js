@@ -1,7 +1,7 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
-import { state } from "./state.js?v=20261117-movement-reconciliation-005";
-import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-movement-reconciliation-005";
-import { applyOwnServerPosition } from "./movement.js?v=20261117-movement-reconciliation-005";
+import { state } from "./state.js?v=20261117-remote-motion-006";
+import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-remote-motion-006";
+import { applyOwnServerPosition } from "./movement.js?v=20261117-remote-motion-006";
 
 // Ordena timestamps timestamptz incluindo os microssegundos do PostgreSQL.
 function compareServerTimestamps(a, b) {
@@ -151,6 +151,11 @@ export function acceptDatabaseChange(payload) {
     position_updated_at: row.position_updated_at,
     display_name: row.display_name, character: row.character,
     wearables: serverState.wearables,
+    moving:serverState.moving,
+    running:serverState.running,
+    guarding:serverState.guarding,
+    movementInputX:serverState.movement_input_x,
+    movementInputY:serverState.movement_input_y,
     combat_stats: {
       health:serverState.health,maxHealth:serverState.max_health,
       stamina:serverState.stamina,maxStamina:serverState.max_stamina,
@@ -246,6 +251,59 @@ function acceptRemote(payload, source = "broadcast") {
   const appearance=mergeRemoteAppearance(previous,payload,{
     authoritativeWearables:isDatabasePosition && payload.wearables && typeof payload.wearables==="object"
   });
+  let velocityX=Number(previous?.velocityX)||0;
+  let velocityY=Number(previous?.velocityY)||0;
+  let positionReceivedAt=Number(previous?.positionReceivedAt)||0;
+  let serverMoving=Boolean(previous?.serverMoving);
+  const acceptedNewPosition=isDatabasePosition&&!staleDatabasePosition&&Boolean(positionTimestamp);
+  if(acceptedNewPosition) {
+    positionReceivedAt=performance.now();
+    serverMoving=Boolean(payload.moving);
+    if(!serverMoving) {
+      velocityX=0;
+      velocityY=0;
+    } else if(previous&&previousPositionTimestamp) {
+      const previousAt=Date.parse(previousPositionTimestamp);
+      const currentAt=Date.parse(positionTimestamp);
+      const elapsedMs=currentAt-previousAt;
+      if(Number.isFinite(elapsedMs)&&elapsedMs>=30&&elapsedMs<=2500) {
+        velocityX=(acceptedX-Number(previous.x||0))/(elapsedMs/1000);
+        velocityY=(acceptedY-Number(previous.y||0))/(elapsedMs/1000);
+        const speed=Math.hypot(velocityX,velocityY);
+        const maxSpeed=420;
+        if(speed>maxSpeed) {
+          velocityX*=maxSpeed/speed;
+          velocityY*=maxSpeed/speed;
+        }
+      } else {
+        const inputX=Number(payload.movementInputX)||0;
+        const inputY=Number(payload.movementInputY)||0;
+        const inputLength=Math.hypot(inputX,inputY);
+        if(serverMoving&&inputLength>0) {
+          const baseSpeed=225*(payload.running?1.5:1)*(payload.guarding?0.5:1);
+          velocityX=inputX/inputLength*baseSpeed;
+          velocityY=inputY/inputLength*baseSpeed;
+        } else {
+          velocityX=0;
+          velocityY=0;
+        }
+      }
+    } else {
+      const inputX=Number(payload.movementInputX)||0;
+      const inputY=Number(payload.movementInputY)||0;
+      const inputLength=Math.hypot(inputX,inputY);
+      if(serverMoving&&inputLength>0) {
+        // Primeiro snapshot: usa a intenção do servidor até haver duas
+        // posições oficiais para medir a velocidade real.
+        const baseSpeed=225*(payload.running?1.5:1)*(payload.guarding?0.5:1);
+        velocityX=inputX/inputLength*baseSpeed;
+        velocityY=inputY/inputLength*baseSpeed;
+      } else {
+        velocityX=0;
+        velocityY=0;
+      }
+    }
+  }
   state.remote.set(id, {
     id,
     display_name: String(payload.display_name || payload.displayName || previous?.display_name || "Aventureiro").slice(0, 24),
@@ -255,6 +313,7 @@ function acceptRemote(payload, source = "broadcast") {
     character: appearance.character,
     wearables: appearance.wearables,
     combatStats: payload.combat_stats || previous?.combatStats || {},
+    velocityX,velocityY,positionReceivedAt,serverMoving,
     type: "player",
     lastUpdate: Date.now(),
     sessionId: sessionId || previous?.sessionId || "",
@@ -307,6 +366,11 @@ export async function loadExistingPlayers(signal) {
       user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
       position_updated_at: row.position_updated_at,
       display_name: "Aventureiro", character: {},
+      moving:row.state?.moving,
+      running:row.state?.running,
+      guarding:row.state?.guarding,
+      movementInputX:row.state?.movement_input_x,
+      movementInputY:row.state?.movement_input_y,
       combat_stats: {
         health:row.state?.health,maxHealth:row.state?.max_health,
         stamina:row.state?.stamina,maxStamina:row.state?.max_stamina,
