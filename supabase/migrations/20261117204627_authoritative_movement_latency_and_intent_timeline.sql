@@ -115,7 +115,7 @@ begin
 
  v_previous_input_x:=greatest(-1,least(1,coalesce((v_state->>'movement_input_x')::integer,0)))::smallint;
  v_previous_input_y:=greatest(-1,least(1,coalesce((v_state->>'movement_input_y')::integer,0)))::smallint;
- v_previous_moving:=v_previous_input_x <> 0 or v_previous_input_y <> 0;
+  v_previous_moving := v_previous_input_x <> 0 or v_previous_input_y <> 0;
  v_previous_running:=coalesce((v_state->>'movement_running')::boolean,false)
   and v_previous_moving and coalesce((v_state->>'stamina')::numeric,0)>0;
  v_previous_guarding:=coalesce((v_state->>'movement_guarding')::boolean,false);
