@@ -547,6 +547,7 @@
   const playerStats = window.KTKPlayerStats;
   const arrowSpriteItem = equipmentCatalog?.items.find(item=>item.id==='equipment-arrow')||null;
   const worldItems = new Set();
+  const serverWorldEntities = new Map();
   let kingCrownClaimedBy = null;
   const wearableSlotOrder = ['head','chest','waist','legs','feet'];
   const equippedWearables = Object.fromEntries(wearableSlotOrder.map(slot=>[slot,null]));
@@ -1654,6 +1655,8 @@
           if(entity.id==='longsword-1') window.KTKWorldSword.draw(ctx,screenX,screenY);
           else drawWorldItem(ctx,entity,screenX,screenY);
           if(entity===focusedItem) drawWorldItemLabel(ctx,entity,screenX,screenY);
+        } else if(entity.type==='resource') {
+          drawResourceEntity(ctx,entity,screenX,screenY);
         } else if(entity.type==='player') {
           const attack=entity.attackAnimation;
           const attackElapsed=attack?(performance.now()-attack.startedAt)/1000:Infinity;
@@ -1709,8 +1712,23 @@
     }
   }
 
+  function updateServerWorldEntities(deltaSeconds) {
+    serverWorldEntities.forEach(entity=>{
+      entity.elapsed=(entity.elapsed||0)+Math.max(0,deltaSeconds);
+      const dx=(Number(entity.targetX)||0)-(Number(entity.x)||0);
+      const dy=(Number(entity.targetY)||0)-(Number(entity.y)||0);
+      const distance=Math.hypot(dx,dy);
+      if(distance>0.05) {
+        const blend=Math.min(1,1-Math.exp(-Math.max(0,deltaSeconds)*14));
+        entity.x+=dx*blend;
+        entity.y+=dy*blend;
+      }
+    });
+  }
+
   function update(dt,roomWidth,roomHeight) {
     if(playerDead) return;
+    updateServerWorldEntities(dt);
     const currentHealth=playerStats?.stats?.health;
     if(currentHealth&&currentHealth.value<=currentHealth.min) {
       handlePlayerDeath();
@@ -1766,6 +1784,7 @@
     const skeleton=window.KTKEnemySkeleton.entity;
     const entities=skeleton.defeated?[]:[skeleton];
     worldItems.forEach(item=>{if(!item.collected) entities.push(item);});
+    serverWorldEntities.forEach(entity=>entities.push(entity));
     remotePlayers.forEach(remote=>{
       entities.push({type:'player',radius:COLLISION_RADIUS,...remote});
       (remote.remoteProjectiles||[]).forEach(projectile=>entities.push(projectile));
@@ -1783,6 +1802,38 @@
     if(!row||!row.entity_id) return false;
     const entityId=String(row.entity_id);
     const worldState=row.state&&typeof row.state==='object'?row.state:{};
+    if(row.deleted) {
+      serverWorldEntities.delete(entityId);
+      worldItems.forEach(item=>{if(item.entityId===entityId) worldItems.delete(item);});
+      return true;
+    }
+    if(row.entity_type==='projectile') {
+      const previous=serverWorldEntities.get(entityId);
+      const x=Number(row.x)||0, y=Number(row.y)||0;
+      serverWorldEntities.set(entityId,{
+        type:'remote-projectile',id:entityId,entityId,
+        x:previous?.x??x,y:previous?.y??y,targetX:x,targetY:y,
+        weaponId:String(worldState.weapon_id||''),
+        projectileType:String(worldState.projectile_type||'arrow'),
+        vectorX:Number(worldState.vector_x)||0,vectorY:Number(worldState.vector_y)||0,
+        direction:Number.isFinite(Number(worldState.direction))?Number(worldState.direction):2,
+        speed:Number(worldState.speed)||600,maxDistance:Number(worldState.max_distance)||160,
+        elapsed:previous?.elapsed||0,phase:String(worldState.phase||'outbound')
+      });
+      return true;
+    }
+    if(row.entity_type==='resource') {
+      const previous=serverWorldEntities.get(entityId);
+      const x=Number(row.x)||0, y=Number(row.y)||0;
+      serverWorldEntities.set(entityId,{
+        type:'resource',id:entityId,entityId,resourceKind:String(worldState.resource_kind||'resource'),
+        displayName:String(worldState.display_name||'Recurso'),health:Number(worldState.health)||0,
+        maxHealth:Number(worldState.max_health||worldState.health)||1,status:String(worldState.status||'ready'),
+        requiredTool:worldState.required_tool||null,
+        x:previous?.x??x,y:previous?.y??y,targetX:x,targetY:y
+      });
+      return true;
+    }
     if(entityId==='king-crown') {
       const crown=getKingCrownItem();
       if(!crown) return false;
@@ -1826,13 +1877,24 @@
       skeleton.health=Number.isFinite(Number(worldState.health))?Number(worldState.health):skeleton.health;
       skeleton.maxHealth=Number.isFinite(Number(worldState.max_health))?Number(worldState.max_health):skeleton.maxHealth;
       skeleton.defeated=Boolean(worldState.defeated);
+      const attackStartedAt=String(worldState.attack_started_at||'');
+      if(attackStartedAt&&attackStartedAt!==skeleton.lastServerAttackStartedAt) {
+        skeleton.lastServerAttackStartedAt=attackStartedAt;
+        skeleton.remoteAttackDirection=Number.isFinite(Number(worldState.direction))?Number(worldState.direction):2;
+        skeleton.remoteAttackElapsed=0;
+        skeleton.remoteAttacking=true;
+      }
       return true;
     }
     return false;
   }
   function applyWorldState(snapshot) {
     if(!snapshot||typeof snapshot!=='object') return false;
-    (Array.isArray(snapshot.entities)?snapshot.entities:[]).forEach(applyWorldEntity);
+    const rows=Array.isArray(snapshot.entities)?snapshot.entities:[];
+    const incomingIds=new Set(rows.map(row=>String(row.entity_id)));
+    for(const id of serverWorldEntities.keys()) if(!incomingIds.has(id)) serverWorldEntities.delete(id);
+    worldItems.forEach(item=>{if(item.entityId&&!incomingIds.has(String(item.entityId))) worldItems.delete(item);});
+    rows.forEach(row=>applyWorldEntity(row));
     kingCrownClaimedBy=snapshot.world?.king_user_id?String(snapshot.world.king_user_id):null;
     remotePlayers.forEach((remote,id)=>{
       remote.isKing=Boolean(kingCrownClaimedBy&&String(id)===String(kingCrownClaimedBy));
@@ -2841,6 +2903,35 @@
     updateKingStatus();
   }
 
+  function drawResourceEntity(g,resource,x,y) {
+    if(resource.status==='depleted') return;
+    g.save();
+    g.imageSmoothingEnabled=false;
+    if(resource.resourceKind==='tree') {
+      g.fillStyle='#684a2c'; g.fillRect(x-4,y+2,8,23);
+      g.fillStyle='#315f37'; g.beginPath(); g.arc(x,y-5,18,0,Math.PI*2); g.fill();
+      g.fillStyle='#477b43'; g.beginPath(); g.arc(x-9,y-12,11,0,Math.PI*2); g.fill();
+    } else if(resource.resourceKind==='ore') {
+      g.fillStyle='#74766f'; g.beginPath(); g.moveTo(x-18,y+10); g.lineTo(x-12,y-9); g.lineTo(x+2,y-17); g.lineTo(x+18,y-5); g.lineTo(x+15,y+12); g.closePath(); g.fill();
+      g.fillStyle='#b8b9b2'; g.fillRect(x-3,y-9,7,4); g.fillRect(x+7,y+1,5,3);
+    } else if(resource.resourceKind==='bush') {
+      g.fillStyle='#386d36'; g.beginPath(); g.arc(x-7,y+1,10,0,Math.PI*2); g.arc(x+6,y-4,12,0,Math.PI*2); g.arc(x+13,y+5,8,0,Math.PI*2); g.fill();
+      g.fillStyle='#c64a45'; g.fillRect(x-8,y-5,4,4); g.fillRect(x+5,y+2,4,4); g.fillRect(x+12,y-8,4,4);
+    } else {
+      g.fillStyle='rgba(83,160,191,.34)'; g.beginPath(); g.ellipse(x,y+6,20,9,0,0,Math.PI*2); g.fill();
+      g.fillStyle='#65b9cb'; g.beginPath(); g.arc(x,y,11,0,Math.PI*2); g.fill();
+      g.fillStyle='#d8f4f5'; g.fillRect(x-3,y-7,4,6);
+    }
+    if(resource.health>0&&resource.maxHealth>1) {
+      const width=34, percent=Math.max(0,Math.min(1,resource.health/resource.maxHealth));
+      g.fillStyle='rgba(0,0,0,.65)'; g.fillRect(x-width/2,y-30,width,4);
+      g.fillStyle='#91d17b'; g.fillRect(x-width/2,y-30,width*percent,4);
+    }
+    g.fillStyle='rgba(20,30,20,.86)'; g.font='10px system-ui'; g.textAlign='center';
+    g.fillText(resource.displayName||'Recurso',x,y+31);
+    g.restore();
+  }
+
   function drawWorldItem(g,item,x,y) {
     if(typeof item.draw==='function') {
       item.draw(g,x,y);
@@ -2880,8 +2971,27 @@
     g.restore();
   }
 
+  async function harvestNearbyResource() {
+    const worldX=camera.x*canvas.clientWidth+player.x;
+    const worldY=camera.y*canvas.clientHeight+player.y;
+    const nearby=[...serverWorldEntities.values()]
+      .filter(entity=>entity.type==='resource'&&entity.status!=='depleted')
+      .map(entity=>({entity,distance:Math.hypot(worldX-entity.x,worldY-entity.y)}))
+      .filter(entry=>entry.distance<=80)
+      .sort((a,b)=>a.distance-b.distance)[0];
+    if(!nearby) return false;
+    try {
+      const result=await window.KTKOnline?.gameAction?.('harvest',{entity_id:nearby.entity.entityId});
+      if(result?.depleted) toast(`${nearby.entity.displayName} coletado.`);
+      else toast(`Você trabalhou em ${nearby.entity.displayName}.`);
+    } catch(error) {
+      toast(error?.message||'O servidor recusou a coleta do recurso.');
+    }
+    return true;
+  }
+
   async function interactWithSelectedItem() {
-    if(collectNearbyArrowIntoStack()) return;
+    if(await harvestNearbyResource()) return;
     if(await collectNearbyItem()) return;
     const selectedItem=inventory[selectedInventorySlot];
     if(!selectedItem) return;
@@ -3031,10 +3141,11 @@
     if(!serverState || typeof serverState!=='object') return false;
     const stats=window.KTKPlayerStats?.stats;
     if(stats) {
-      ['health','satiety','hydration','stamina','mana','magicLevel'].forEach(key=>{
+      ['health','satiety','hydration','stamina','mana','magicLevel','temperature','attack','defense'].forEach(key=>{
         const source=key==='magicLevel'?'magic_level':key;
         if(serverState[source]!==undefined && stats[key]) stats[key].value=Math.max(stats[key].min,Math.min(stats[key].max,Number(serverState[source])||0));
       });
+      if(Number.isInteger(Number(serverState.selected_slot))) selectedInventorySlot=Math.max(0,Math.min(inventory.length-1,Number(serverState.selected_slot)));
       window.KTKPlayerStats.render();
     }
     if(Array.isArray(serverState.inventory)) {
@@ -3065,6 +3176,8 @@
       x:camera.x*(canvas.clientWidth||0)+player.x,
       y:camera.y*(canvas.clientHeight||0)+player.y,
       direction:player.direction,
+      running:Boolean(playerRunning),
+      guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield()),
       character:{...character},
       combatStats:(()=>{
         const stats=window.KTKPlayerStats.stats;
@@ -3113,6 +3226,7 @@
       return true;
     },
     applyWorldEntity,applyWorldState,
+    serverDeath:()=>handlePlayerDeath(true),
     setLocalState:(x,y,direction)=>{
       if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
       camera.x=0; camera.y=0;
@@ -3121,7 +3235,7 @@
       return true;
     }
   };
-  function handlePlayerDeath() {
+  function handlePlayerDeath(serverConfirmed=false) {
     if(playerDead) return;
     playerDead=true;
     newCharacterRequired=true;
@@ -3132,17 +3246,8 @@
     player.knockback=null;
     player.knockbackHeight=0;
 
-    const itemsToDrop=[];
-    wearableSlotOrder.forEach(slot=>{
-      const item=equippedWearables[slot];
-      if(item&&!item.isStartingWearable) itemsToDrop.push(item);
-      equippedWearables[slot]=null;
-    });
-    inventory.forEach((item,index)=>{
-      if(item) itemsToDrop.push(item);
-      inventory[index]=null;
-    });
-    itemsToDrop.forEach((item,index)=>dropItemAtPlayer(item,(player.direction+index)%4));
+    wearableSlotOrder.forEach(slot=>{equippedWearables[slot]=null;});
+    inventory.forEach((item,index)=>{inventory[index]=null;});
 
     boomerangProjectile.active=false;
     arrowProjectile.active=false;
@@ -3153,7 +3258,7 @@
     rebuildCharacterLayers();
     document.getElementById('enter-world').textContent='Criar novo personagem';
     showScreen('death');
-    window.KTKOnline?.markDead();
+    if(!serverConfirmed) void window.KTKOnline?.markDead?.();
     updateKingStatus();
   }
 
@@ -3310,9 +3415,11 @@
       if(key==='e'&&!event.repeat) interactWithSelectedItem();
       if((key==='1'||key==='2')&&!event.repeat) selectInventorySlot(Number(key)-1);
       if(key==='m'&&!event.repeat) {
-        const level=window.KTKPlayerStats.cycleMagicLevel();
-        const maxLevel=window.KTKPlayerStats.stats.magicLevel.max;
-        toast(`Nível mágico: ${level}/${maxLevel}.`);
+        void window.KTKOnline?.gameAction?.('magic_level',{}).then(result=>{
+          const level=Number(result?.magic_level)||0;
+          const maxLevel=window.KTKPlayerStats.stats.magicLevel.max;
+          toast(`Nível mágico: ${level}/${maxLevel}.`);
+        }).catch(error=>toast(error?.message||'O servidor não alterou o nível mágico.'));
       }
     }
     if(key==='escape'&&gameStarted&&screens.game.classList.contains('active')) {
