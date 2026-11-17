@@ -3146,6 +3146,7 @@
       }
 
       const onlinePlayer=onlineResult.player;
+      if(onlinePlayer?.state) applyServerState(onlinePlayer.state);
       if(newCharacterRequired) {
         equipStartingWearables();
         playerStats?.resetForNewCharacter?.();
