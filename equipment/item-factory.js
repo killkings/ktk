@@ -68,7 +68,7 @@
 
   function asNumber(value){const n=Number(value);return Number.isFinite(n)?n:0;}
   function equipmentClassForDatabaseType(type){
-    return ({weapon:'melee',tool:'tool',shield:'shield',ranged:'ranged',magic:'magic',armor:'apparel',apparel:'apparel',ammo:'ammo'})[type]||'equipment';
+    return ({weapon:'melee',tool:'tool',shield:'shield',ranged:'ranged',magic:'magic',armor:'apparel',apparel:'apparel',ammo:'ammunition'})[type]||'equipment';
   }
   function applyAuthoritativeItem(item,row){
     const metadata=row.metadata&&typeof row.metadata==='object'&&!Array.isArray(row.metadata)?row.metadata:{};
