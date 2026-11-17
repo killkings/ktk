@@ -63,6 +63,7 @@ const lpcRenderer = new LPCRenderer();
 const state = {
   joined: false,
   entryAttempted: false,
+  sessionGeneration: 0,
   leaving: false,
   busy: false,
   movementController: null,
@@ -89,6 +90,10 @@ const state = {
   movementTimer: 0,
   errorTimer: 0
 };
+
+function isCurrentSession(generation) {
+  return state.sessionGeneration === generation && state.joined && !state.leaving;
+}
 
 function showError(message, target = "game") {
   if (target === "join") {
@@ -255,28 +260,37 @@ function applyWorldRow(row) {
 
 async function claimCrown() {
   if (!state.joined || state.leaving || state.claimBusy) return;
+  const generation = state.sessionGeneration;
   state.claimBusy = true;
   try {
     const { data, error } = await supabase.rpc("ktk_v2_claim_crown");
     if (error) throw error;
+    if (!isCurrentSession(generation)) return;
     if (data?.world) applyWorldRow(data.world);
     if (data?.crown) upsertEntity(data.crown);
-    await loadWorldSnapshot();
-    showError("A coroa foi reivindicada. O mundo já reconhece você como rei.");
+    await loadWorldSnapshot(generation);
+    if (isCurrentSession(generation)) {
+      showError("A coroa foi reivindicada. O mundo já reconhece você como rei.");
+    }
   } catch (error) {
-    showError(error?.message || "Não foi possível reivindicar a coroa.");
+    if (isCurrentSession(generation)) {
+      showError(error?.message || "Não foi possível reivindicar a coroa.");
+    }
   } finally {
-    state.claimBusy = false;
+    if (state.sessionGeneration === generation) state.claimBusy = false;
   }
 }
 
 async function runGameAction(rpcName, args = {}) {
   if (!state.joined || state.leaving || state.actionBusy) return null;
+  const generation = state.sessionGeneration;
+  const userId = state.userId;
   state.actionBusy = true;
   updateHud();
   try {
     const { data, error } = await supabase.rpc(rpcName, args);
     if (error) throw error;
+    if (!isCurrentSession(generation) || state.userId !== userId) return null;
     if (data?.user_id) upsertPlayer(data);
     if (data?.player) upsertPlayer(data.player);
     if (data?.attacker) upsertPlayer(data.attacker);
@@ -284,14 +298,18 @@ async function runGameAction(rpcName, args = {}) {
     if (data?.target_type === "enemy" && data?.target) upsertEntity(data.target);
     if (data?.world) applyWorldRow(data.world);
     if (data?.crown) upsertEntity(data.crown);
-    await loadWorldSnapshot();
-    return data;
+    await loadWorldSnapshot(generation);
+    return isCurrentSession(generation) ? data : null;
   } catch (error) {
-    showError(error?.message || "A ação foi recusada pelo servidor.");
+    if (isCurrentSession(generation)) {
+      showError(error?.message || "A ação foi recusada pelo servidor.");
+    }
     return null;
   } finally {
-    state.actionBusy = false;
-    updateHud();
+    if (state.sessionGeneration === generation) {
+      state.actionBusy = false;
+      updateHud();
+    }
   }
 }
 
@@ -322,8 +340,9 @@ async function attackTarget() {
   else if (result?.reason === "NO_TARGET") showError("Nenhum alvo à frente.");
 }
 
-async function subscribeWorld() {
+async function subscribeWorld(generation = state.sessionGeneration) {
   await supabase.realtime.setAuth();
+  if (state.sessionGeneration !== generation || state.leaving) return;
   const channel = supabase.channel(TOPIC, {
     config: {
       private: true,
@@ -331,20 +350,36 @@ async function subscribeWorld() {
       presence: { key: state.userId }
     }
   });
+  const isSubscribedSession = () =>
+    state.sessionGeneration === generation && state.channel === channel;
+
   channel
-    .on("broadcast", { event: "INSERT" }, ({ payload }) => applyRealtimePlayer(payload))
-    .on("broadcast", { event: "UPDATE" }, ({ payload }) => applyRealtimePlayer(payload))
+    .on("broadcast", { event: "INSERT" }, ({ payload }) => {
+      if (isSubscribedSession() && state.joined && !state.leaving) applyRealtimePlayer(payload);
+    })
+    .on("broadcast", { event: "UPDATE" }, ({ payload }) => {
+      if (isSubscribedSession() && state.joined && !state.leaving) applyRealtimePlayer(payload);
+    })
     .on("broadcast", { event: "DELETE" }, ({ payload }) => {
+      if (!isSubscribedSession() || !state.joined || state.leaving) return;
       const row = payload?.old_record || payload?.old || extractRow(payload);
       if (row?.user_id) state.players.delete(String(row.user_id));
       updateHud();
     })
-    .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => upsertEntity(extractRow(payload)))
-    .on("broadcast", { event: "ENTITY_UPDATE" }, ({ payload }) => upsertEntity(extractRow(payload)))
-    .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) =>
-      upsertEntity(payload?.old_record || payload?.old || extractRow(payload), true))
-    .on("broadcast", { event: "WORLD_UPDATE" }, ({ payload }) =>
-      applyWorldRow(extractRow(payload)));
+    .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => {
+      if (isSubscribedSession() && state.joined && !state.leaving) upsertEntity(extractRow(payload));
+    })
+    .on("broadcast", { event: "ENTITY_UPDATE" }, ({ payload }) => {
+      if (isSubscribedSession() && state.joined && !state.leaving) upsertEntity(extractRow(payload));
+    })
+    .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) => {
+      if (isSubscribedSession() && state.joined && !state.leaving) {
+        upsertEntity(payload?.old_record || payload?.old || extractRow(payload), true);
+      }
+    })
+    .on("broadcast", { event: "WORLD_UPDATE" }, ({ payload }) => {
+      if (isSubscribedSession() && state.joined && !state.leaving) applyWorldRow(extractRow(payload));
+    });
 
   state.channel = channel;
   await new Promise((resolve, reject) => {
@@ -356,6 +391,14 @@ async function subscribeWorld() {
       }
     }, 12000);
     channel.subscribe(status => {
+      if (!isSubscribedSession()) {
+        if (!settled) {
+          settled = true;
+          clearTimeout(timer);
+          reject(new Error("A sessão foi encerrada durante a conexão Realtime."));
+        }
+        return;
+      }
       if (status === "SUBSCRIBED" && !settled) {
         settled = true;
         clearTimeout(timer);
@@ -372,10 +415,10 @@ async function subscribeWorld() {
 
 }
 
-async function loadWorldSnapshot() {
+async function loadWorldSnapshot(generation = state.sessionGeneration) {
   const { data, error } = await supabase.rpc("ktk_v2_world_state");
   if (error) throw error;
-  if (!state.joined || state.leaving) return;
+  if (!isCurrentSession(generation)) return;
   applyWorldRow(data?.world);
   const players = Array.isArray(data?.players) ? data.players : [];
   players.forEach(upsertPlayer);
@@ -386,7 +429,9 @@ async function loadWorldSnapshot() {
 }
 
 async function enterWorld(displayName, appearance) {
+  const generation = ++state.sessionGeneration;
   const { data: authData, error: authError } = await supabase.auth.signInAnonymously();
+  if (generation !== state.sessionGeneration) return;
   if (authError) throw new Error("Não foi possível iniciar uma sessão nova: " + authError.message);
   if (!authData?.user?.id || !authData?.session?.access_token) {
     throw new Error("O Supabase não retornou uma identidade válida para a sessão.");
@@ -396,25 +441,30 @@ async function enterWorld(displayName, appearance) {
 
   // Create the private Realtime subscription before any INSERT/UPDATE trigger
   // can broadcast from Postgres. This also supplies the JWT for channel RLS.
-  await subscribeWorld();
+  await subscribeWorld(generation);
+  if (generation !== state.sessionGeneration) return;
 
   state.entryAttempted = true;
   const { data: player, error: enterError } = await supabase.rpc("ktk_v2_enter_world", {
     p_display_name: displayName,
     p_appearance: appearance
   });
+  if (generation !== state.sessionGeneration) return;
   if (enterError) throw new Error("Não foi possível criar o personagem no servidor: " + enterError.message);
   if (!player?.user_id) throw new Error("O servidor não confirmou a criação do personagem.");
 
   state.joined = true;
   state.leaving = false;
   upsertPlayer(player);
-  const { error: presenceError } = await state.channel.track({
+  const channel = state.channel;
+  const { error: presenceError } = await channel.track({
     user_id: state.userId,
     joined_at: new Date().toISOString()
   });
+  if (generation !== state.sessionGeneration || !state.joined || state.leaving) return;
   if (presenceError) console.warn("KTK V2 presence:", presenceError.message);
-  await loadWorldSnapshot();
+  await loadWorldSnapshot(generation);
+  if (!isCurrentSession(generation)) return;
   state.lastInputSignature = "";
   state.lastStepAt = 0;
   ui.connection.textContent = "● Mundo sincronizado";
@@ -426,6 +476,8 @@ async function enterWorld(displayName, appearance) {
 
 async function pumpMovement() {
   if (!state.joined || state.leaving || state.busy) return;
+  const generation = state.sessionGeneration;
+  const userId = state.userId;
   const controls = readControls();
   const signature = controlSignature(controls);
   const moving = controls.x !== 0 || controls.y !== 0;
@@ -449,23 +501,27 @@ async function pumpMovement() {
       p_guarding: controls.guarding
     }).abortSignal(movementController.signal);
     if (error) throw error;
-    if (!state.joined || state.leaving) return;
+    if (!isCurrentSession(generation) || state.userId !== userId) return;
     upsertPlayer(data?.player || data);
     state.lastInputSignature = signature;
     state.nextMovementRetryAt = 0;
     state.lastStepAt = performance.now();
     showError("");
   } catch (error) {
-    state.nextMovementRetryAt = performance.now() + 500;
-    const message = error?.message || "Falha ao sincronizar o movimento.";
-    if (!message.includes("PLAYER_NOT_ACTIVE")) showError(message);
+    if (isCurrentSession(generation) && state.userId === userId) {
+      state.nextMovementRetryAt = performance.now() + 500;
+      const message = error?.message || "Falha ao sincronizar o movimento.";
+      if (!message.includes("PLAYER_NOT_ACTIVE")) showError(message);
+    }
   } finally {
     clearTimeout(movementTimeout);
-    if (state.movementController === movementController) state.movementController = null;
-    state.busy = false;
-    if (state.joined && !state.leaving) {
-      const latest = controlSignature(readControls());
-      if (latest !== signature) void pumpMovement();
+    if (state.sessionGeneration === generation) {
+      if (state.movementController === movementController) state.movementController = null;
+      state.busy = false;
+      if (isCurrentSession(generation)) {
+        const latest = controlSignature(readControls());
+        if (latest !== signature) void pumpMovement();
+      }
     }
   }
 }
@@ -490,6 +546,9 @@ function frame(now) {
 }
 
 async function cleanupLocalSession() {
+  state.sessionGeneration += 1;
+  state.actionBusy = false;
+  state.claimBusy = false;
   state.movementController?.abort();
   state.movementController = null;
   if (state.channel) {
@@ -531,6 +590,8 @@ async function cleanupLocalSession() {
 
 async function leaveWorld(fromPageHide = false) {
   if (!state.joined || state.leaving) return;
+  const generation = state.sessionGeneration;
+  const userId = state.userId;
   state.leaving = true;
   state.movementController?.abort();
   state.movementController = null;
@@ -562,6 +623,7 @@ async function leaveWorld(fromPageHide = false) {
 
   try {
     const { data, error } = await supabase.rpc("ktk_v2_leave_world");
+    if (generation !== state.sessionGeneration || state.userId !== userId) return;
     if (error) throw error;
     if (data?.ok === false) throw new Error("O servidor não confirmou a saída.");
     await cleanupLocalSession();
