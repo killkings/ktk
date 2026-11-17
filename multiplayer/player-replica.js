@@ -80,7 +80,7 @@ function getLocalMovementControls() {
           : sample.direction===2?[0,1]:[1,0];
         const correctionX=nextX-remote.x,correctionY=nextY-remote.y;
         const backwards=correctionX*directionVector[0]+correctionY*directionVector[1];
-        if(backwards<0&&Math.hypot(correctionX,correctionY)<96) {
+        if(backwards<0) {
           nextX-=directionVector[0]*backwards;
           nextY-=directionVector[1]*backwards;
         }
