@@ -8,19 +8,21 @@ const simulationMigrationUrl = new URL("../../supabase/migrations/20261117173000
 const projectileMigrationUrl = new URL("../../supabase/migrations/20261117174000_ktk_v2_projectiles.sql", import.meta.url);
 const movementMigrationUrl = new URL("../../supabase/migrations/20261117175000_ktk_v2_guard_and_world_collisions.sql", import.meta.url);
 const populationMigrationUrl = new URL("../../supabase/migrations/20261117176000_ktk_v2_world_population.sql", import.meta.url);
+const suspensionMigrationUrl = new URL("../../supabase/migrations/20261117177000_ktk_v2_safe_suspend_and_disconnect_expiry.sql", import.meta.url);
 const clientUrl = new URL("../js/main.js", import.meta.url);
 const htmlUrl = new URL("../index.html", import.meta.url);
 const rendererUrl = new URL("../js/world-renderer.js", import.meta.url);
 const lpcUrl = new URL("../js/lpc-renderer.js", import.meta.url);
 const rulesUrl = new URL("../js/client-rules.js", import.meta.url);
 const catalogUrl = new URL("../../personagem.js", import.meta.url);
-const [sql, gameplaySql, simulationSql, projectileSql, movementSql, populationSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
+const [sql, gameplaySql, simulationSql, projectileSql, movementSql, populationSql, suspensionSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
   readFile(migrationUrl, "utf8"),
   readFile(gameplayMigrationUrl, "utf8"),
   readFile(simulationMigrationUrl, "utf8"),
   readFile(projectileMigrationUrl, "utf8"),
   readFile(movementMigrationUrl, "utf8"),
   readFile(populationMigrationUrl, "utf8"),
+  readFile(suspensionMigrationUrl, "utf8"),
   readFile(clientUrl, "utf8"),
   readFile(htmlUrl, "utf8"),
   readFile(rendererUrl, "utf8"),
@@ -260,6 +262,26 @@ test("the shared V2 world is populated with persistent resources and obstacles",
   assert.match(simulationSql, /for v_enemy in[\s\S]*entity_type='enemy'/);
   assert.match(movementSql, /entity_type='resource'/);
   assert.match(movementSql, /entity_type='enemy'/);
+});
+
+test("V2 suspension pauses simulation without killing the character", () => {
+  for (const required of [
+    "create or replace function public.ktk_v2_set_suspended",
+    "p_sequence bigint",
+    "visibility_sequence",
+    "PLAYER_SUSPENDED",
+    "create or replace function ktk_v2_private.expire_disconnected_players",
+    "last_seen_at<clock_timestamp()-interval '10 minutes'",
+    "ktk-v2-disconnect-expirer",
+    "from public,anon"
+  ]) {
+    assert.ok(suspensionSql.includes(required), `Missing suspension contract: ${required}`);
+  }
+  assert.match(suspensionSql, /not coalesce\(\(state->>'suspended'\)::boolean,false\)/);
+  assert.match(suspensionSql, /not coalesce\(\(p\.state->>'suspended'\)::boolean,false\)/);
+  assert.ok(client.includes("visibilitychange"));
+  assert.ok(client.includes("setConnectionSuspended"));
+  assert.ok(client.includes("sessionGeneration"));
 });
 
 test("the V2 migration has one clean commit boundary", () => {
