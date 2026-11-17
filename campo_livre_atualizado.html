@@ -2337,7 +2337,10 @@
           if(result.target_dead && result.target_type==='enemy') toast('Esqueleto derrotado.');
           if(result.hit) {
             const hitTarget=result.target_type==='enemy'?window.KTKEnemySkeleton.entity:remotePlayers.get(String(result.target_id));
-            if(hitTarget) startKnockback(hitTarget,{x:[0,-1,0,1][direction],y:[-1,0,1,0][direction]});
+            if(hitTarget===window.KTKEnemySkeleton.entity) {
+              startKnockback(hitTarget,{x:[0,-1,0,1][direction],y:[-1,0,1,0][direction]});
+              hitTarget.knockback.authoritative=true;
+            }
           }
           if(result.state) applyServerState(result.state);
         })
@@ -2446,8 +2449,8 @@
       knockback.progress=Math.min(1,previous+deltaSeconds/KNOCKBACK_SECONDS);
       const distance=KNOCKBACK_DISTANCE*(knockback.progress-previous);
       if(target===player) {
-        movePlayerWithCollisions(knockback.x*distance,knockback.y*distance);
-      } else {
+        if(!knockback.authoritative) movePlayerWithCollisions(knockback.x*distance,knockback.y*distance);
+      } else if(!knockback.authoritative) {
         target.x+=knockback.x*distance;
         target.y+=knockback.y*distance;
       }
@@ -3168,6 +3171,20 @@
         }];
       }))
     }),
+    applyServerKnockback:(event,x,y,direction)=>{
+      if(playerDead) return false;
+      if(Number.isFinite(Number(x))&&Number.isFinite(Number(y))) {
+        camera.x=0; camera.y=0;
+        player.x=Number(x); player.y=Number(y);
+        player.direction=Number.isFinite(Number(direction))?Math.max(0,Math.min(3,Number(direction))):player.direction;
+      }
+      if(event) {
+        player.knockback={
+          x:Number(event.x)||0,y:Number(event.y)||0,progress:0,authoritative:true
+        };
+      }
+      return true;
+    },
     applyRemoteDamage:event=>{
       if(!event||playerDead) return false;
       const damage=Math.max(0,Number(event.damage)||0);
