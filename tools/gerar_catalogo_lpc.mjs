@@ -53,7 +53,9 @@ async function hasRequiredLpcFolders(root) {
 async function isPinnedLpcSource(root) {
   if (!(await hasRequiredLpcFolders(root))) return false;
   try {
-    return runGit(root, ["rev-parse", "HEAD"]).trim() === LPC_SOURCE_CONFIG.revision;
+    const revision = runGit(root, ["rev-parse", "HEAD"]).trim();
+    const changes = runGit(root, ["status", "--porcelain", "--untracked-files=all"]).trim();
+    return revision === LPC_SOURCE_CONFIG.revision && changes === "";
   } catch {
     return false;
   }
