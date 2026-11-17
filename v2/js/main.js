@@ -2,7 +2,8 @@ import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import {
   normalizeControls,
   reconcilePlayerView,
-  advancePlayerView
+  advancePlayerView,
+  shouldSendMovement
 } from "./client-rules.js";
 import { renderWorld } from "./world-renderer.js?v=v2-004";
 import { LPCRenderer } from "./lpc-renderer.js";
@@ -430,8 +431,8 @@ async function pumpMovement() {
   const moving = controls.x !== 0 || controls.y !== 0;
   const now = performance.now();
   const changed = signature !== state.lastInputSignature;
-  const heartbeatDue = now - state.lastStepAt >= 2500;
-  if (!changed && !moving && !heartbeatDue) return;
+  const elapsedMs = now - state.lastStepAt;
+  if (!shouldSendMovement({changed,moving,elapsedMs})) return;
   if (signature === state.lastAttemptSignature && now < state.nextMovementRetryAt) return;
 
   state.localInput = controls;
