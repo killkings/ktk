@@ -65,7 +65,11 @@ async function loadWorldState() {
 
 function acceptDatabaseChange(payload) {
   const row = payload?.new || payload?.record || payload;
-  if (!row?.user_id || row.user_id === state.user?.id) return;
+  if (!row?.user_id) return;
+  if (row.user_id === state.user?.id) {
+    if (row.state) window.KTKWorldEntities?.applyServerState?.(row.state);
+    return;
+  }
   if (row.is_alive === false) {
     state.remote.delete(String(row.user_id));
     updateRemotes();
@@ -430,6 +434,9 @@ async function enter(options = {}) {
       });
       if (error) throw error;
       player = data?.player;
+    }
+    if (player?.is_alive) {
+      try { player.state = (await getPlayerState()).state; } catch (stateError) { console.warn("KTK initial player state:", stateError); }
     }
     if (!player?.is_alive) {
       return { ok: false, dead: true, player, error: "Este personagem morreu. Crie outro para voltar ao mundo." };
