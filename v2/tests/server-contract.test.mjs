@@ -210,6 +210,10 @@ test("V2 projectile combat is calculated and persisted on the server", () => {
   assert.equal(projectileSql.trimEnd().toLowerCase().endsWith("commit;"), true);
 });
 
+test("movement supports server-validated shield blocking while walking", () => {
+  assert.ok(gameplaySql.includes("ktk_v2_step_player"));
+  assert.ok(gameplaySql.includes("SHIELD_REQUIRED") || gameplaySql.includes("TWO_HANDED_WEAPON_CANNOT_BLOCK"));
+});
 test("the V2 migration has one clean commit boundary", () => {
   assert.equal((sql.match(/\bcommit;/gi) || []).length, 1);
   assert.equal(sql.trimEnd().toLowerCase().endsWith("commit;"), true);
