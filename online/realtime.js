@@ -1,10 +1,10 @@
 /* Canal Broadcast privado e fotografias oficiais do mundo. */
-import { state } from "./state.js?v=20261117-online-separation-001";
-import { supabase, TOPIC } from "./supabase-client.js?v=20261117-online-separation-001";
+import { state } from "./state.js?v=20261117-movement-reconciliation-005";
+import { supabase, TOPIC } from "./supabase-client.js?v=20261117-movement-reconciliation-005";
 import {
   acceptDatabaseChange, acceptWorldEntityChange, loadExistingPlayers
-} from "./player-sync.js?v=20261117-entry-timeouts-001";
-import { withTimeout } from "./request-timeout.js?v=20261117-entry-timeouts-001";
+} from "./player-sync.js?v=20261117-movement-reconciliation-005";
+import { withTimeout } from "./request-timeout.js?v=20261117-movement-reconciliation-005";
 
 export async function loadWorldState(signal) {
   if(!state.user||state.leaving) return null;

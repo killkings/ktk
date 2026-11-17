@@ -182,15 +182,25 @@ var  camera = {x:0,y:0};
       running:playerRunning,guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted),
       inputAgeMs:0
     };
-    const sameIntent=Boolean(requestInput
-      && Number(requestInput.inputX)===Number(controls.inputX)
-      && Number(requestInput.inputY)===Number(controls.inputY)
-      && Boolean(requestInput.running)===Boolean(controls.running)
-      && Boolean(requestInput.guarding)===Boolean(controls.guarding));
+    const hasIntentRevision=typeof requestInput?.intentRevision==="number"
+      && Number.isFinite(requestInput.intentRevision)
+      && typeof controls.intentRevision==="number"
+      && Number.isFinite(controls.intentRevision);
+    // Mesmo vetor não significa mesma intenção: o jogador pode ter mudado e
+    // voltado à direção original enquanto a RPC estava em trânsito.
+    const sameIntent=Boolean(requestInput && (hasIntentRevision
+      ? requestInput.intentRevision===controls.intentRevision
+      : Number(requestInput.inputX)===Number(controls.inputX)
+        && Number(requestInput.inputY)===Number(controls.inputY)
+        && Boolean(requestInput.running)===Boolean(controls.running)
+        && Boolean(requestInput.guarding)===Boolean(controls.guarding)));
     const oneWayLatencyMs=Math.max(0,Number(latencyMs)||0)/2;
+    // A nova intenção pode ter começado antes ou depois do snapshot do servidor.
+    // O tempo posterior ao snapshot é limitado ao menor entre idade e meia-RTT.
+    const intentAgeMs=Math.max(0,Math.min(750,Number(controls.inputAgeMs)||0));
     const extrapolationMs=sameIntent
       ? oneWayLatencyMs
-      : Math.max(0,Number(controls.inputAgeMs)||0)+oneWayLatencyMs;
+      : Math.min(oneWayLatencyMs,intentAgeMs);
     const inputX=Math.max(-1,Math.min(1,Math.trunc(Number(controls.inputX)||0)));
     const inputY=Math.max(-1,Math.min(1,Math.trunc(Number(controls.inputY)||0)));
     const inputLength=Math.hypot(inputX,inputY);
@@ -255,8 +265,12 @@ var  camera = {x:0,y:0};
       // obstáculos dinâmicos conhecidos pelo cliente (jogadores e esqueleto).
       const obstacles=[];
       if(typeof remotePlayers!=="undefined" && remotePlayers && typeof remotePlayers.forEach==="function") remotePlayers.forEach(remote=>{
-        if(remote&&Number.isFinite(Number(remote.x))&&Number.isFinite(Number(remote.y))) {
-          obstacles.push({x:Number(remote.x),y:Number(remote.y),radius:COLLISION_RADIUS*2});
+        // x/y são interpolados para desenho; a colisão deve usar a última posição
+        // oficial recebida do servidor, mantida em targetX/targetY.
+        const obstacleX=Number.isFinite(remote?.targetX)?remote.targetX:Number(remote?.x);
+        const obstacleY=Number.isFinite(remote?.targetY)?remote.targetY:Number(remote?.y);
+        if(remote&&Number.isFinite(obstacleX)&&Number.isFinite(obstacleY)) {
+          obstacles.push({x:obstacleX,y:obstacleY,radius:COLLISION_RADIUS*2});
         }
       });
       const skeleton=window.KTKEnemySkeleton?.entity;

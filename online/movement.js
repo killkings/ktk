@@ -1,6 +1,6 @@
 /* Movimento: o cliente envia intenções e só aplica coordenadas oficiais do servidor. */
-import { state } from "./state.js?v=20261117-online-separation-001";
-import { supabase } from "./supabase-client.js?v=20261117-online-separation-001";
+import { state } from "./state.js?v=20261117-movement-reconciliation-005";
+import { supabase } from "./supabase-client.js?v=20261117-movement-reconciliation-005";
 
 state.lastMovementLatencyMs = Math.max(
   0, Math.min(750, Number(state.lastMovementLatencyMs) || 150)
@@ -14,7 +14,8 @@ function readControlInput() {
     inputY: Number.isFinite(Number(data.inputY)) ? Math.max(-1, Math.min(1, Math.trunc(Number(data.inputY)))) : 0,
     running: Boolean(data.running),
     guarding: Boolean(data.guarding),
-    inputAgeMs: Math.max(0, Math.min(750, Math.trunc(Number(data.inputAgeMs) || 0)))
+    inputAgeMs: Math.max(0, Math.min(750, Math.trunc(Number(data.inputAgeMs) || 0))),
+    intentRevision: Number.isFinite(data.intentRevision) ? Math.max(0,Math.trunc(data.intentRevision)) : null
   };
 }
 
@@ -85,7 +86,7 @@ export async function sendPosition(force = false) {
   const guarding = Boolean(payload.guarding);
   const inputSignature = JSON.stringify({ inputX, inputY, running, guarding });
   const inputChanged = inputSignature !== state.lastInputSignature;
-  const requestInput = { inputX, inputY, running, guarding };
+  const requestInput = { inputX, inputY, running, guarding, intentRevision: payload.intentRevision };
   const inputAgeAtServer = Math.max(0, Math.min(
     750,
     Math.round(payload.inputAgeMs + (Number(state.lastMovementLatencyMs) || 150) / 2)

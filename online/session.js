@@ -1,13 +1,13 @@
 /* Autenticação, entrada/saída e ciclo de vida da sessão. */
-import { state } from "./state.js?v=20261117-online-separation-001";
+import { state } from "./state.js?v=20261117-movement-reconciliation-005";
 import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
-} from "./supabase-client.js?v=20261117-online-separation-001";
-import { sendPosition } from "./movement.js?v=20261117-movement-authority-002";
-import { subscribeWorld } from "./realtime.js?v=20261117-realtime-entry-fix-001";
-import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-entry-timeouts-001";
-import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-entry-timeouts-001";
-import { withTimeout } from "./request-timeout.js?v=20261117-entry-timeouts-001";
+} from "./supabase-client.js?v=20261117-movement-reconciliation-005";
+import { sendPosition } from "./movement.js?v=20261117-movement-reconciliation-005";
+import { subscribeWorld } from "./realtime.js?v=20261117-movement-reconciliation-005";
+import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-movement-reconciliation-005";
+import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-movement-reconciliation-005";
+import { withTimeout } from "./request-timeout.js?v=20261117-movement-reconciliation-005";
 
 export function setStatus(message, connected = false) {
   let el = document.getElementById("ktk-online-status");
@@ -104,6 +104,9 @@ export async function enter(options = {}) {
     if (!player?.is_alive) {
       return { ok: false, dead: true, player, error: "Este personagem morreu. Crie outro para voltar ao mundo." };
     }
+    // Não reproduz como novo um knockback que já constava do estado inicial.
+    // A posição do ingresso não inclui position_updated_at no contrato SQL.
+    state.lastLocalKnockbackAt=String(player.state?.last_knockback_at||"");
     reportEntryProgress(options, "Conectando ao canal multiplayer...");
     await subscribeWorld(message => reportEntryProgress(options, message));
     setStatus("● Online · mundo principal", true);

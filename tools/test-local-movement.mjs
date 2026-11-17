@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch, playerSync, rootHtml] = await Promise.all([
+const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch, playerSync, rootHtml, session, realtime, actions, supabaseClient] = await Promise.all([
   read("../input/input-controller.js"),
   read("../multiplayer/player-replica.js"),
   read("../js/game-state.js"),
@@ -14,7 +14,11 @@ const [input, replica, gameState, renderer, movement, online, html, migration, r
   read("../supabase/migrations/20261117204627_authoritative_movement_latency_and_intent_timeline.sql"),
   read("../supabase/migrations/20261117204956_ignore_stale_movement_intent_after_lifecycle_reset.sql"),
   read("../online/player-sync.js"),
-  read("../index.html")
+  read("../index.html"),
+  read("../online/session.js"),
+  read("../online/realtime.js"),
+  read("../online/actions.js"),
+  read("../online/supabase-client.js")
 ]);
 
 // Keyboard state includes the age of the exact active intent, not the last
@@ -37,6 +41,8 @@ let controls = replicaContext.window.KTKWorldEntities.getLocalControls();
 assert.equal(controls.inputX, 0);
 assert.equal(controls.inputY, -1);
 assert.equal(controls.inputAgeMs, 0);
+const firstIntentRevision=controls.intentRevision;
+assert.ok(firstIntentRevision>0);
 clock = 1125;
 keys.delete("w");
 keys.add("d");
@@ -44,8 +50,13 @@ controls = replicaContext.window.KTKWorldEntities.getLocalControls();
 assert.equal(controls.inputX, 1);
 assert.equal(controls.inputY, 0);
 assert.equal(controls.inputAgeMs, 0);
+const turnedIntentRevision=controls.intentRevision;
+assert.notEqual(turnedIntentRevision,firstIntentRevision);
 clock = 1250;
-assert.equal(replicaContext.window.KTKWorldEntities.getLocalControls().inputAgeMs, 125);
+const heldControls=replicaContext.window.KTKWorldEntities.getLocalControls();
+assert.equal(heldControls.inputAgeMs, 125);
+assert.equal(heldControls.intentRevision,turnedIntentRevision,
+  "Manter o mesmo vetor não pode criar uma nova geração a cada leitura.");
 keys.add("shift");
 assert.equal(replicaContext.window.KTKWorldEntities.getLocalControls().running, true);
 stamina.value = 0;
@@ -92,7 +103,7 @@ context.playerVisual.x=100;
 context.playerVisual.y=120;
 context.playerVisual.targetX=100;
 context.playerVisual.targetY=120;
-context.remotePlayers.set("other",{x:130,y:120});
+context.remotePlayers.set("other",{x:100,y:120,targetX:130,targetY:120});
 context.playerMoving=true;
 context.playerInputX=1;
 context.playerInputY=0;
@@ -100,6 +111,54 @@ context.updateLocalPlayerVisual(0.05);
 assert.equal(context.playerVisual.x,100,
   "The visual prediction must not walk through another player's collision radius.");
 context.remotePlayers.clear();
+
+// A mudança de direção não pode somar a idade da tecla à meia-RTT.
+// O trecho após o snapshot é limitado ao menor desses dois intervalos.
+function makeIntentTimingContext(ageMs) {
+  const timing = {
+    playerMoving:true,playerRunning:false,playerInputX:0,playerInputY:-1,
+    playerStats:{stats:{speed:{value:2}}},
+    window:{KTKOnline:{connected:true}},SPEED:225,COLLISION_RADIUS:18
+  };
+  vm.createContext(timing);
+  vm.runInContext(gameState.slice(blockStart,blockEnd),timing);
+  timing.setAuthoritativePlayerPosition(100,120,2,true);
+  timing.setAuthoritativePlayerPosition(
+    100,120,0,false,400,
+    {inputX:1,inputY:0,running:false,guarding:false},
+    {inputX:0,inputY:-1,running:false,guarding:false,inputAgeMs:ageMs}
+  );
+  return timing;
+}
+const recentIntent=makeIntentTimingContext(100);
+assert.ok(Math.abs(recentIntent.playerVisual.targetY-97.5)<0.01,
+  "Uma intenção de 100ms não pode ser projetada por 300ms com meia-RTT de 200ms.");
+const olderIntent=makeIntentTimingContext(300);
+assert.ok(Math.abs(olderIntent.playerVisual.targetY-75)<0.01,
+  "Uma intenção mais antiga que a meia-RTT deve ser projetada somente pela meia-RTT.");
+const returnedDirection={
+  playerMoving:true,playerRunning:false,playerInputX:1,playerInputY:0,
+  playerStats:{stats:{speed:{value:2}}},
+  window:{KTKOnline:{connected:true}},SPEED:225,COLLISION_RADIUS:18
+};
+vm.createContext(returnedDirection);
+vm.runInContext(gameState.slice(blockStart,blockEnd),returnedDirection);
+returnedDirection.setAuthoritativePlayerPosition(100,120,3,true);
+returnedDirection.setAuthoritativePlayerPosition(
+  100,120,3,false,400,
+  {inputX:1,inputY:0,running:false,guarding:false,intentRevision:10},
+  {inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:30,intentRevision:12}
+);
+assert.ok(Math.abs(returnedDirection.playerVisual.targetX-106.75)<0.01,
+  "Voltar ao mesmo vetor com outra geração não pode ser confundido com a intenção original.");
+const sameIntent=makeIntentTimingContext(0);
+sameIntent.setAuthoritativePlayerPosition(
+  100,120,0,false,400,
+  {inputX:0,inputY:-1,running:false,guarding:false},
+  {inputX:0,inputY:-1,running:false,guarding:false,inputAgeMs:0}
+);
+assert.ok(Math.abs(sameIntent.playerVisual.targetY-75)<0.01,
+  "Uma intenção inalterada continua sendo extrapolada pela meia-RTT.");
 
 // Regression: completing a network correction while walking must never snap
 // the sprite back to the target captured before those extra movement frames.
@@ -191,11 +250,19 @@ assert.match(input,/window\.addEventListener\('keyup'[\s\S]*?sendImmediateMoveme
 assert.match(renderer,/playerMoving\?playerVisual.direction:player.direction/);
 assert.match(gameState,/errorDistance\/correctionSpeed/);
 assert.match(gameState,/maxBackward/);
+assert.match(gameState,/Math\.min\(oneWayLatencyMs,intentAgeMs\)/);
+assert.match(gameState,/requestInput\.intentRevision===controls\.intentRevision/);
+assert.match(movement,/intentRevision: payload\.intentRevision/);
+assert.match(replica,/localMovementIntentRevision/);
+assert.match(gameState,/remote\?\.targetX/);
+assert.match(gameState,/remote\?\.targetY/);
 assert.match(gameState,/Math.ceil\(Math.max\(Math.abs\(wantedX\),Math.abs\(wantedY\)\)\/6\)/);
 assert.match(playerSync,/function compareServerTimestamps\(/);
-assert.doesNotMatch(playerSync,/applyOwnServerPosition\(row\)/);
-assert.match(rootHtml,/20261117-movement-reconciliation-004/);
-assert.doesNotMatch(playerSync,/applyOwnServerPosition/);
+assert.match(playerSync,/applyOwnServerPosition\(row,Number\(state\.lastMovementLatencyMs\)\|\|0\)/);
+assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-movement-reconciliation-005"/);
+assert.match(session,/state\.lastLocalKnockbackAt=String\(player\.state\?\.last_knockback_at/);
+assert.doesNotMatch(session,/spawnTimestamp/);
+assert.match(rootHtml,/20261117-movement-reconciliation-005/);
 assert.doesNotMatch(playerSync,/compareServerTimestamps is not defined/);
 const timestampHelper = playerSync.slice(
   playerSync.indexOf("function compareServerTimestamps"),
@@ -208,14 +275,23 @@ assert.equal(timestampContext.compare("2026-11-17T21:00:00.000002Z","2026-11-17T
   "Remote timestamps must preserve PostgreSQL microsecond ordering.");
 assert.equal(timestampContext.compare("2026-11-17T21:00:00.000001Z","2026-11-17T21:00:00.000001Z"),0);
 assert.match(online,/sendPosition/);
+const onlineModules={online,session,realtime,actions,supabaseClient,playerSync,movement};
+for(const [name,source] of Object.entries(onlineModules)) {
+  assert.doesNotMatch(source,/20261117-(online-separation-001|movement-authority-002|realtime-entry-fix-001|entry-timeouts-001)/,
+    "Módulo ESM ainda usa uma chave antiga: "+name);
+  for(const match of source.matchAll(/from\s+["']([^"']+\.js\?v=[^"']+)["']/g)) {
+    assert.ok(match[1].endsWith("?v=20261117-movement-reconciliation-005"),
+      "Dependência ESM sem a chave única em "+name+": "+match[1]);
+  }
+}
 for(const [path,version] of [
-  ["render/world-renderer.js","20261117-movement-reconciliation-004"],
-  ["multiplayer/player-replica.js","20261117-movement-reconciliation-004"],
-  ["js/game-state.js","20261117-movement-reconciliation-004"],
-  ["input/input-controller.js","20261117-movement-reconciliation-004"],
-  ["js/online.js","20261117-movement-reconciliation-004"]
+  ["render/world-renderer.js","20261117-movement-reconciliation-005"],
+  ["multiplayer/player-replica.js","20261117-movement-reconciliation-005"],
+  ["js/game-state.js","20261117-movement-reconciliation-005"],
+  ["input/input-controller.js","20261117-movement-reconciliation-005"],
+  ["js/online.js","20261117-movement-reconciliation-005"]
 ]) {
   assert.ok(html.includes("./"+path+"?v="+version),
     "Cache bust ausente: "+path);
 }
-console.log("Timestamped server movement, RTT extrapolation, gear speed and continuous correction passed.");
+console.log("Movement timing, authoritative collisions, cache graph, knockback reconciliation and continuous correction passed.");
