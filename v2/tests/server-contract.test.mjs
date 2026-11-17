@@ -105,3 +105,22 @@ test("old player-death and entity-delete broadcasts cannot roll back newer state
   assert.match(client, /if \(revision < knownRevision\) return/);
   assert.match(client, /if \(revision <= knownRevision\) return/);
 });
+
+
+test("spawn selection shares the same world movement lock", () => {
+  const enter = sql.slice(
+    sql.indexOf("create or replace function public.ktk_v2_enter_world"),
+    sql.indexOf("create or replace function public.ktk_v2_world_state")
+  );
+  assert.match(enter, /pg_advisory_xact_lock\(pg_catalog\.hashtext\('ktk-v2:main:movement'\)\)/);
+});
+
+test("the V2 migration has one clean commit boundary", () => {
+  assert.equal((sql.match(/\bcommit;/gi) || []).length, 1);
+  assert.equal(sql.trimEnd().toLowerCase().endsWith("commit;"), true);
+});
+
+test("movement requests have a timeout and are aborted on exit", () => {
+  assert.match(client, /movementTimeout = setTimeout\(\(\) => movementController\.abort\(\), 1500\)/);
+  assert.match(client, /state\.movementController\?\.abort\(\)/);
+});
