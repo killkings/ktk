@@ -754,4 +754,48 @@ begin
 end
 $$;
 
+-- The world population is persistent and ready resources/obstacles block
+-- player movement on the server instead of being cosmetic client objects.
+do $$
+declare
+  v_uid uuid := '10000000-0000-4000-8000-000000000011';
+  v_player public.ktk_v2_players;
+  v_before double precision;
+  v_step jsonb;
+  v_resource_count integer;
+  v_obstacle_count integer;
+  v_enemy_count integer;
+begin
+  insert into auth.users(id) values (v_uid);
+  update public.ktk_v2_players
+  set last_seen_at=clock_timestamp()-interval '1 hour'
+  where world_id='main' and is_alive;
+
+  select count(*) into v_resource_count
+  from public.ktk_v2_entities where world_id='main' and entity_type='resource';
+  select count(*) into v_obstacle_count
+  from public.ktk_v2_entities where world_id='main' and entity_type='obstacle';
+  select count(*) into v_enemy_count
+  from public.ktk_v2_entities where world_id='main' and entity_type='enemy' and not coalesce((state->>'defeated')::boolean,false);
+
+  if v_resource_count<40 then raise exception 'V2_WORLD_HAS_TOO_FEW_RESOURCES count=%',v_resource_count; end if;
+  if v_obstacle_count<20 then raise exception 'V2_WORLD_HAS_TOO_FEW_OBSTACLES count=%',v_obstacle_count; end if;
+  if v_enemy_count<5 then raise exception 'V2_WORLD_HAS_TOO_FEW_ENEMIES count=%',v_enemy_count; end if;
+
+  perform set_config('request.jwt.claim.sub',v_uid::text,true);
+  perform public.ktk_v2_enter_world('Teste Colisão','{}'::jsonb);
+  update public.ktk_v2_players
+  set x=1140,y=560,direction=3,revision=revision+1,
+      last_seen_at=clock_timestamp(),
+      movement_updated_at=clock_timestamp()-interval '0.2 seconds'
+  where user_id=v_uid and world_id='main';
+  select x into v_before from public.ktk_v2_players where user_id=v_uid;
+  v_step:=public.ktk_v2_step_player(1::smallint,0::smallint,false,false);
+  select * into v_player from public.ktk_v2_players where user_id=v_uid;
+  if abs(v_player.x-v_before)>0.001 then
+    raise exception 'V2_PLAYER_PASSED_THROUGH_A_READY_RESOURCE x_before=% x_after=%',v_before,v_player.x;
+  end if;
+end
+$$;
+
 rollback;
