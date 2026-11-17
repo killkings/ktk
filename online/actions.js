@@ -1,7 +1,7 @@
 /* Ações validadas pelo servidor: combate, inventário, interação e coroa. */
-import { state } from "./state.js?v=20261117-remote-motion-006";
-import { supabase } from "./supabase-client.js?v=20261117-remote-motion-006";
-import { loadWorldState } from "./realtime.js?v=20261117-remote-motion-006";
+import { state } from "./state.js?v=20261117-remote-snapshot-007";
+import { supabase } from "./supabase-client.js?v=20261117-remote-snapshot-007";
+import { loadWorldState } from "./realtime.js?v=20261117-remote-snapshot-007";
 
 export async function gameAction(action, payload = {}) {
   const sessionId=state.sessionId;
