@@ -117,7 +117,7 @@ assert.equal(element("toast").textContent, "Falha simulada da RPC.");
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
 assert.match(html, /id="enter-world"/);
 assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
-assert.match(html, /game-lifecycle\.js\?v=20261117-entry-recovery-001/);
-assert.match(html, /online\.js\?v=20261117-entry-recovery-001/);
+assert.match(html, /game-lifecycle\.js\?v=20261117-entry-timeouts-001/);
+assert.match(html, /online\.js\?v=20261117-entry-timeouts-001/);
 
 console.log("World entry button, name validation, online-module readiness and error feedback passed.");
