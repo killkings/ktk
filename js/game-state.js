@@ -205,8 +205,9 @@ var  camera = {x:0,y:0};
     const movementSpeedForIntent=intent=>{
       const running=Boolean(intent?.running);
       const guarding=Boolean(intent?.guarding);
-      const penalty=(wearableSlotOrder||[]).reduce((sum,slot)=>{
-        const item=equippedWearables?.[slot];
+      const slots=typeof wearableSlotOrder!=="undefined"?wearableSlotOrder:[];
+      const penalty=slots.reduce((sum,slot)=>{
+        const item=typeof equippedWearables!=="undefined"?equippedWearables?.[slot]:null;
         return sum+(item?.durability>0?Math.max(0,Number(item.speedPenalty)||0):0);
       },0);
       const level=(running?3:2)*(guarding?0.5:1);
