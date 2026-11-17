@@ -377,7 +377,7 @@
 })();
 </script>
 <script src="./personagem.js?v=stable-20261115-13"></script>
-<script src="./mapa/player/stats.js?v=20261117-dead-name-reuse1"></script>
+<script src="./mapa/player/stats.js?v=20261117-movement-spawnfix1"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
 <script src="./enemy/skeleton/skeleton.js?v=stable-20261117-combat1"></script>
 <script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
@@ -2978,12 +2978,22 @@
   // Move por eixo, permitindo deslizar ao longo de inimigos e outros jogadores.
   function movePlayerWithCollisions(dx,dy) {
     const solids=getSolidEntities();
-    const blocked=(x,y)=>solids.some(entity=>{
+    const offsetX=camera.x*canvas.clientWidth;
+    const offsetY=camera.y*canvas.clientHeight;
+    const currentWorldX=offsetX+player.x;
+    const currentWorldY=offsetY+player.y;
+    const blocked=(x,y,fromX,fromY)=>solids.some(entity=>{
       const minDistance=COLLISION_RADIUS+(entity.radius||COLLISION_RADIUS);
-      return Math.hypot(x-entity.x,y-entity.y)<minDistance;
+      const nextDistance=Math.hypot(offsetX+x-entity.x,offsetY+y-entity.y);
+      const currentDistance=Math.hypot(offsetX+fromX-entity.x,offsetY+fromY-entity.y);
+      // A colisão impede aproximar-se, mas permite sair de uma sobreposição
+      // causada pelo nascimento junto de outro jogador ou inimigo.
+      return nextDistance<minDistance && nextDistance+0.01<currentDistance;
     });
-    if(!blocked(player.x+dx,player.y)) player.x+=dx;
-    if(!blocked(player.x,player.y+dy)) player.y+=dy;
+    const nextX=player.x+dx;
+    if(!blocked(nextX,player.y,player.x,player.y)) player.x=nextX;
+    const nextY=player.y+dy;
+    if(!blocked(player.x,nextY,player.x,player.y)) player.y=nextY;
   }
 
   // Entrada para sincronização futura de posições vindas do servidor online.
@@ -3275,10 +3285,18 @@
 
       const onlinePlayer=onlineResult.player;
       if(onlinePlayer?.state) applyServerState(onlinePlayer.state);
+      const serverSpawnX=Number(onlinePlayer?.x);
+      const serverSpawnY=Number(onlinePlayer?.y);
+      const serverSpawnDirection=Number(onlinePlayer?.direction);
+      if(Number.isFinite(serverSpawnX)&&Number.isFinite(serverSpawnY)) {
+        window.KTKWorldEntities?.setLocalState?.(
+          serverSpawnX,serverSpawnY,
+          Number.isFinite(serverSpawnDirection)?serverSpawnDirection:2
+        );
+      }
       if(newCharacterRequired) {
         equipStartingWearables();
         playerStats?.resetForNewCharacter?.();
-        player.x=0; player.y=96; player.direction=2;
         player.knockback=null; player.knockbackHeight=0;
         camera.x=0; camera.y=0; walkTime=0; idleTime=0;
         keys.clear();
@@ -3301,7 +3319,6 @@
         toast('Novo personagem criado. Boa exploração!');
       } else if(!gameStarted) {
         gameStarted=true;
-        player.x=0; player.y=96; player.direction=2;
         camera.x=0; camera.y=0; walkTime=0;
         toast('Você chegou ao mundo. Explore à vontade!');
       } else {
@@ -3496,6 +3513,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-dead-name-reuse1"></script>
+<script type="module" src="./js/online.js?v=20261117-movement-spawnfix1"></script>
 </body>
 </html>
