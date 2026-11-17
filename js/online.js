@@ -578,6 +578,7 @@ function startHeartbeat() {
 async function claimKingCrown() {
   const {data,error}=await supabase.rpc("ktk_claim_king_crown");
   if(error) return {ok:false,error:error.message||"Não foi possível reivindicar a coroa."};
+  if(data?.state) window.KTKWorldEntities?.applyServerState?.(data.state);
   try { await loadWorldState(); }
   catch(snapshotError) { console.warn("KTK crown snapshot:",snapshotError); }
   return {ok:true,data};
