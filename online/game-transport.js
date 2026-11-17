@@ -2,8 +2,8 @@
 import { state } from "./state.js?v=20261117-websocket-world-001";
 
 const GAME_SERVER_URL = window.KTK_GAME_SERVER_URL ||
-  "wss://ktk-authoritative-world-uriel29m.fly.dev/game";
-const CONNECT_TIMEOUT_MS = 45000;
+  "wss://ktk-authoritative-world.onrender.com/game";
+const CONNECT_TIMEOUT_MS = 90000;
 const FLUSH_TIMEOUT_MS = 3000;
 let connectPromise = null;
 let reconnectTimer = null;

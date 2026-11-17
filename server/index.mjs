@@ -5,7 +5,7 @@ import { AuthoritativeWorld, SIMULATION_HZ, SNAPSHOT_HZ } from "./world.mjs";
 import { SupabaseStore } from "./supabase-store.mjs";
 
 const PORT = Number(process.env.PORT || 8080);
-const AUTH_TIMEOUT_MS = 45000;
+const AUTH_TIMEOUT_MS = 90000;
 const MAX_MESSAGES_PER_SECOND = 40;
 const MAX_CONNECTED_PLAYERS = 128;
 const PERSIST_INTERVAL_MS = 1000;
@@ -492,7 +492,7 @@ function shutdown(signal) {
         try { ws.close(1001, "SERVER_SHUTDOWN"); } catch { ws.terminate(); }
       }
       httpServer.close(() => process.exit(0));
-      setTimeout(() => process.exit(1), 5000).unref();
+      setTimeout(() => process.exit(1), 25000).unref();
     });
 }
 
