@@ -165,7 +165,12 @@ function recolorLayer(source, mode, palette, appearance) {
 }
 
 function getImage(path,mode,palette,appearance) {
-  const key=path+"|"+(mode||"none")+"|"+(palette||"");
+  const appearanceKey = mode === "skin" ? appearance.skin
+    : mode === "face" ? appearance.skin + ":" + appearance.eyes
+    : mode === "hair" ? appearance.hair
+    : mode === "tint" ? (palette || appearance.clothing)
+    : (palette || "");
+  const key=path+"|"+(mode||"none")+"|"+appearanceKey;
   if(imageCache.has(key)) return imageCache.get(key);
   const promise=new Promise(resolve=>{
     const requested=(path.match(/\/(walk|run|idle)\.png$/)||[])[1]||"walk";
