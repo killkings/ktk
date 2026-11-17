@@ -1,13 +1,13 @@
 /* Autenticação, entrada/saída e ciclo de vida da sessão. */
-import { state } from "./state.js?v=20261117-remote-motion-006";
+import { state } from "./state.js?v=20261117-remote-snapshot-007";
 import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
-} from "./supabase-client.js?v=20261117-remote-motion-006";
-import { sendPosition } from "./movement.js?v=20261117-remote-motion-006";
-import { subscribeWorld } from "./realtime.js?v=20261117-remote-motion-006";
-import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-remote-motion-006";
-import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-remote-motion-006";
-import { withTimeout } from "./request-timeout.js?v=20261117-remote-motion-006";
+} from "./supabase-client.js?v=20261117-remote-snapshot-007";
+import { sendPosition } from "./movement.js?v=20261117-remote-snapshot-007";
+import { subscribeWorld } from "./realtime.js?v=20261117-remote-snapshot-007";
+import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-remote-snapshot-007";
+import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-remote-snapshot-007";
+import { withTimeout } from "./request-timeout.js?v=20261117-remote-snapshot-007";
 
 export function setStatus(message, connected = false) {
   let el = document.getElementById("ktk-online-status");

@@ -25,44 +25,76 @@ function getLocalMovementControls() {
   };
 }
 
+  var REMOTE_MOTION_SNAPSHOT_DELAY_MS = 180;
+  var REMOTE_MOTION_MAX_EXTRAPOLATION_MS = 180;
+
+  function getRemoteMotionSample(remote, now) {
+    const snapshots=Array.isArray(remote.motionSnapshots)?remote.motionSnapshots:[];
+    const fallbackX=Number.isFinite(remote.targetX)?remote.targetX:remote.x;
+    const fallbackY=Number.isFinite(remote.targetY)?remote.targetY:remote.y;
+    if(!snapshots.length) {
+      return {x:fallbackX,y:fallbackY,moving:false,
+        direction:Number.isFinite(remote.direction)?remote.direction:2};
+    }
+    const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS;
+    const first=snapshots[0];
+    if(renderAt<=first.receivedAt) {
+      return {x:first.x,y:first.y,moving:false,direction:first.direction};
+    }
+    for(let i=0;i<snapshots.length-1;i++) {
+      const a=snapshots[i],b=snapshots[i+1];
+      if(renderAt>b.receivedAt) continue;
+      const duration=Math.max(1,b.receivedAt-a.receivedAt);
+      const alpha=Math.max(0,Math.min(1,(renderAt-a.receivedAt)/duration));
+      const dx=b.x-a.x,dy=b.y-a.y,distance=Math.hypot(dx,dy);
+      const moving=distance>0.35&&(Boolean(a.moving)||Boolean(b.moving));
+      const direction=distance>0.35
+        ? (Math.abs(dx)>Math.abs(dy)?(dx>0?3:1):(dy>0?2:0))
+        : (alpha<0.5?a.direction:b.direction);
+      return {x:a.x+dx*alpha,y:a.y+dy*alpha,moving,direction};
+    }
+    const last=snapshots[snapshots.length-1];
+    const elapsed=Math.max(0,renderAt-last.receivedAt);
+    const extrapolationMs=Math.min(REMOTE_MOTION_MAX_EXTRAPOLATION_MS,elapsed);
+    const velocityX=Number(remote.velocityX)||0,velocityY=Number(remote.velocityY)||0;
+    const speed=Math.hypot(velocityX,velocityY);
+    const moving=Boolean(last.moving)&&speed>4&&elapsed<REMOTE_MOTION_MAX_EXTRAPOLATION_MS;
+    return {x:last.x+velocityX*extrapolationMs/1000,
+      y:last.y+velocityY*extrapolationMs/1000,moving,direction:last.direction};
+  }
+
   function updateRemotePlayerMotion(dt) {
     const now=performance.now();
     remotePlayers.forEach(remote=>{
-      const targetX=Number.isFinite(remote.targetX)?remote.targetX:remote.x;
-      const targetY=Number.isFinite(remote.targetY)?remote.targetY:remote.y;
-      const receivedAt=Number(remote.positionReceivedAt);
-      const packetAgeMs=Number.isFinite(receivedAt)?Math.max(0,now-receivedAt):1000;
-      // Os snapshots oficiais chegam em intervalos próximos à latência da RPC.
-      // Mantém a velocidade medida entre duas posições do servidor e projeta
-      // no máximo 450ms; assim a réplica não para entre pacotes nem desliza
-      // indefinidamente quando a conexão realmente perde atualizações.
-      const extrapolationMs=Math.min(450,packetAgeMs);
-      const velocityX=Number(remote.velocityX)||0;
-      const velocityY=Number(remote.velocityY)||0;
-      const predictedX=targetX+velocityX*extrapolationMs/1000;
-      const predictedY=targetY+velocityY*extrapolationMs/1000;
-      const dx=predictedX-remote.x,dy=predictedY-remote.y;
-      const distance=Math.hypot(dx,dy);
-      if(distance>0.01) {
-        const blend=1-Math.exp(-Math.max(0,dt)*18);
-        const maxStep=SPEED*2*Math.max(0,dt);
-        const step=Math.min(1,blend,maxStep/Math.max(distance,0.001));
-        remote.x+=dx*step;
-        remote.y+=dy*step;
-      } else {
-        remote.x=predictedX; remote.y=predictedY;
+      const sample=getRemoteMotionSample(remote,now);
+      // Uma amostra atrasada pode ficar atrás do último quadro já exibido
+      // quando há perda/jitter acima do buffer. Na mesma direção, nunca volta:
+      // remove só a componente contrária; mudanças reais de direção e knockback
+      // continuam podendo deslocar o personagem normalmente.
+      const previousDirection=Number.isFinite(remote.renderDirection)
+        ? remote.renderDirection : remote.direction;
+      let nextX=sample.x,nextY=sample.y;
+      if(!remote.knockback&&sample.direction===previousDirection) {
+        const directionVector=sample.direction===0?[0,-1]
+          : sample.direction===1?[-1,0]
+          : sample.direction===2?[0,1]:[1,0];
+        const correctionX=nextX-remote.x,correctionY=nextY-remote.y;
+        const backwards=correctionX*directionVector[0]+correctionY*directionVector[1];
+        if(backwards<0) {
+          nextX-=directionVector[0]*backwards;
+          nextY-=directionVector[1]*backwards;
+        }
       }
-      const hasFreshServerMotion=Boolean(remote.serverMoving)&&packetAgeMs<700
-        &&Math.hypot(velocityX,velocityY)>4;
-      remote.moving=distance>1.2||hasFreshServerMotion;
+      remote.x=nextX; remote.y=nextY;
+      remote.direction=sample.direction; remote.renderDirection=sample.direction;
+      remote.moving=sample.moving;
       if(remote.moving) remote.walkTime=(remote.walkTime||0)+Math.max(0,dt);
       else remote.walkTime=0;
       if(remote.knockback) {
         remote.knockback.progress=Math.min(1,(remote.knockback.progress||0)+Math.max(0,dt)/KNOCKBACK_SECONDS);
         remote.knockbackHeight=Math.sin(remote.knockback.progress*Math.PI)*KNOCKBACK_HEIGHT;
         if(remote.knockback.progress>=1) {
-          remote.knockback=null;
-          remote.knockbackHeight=0;
+          remote.knockback=null; remote.knockbackHeight=0;
         }
       }
       if(Array.isArray(remote.remoteProjectiles)) {
@@ -73,19 +105,14 @@ function getLocalMovementControls() {
             const dx=remote.x-projectile.x,dy=remote.y-projectile.y;
             const distance=Math.hypot(dx,dy);
             if(distance<=Math.max(step,BOOMERANG_PROJECTILE_RADIUS)) return false;
-            projectile.x+=dx/distance*step;
-            projectile.y+=dy/distance*step;
+            projectile.x+=dx/distance*step; projectile.y+=dy/distance*step;
             return true;
           }
           const travel=Math.min(step,Math.max(0,projectile.maxDistance-projectile.distance));
           projectile.distance+=travel;
-          projectile.x+=projectile.vectorX*travel;
-          projectile.y+=projectile.vectorY*travel;
+          projectile.x+=projectile.vectorX*travel; projectile.y+=projectile.vectorY*travel;
           if(projectile.distance>=projectile.maxDistance) {
-            if(projectile.projectileType==='boomerang') {
-              projectile.phase='returning';
-              return true;
-            }
+            if(projectile.projectileType==='boomerang') { projectile.phase='returning'; return true; }
             return false;
           }
           return true;
@@ -168,6 +195,24 @@ function getLocalMovementControls() {
       entity.positionReceivedAt=Number.isFinite(Number(remote.positionReceivedAt))
         ? Number(remote.positionReceivedAt) : (entity.positionReceivedAt||performance.now());
       entity.serverMoving=Boolean(remote.serverMoving);
+      const positionVersion=String(remote.positionUpdatedAt||"");
+      if(positionVersion&&positionVersion!==entity.lastMotionSnapshotTimestamp) {
+        const receivedValue=Number(remote.positionReceivedAt);
+        const receivedAt=Number.isFinite(receivedValue)&&receivedValue>0
+          ? receivedValue : performance.now();
+        if(!Array.isArray(entity.motionSnapshots)) entity.motionSnapshots=[];
+        const lastSnapshot=entity.motionSnapshots[entity.motionSnapshots.length-1];
+        if(!lastSnapshot||receivedAt>lastSnapshot.receivedAt) {
+          entity.motionSnapshots.push({
+            timestamp:positionVersion,receivedAt,x:Number(remote.x),y:Number(remote.y),
+            moving:Boolean(remote.serverMoving),direction:remoteDirection
+          });
+          if(entity.motionSnapshots.length>20) {
+            entity.motionSnapshots.splice(0,entity.motionSnapshots.length-20);
+          }
+        }
+        entity.lastMotionSnapshotTimestamp=positionVersion;
+      }
       entity.direction=remoteDirection;
       entity.displayName=remote.displayName||remote.display_name||entity.displayName||'Aventureiro';
       entity.character=remote.character||entity.character||{};
