@@ -5,16 +5,18 @@ import { readFile } from "node:fs/promises";
 const migrationUrl = new URL("../../supabase/migrations/20261117170000_ktk_v2_foundation.sql", import.meta.url);
 const gameplayMigrationUrl = new URL("../../supabase/migrations/20261117172000_ktk_v2_gameplay_actions.sql", import.meta.url);
 const simulationMigrationUrl = new URL("../../supabase/migrations/20261117173000_ktk_v2_server_simulation.sql", import.meta.url);
+const projectileMigrationUrl = new URL("../../supabase/migrations/20261117174000_ktk_v2_projectiles.sql", import.meta.url);
 const clientUrl = new URL("../js/main.js", import.meta.url);
 const htmlUrl = new URL("../index.html", import.meta.url);
 const rendererUrl = new URL("../js/world-renderer.js", import.meta.url);
 const lpcUrl = new URL("../js/lpc-renderer.js", import.meta.url);
 const rulesUrl = new URL("../js/client-rules.js", import.meta.url);
 const catalogUrl = new URL("../../personagem.js", import.meta.url);
-const [sql, gameplaySql, simulationSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
+const [sql, gameplaySql, simulationSql, projectileSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
   readFile(migrationUrl, "utf8"),
   readFile(gameplayMigrationUrl, "utf8"),
   readFile(simulationMigrationUrl, "utf8"),
+  readFile(projectileMigrationUrl, "utf8"),
   readFile(clientUrl, "utf8"),
   readFile(htmlUrl, "utf8"),
   readFile(rendererUrl, "utf8"),
@@ -187,6 +189,25 @@ test("V2 simulation owns survival, loot expiry, resource respawn and enemy AI", 
   assert.ok(simulationSql.includes("from public,anon,authenticated"));
   assert.equal((simulationSql.match(/\bcommit;/gi) || []).length, 1);
   assert.equal(simulationSql.trimEnd().toLowerCase().endsWith("commit;"), true);
+});
+
+test("V2 projectile combat is calculated and persisted on the server", () => {
+  for (const required of [
+    "create or replace function public.ktk_v2_launch_projectile",
+    "create or replace function ktk_v2_private.projectile_tick",
+    "return public.ktk_v2_launch_projectile()",
+    "AMMO_REQUIRED",
+    "last_tick_at",
+    "phase",
+    "ktk-v2-projectile-simulation"
+  ]) {
+    assert.ok(projectileSql.includes(required), `Missing projectile contract: ${required}`);
+  }
+  assert.ok(projectileSql.includes("ktk_v2_private.apply_player_hit"));
+  assert.ok(projectileSql.includes("p.user_id=v_world.king_user_id"));
+  assert.ok(projectileSql.includes("from public,anon,authenticated"));
+  assert.equal((projectileSql.match(/\bcommit;/gi) || []).length, 1);
+  assert.equal(projectileSql.trimEnd().toLowerCase().endsWith("commit;"), true);
 });
 
 test("the V2 migration has one clean commit boundary", () => {
