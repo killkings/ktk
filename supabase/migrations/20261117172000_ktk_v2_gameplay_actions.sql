@@ -329,6 +329,15 @@ begin
     v_slot:=coalesce((p_payload->>'slot')::integer,-1);
     if v_slot not between 0 and jsonb_array_length(v_inventory)-1 then raise exception 'INVALID_SLOT'; end if;
     v_state:=jsonb_set(v_state,'{selected_slot}',to_jsonb(v_slot),true);
+    if coalesce((v_state->>'guarding')::boolean,false)
+       and v_inventory->v_slot<>'null'::jsonb then
+      select * into v_item_def
+      from public.ktk_v2_item_catalog
+      where item_id=v_inventory->v_slot->>'item_id';
+      if found and v_item_def.two_handed then
+        v_state:=jsonb_set(v_state,'{guarding}','false'::jsonb,true);
+      end if;
+    end if;
 
   elsif p_action='pickup' then
     v_entity_id:=left(coalesce(p_payload->>'entity_id',''),120);
@@ -520,6 +529,16 @@ begin
           revision=revision+1,updated_at=clock_timestamp()
       where world_id='main' and entity_id=v_entity_id;
     end if;
+  end if;
+
+  -- Never retain a guard flag after the last server-owned shield leaves inventory.
+  if coalesce((v_state->>'guarding')::boolean,false) and not exists(
+    select 1
+    from jsonb_array_elements(v_inventory) inv(item)
+    join public.ktk_v2_item_catalog c on c.item_id=inv.item->>'item_id'
+    where c.item_type='shield'
+  ) then
+    v_state:=jsonb_set(v_state,'{guarding}','false'::jsonb,true);
   end if;
 
   v_state:=jsonb_set(v_state,'{inventory}',v_inventory,true);
