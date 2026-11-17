@@ -7,18 +7,20 @@ const gameplayMigrationUrl = new URL("../../supabase/migrations/20261117172000_k
 const simulationMigrationUrl = new URL("../../supabase/migrations/20261117173000_ktk_v2_server_simulation.sql", import.meta.url);
 const projectileMigrationUrl = new URL("../../supabase/migrations/20261117174000_ktk_v2_projectiles.sql", import.meta.url);
 const movementMigrationUrl = new URL("../../supabase/migrations/20261117175000_ktk_v2_guard_and_world_collisions.sql", import.meta.url);
+const populationMigrationUrl = new URL("../../supabase/migrations/20261117176000_ktk_v2_world_population.sql", import.meta.url);
 const clientUrl = new URL("../js/main.js", import.meta.url);
 const htmlUrl = new URL("../index.html", import.meta.url);
 const rendererUrl = new URL("../js/world-renderer.js", import.meta.url);
 const lpcUrl = new URL("../js/lpc-renderer.js", import.meta.url);
 const rulesUrl = new URL("../js/client-rules.js", import.meta.url);
 const catalogUrl = new URL("../../personagem.js", import.meta.url);
-const [sql, gameplaySql, simulationSql, projectileSql, movementSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
+const [sql, gameplaySql, simulationSql, projectileSql, movementSql, populationSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
   readFile(migrationUrl, "utf8"),
   readFile(gameplayMigrationUrl, "utf8"),
   readFile(simulationMigrationUrl, "utf8"),
   readFile(projectileMigrationUrl, "utf8"),
   readFile(movementMigrationUrl, "utf8"),
+  readFile(populationMigrationUrl, "utf8"),
   readFile(clientUrl, "utf8"),
   readFile(htmlUrl, "utf8"),
   readFile(rendererUrl, "utf8"),
@@ -246,6 +248,20 @@ test("movement supports server-validated shield blocking while walking", () => {
   assert.ok(movementSql.includes("entity_type='enemy'"));
   assert.ok(rules.includes("guarding: Boolean(input.guarding)"));
 });
+test("the shared V2 world is populated with persistent resources and obstacles", () => {
+  assert.match(populationSql, /generate_series\(2,25\)/);
+  assert.match(populationSql, /generate_series\(2,19\)/);
+  assert.match(populationSql, /generate_series\(2,15\)/);
+  assert.match(populationSql, /entity_type, x, y, collision_radius, state, revision/i);
+  assert.match(populationSql, /obstacle-tree-/);
+  assert.match(populationSql, /obstacle-rock-/);
+  assert.match(populationSql, /skeleton-/);
+  assert.match(populationSql, /on conflict \(world_id,entity_id\) do nothing/i);
+  assert.match(simulationSql, /for v_enemy in[\s\S]*entity_type='enemy'/);
+  assert.match(movementSql, /entity_type='resource'/);
+  assert.match(movementSql, /entity_type='enemy'/);
+});
+
 test("the V2 migration has one clean commit boundary", () => {
   assert.equal((sql.match(/\bcommit;/gi) || []).length, 1);
   assert.equal(sql.trimEnd().toLowerCase().endsWith("commit;"), true);
