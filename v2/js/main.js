@@ -50,6 +50,7 @@ const state = {
   entryAttempted: false,
   leaving: false,
   busy: false,
+  movementController: null,
   claimBusy: false,
   userId: "",
   accessToken: "",
@@ -320,13 +321,16 @@ async function pumpMovement() {
   state.localInput = controls;
   state.lastAttemptSignature = signature;
   state.busy = true;
+  const movementController = new AbortController();
+  state.movementController = movementController;
+  const movementTimeout = setTimeout(() => movementController.abort(), 1500);
   try {
     const { data, error } = await supabase.rpc("ktk_v2_step_player", {
       p_input_x: controls.x,
       p_input_y: controls.y,
       p_running: controls.running,
       p_guarding: controls.guarding
-    });
+    }).abortSignal(movementController.signal);
     if (error) throw error;
     if (!state.joined || state.leaving) return;
     upsertPlayer(data?.player || data);
@@ -339,6 +343,8 @@ async function pumpMovement() {
     const message = error?.message || "Falha ao sincronizar o movimento.";
     if (!message.includes("PLAYER_NOT_ACTIVE")) showError(message);
   } finally {
+    clearTimeout(movementTimeout);
+    if (state.movementController === movementController) state.movementController = null;
     state.busy = false;
     if (state.joined && !state.leaving) {
       const latest = controlSignature(readControls());
@@ -367,6 +373,8 @@ function frame(now) {
 }
 
 async function cleanupLocalSession() {
+  state.movementController?.abort();
+  state.movementController = null;
   if (state.channel) {
     const channel = state.channel;
     state.channel = null;
@@ -405,6 +413,8 @@ async function cleanupLocalSession() {
 async function leaveWorld(fromPageHide = false) {
   if (!state.joined || state.leaving) return;
   state.leaving = true;
+  state.movementController?.abort();
+  state.movementController = null;
   state.keys.clear();
   clearInterval(state.movementTimer);
   state.movementTimer = 0;
