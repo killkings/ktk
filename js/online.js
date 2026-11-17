@@ -53,9 +53,9 @@ function updateRemotes() {
   }
 }
 
-function acceptWorldEntityChange(payload) {
-  const row=payload?.record||payload?.new||payload;
-  if(row?.entity_id) window.KTKWorldEntities?.applyWorldEntity?.(row);
+function acceptWorldEntityChange(payload, deleted = false) {
+  const row=payload?.record||payload?.new||payload?.old||payload;
+  if(row?.entity_id) window.KTKWorldEntities?.applyWorldEntity?.({...row,deleted});
 }
 
 async function loadWorldState() {
@@ -78,10 +78,25 @@ function acceptDatabaseChange(payload) {
     updateRemotes();
     return;
   }
-  acceptRemote({
+  const serverState=row.state&&typeof row.state==="object"?row.state:{};
+  const remote=acceptRemote({
     user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
-    display_name: row.display_name, character: row.character
+    display_name: row.display_name, character: row.character,
+    combat_stats: {
+      health:serverState.health,maxHealth:serverState.max_health,
+      stamina:serverState.stamina,maxStamina:serverState.max_stamina,
+      satiety:serverState.satiety,maxSatiety:99,
+      hydration:serverState.hydration,maxHydration:99
+    }
   }, "database");
+  const changedRemote=state.remote.get(String(row.user_id));
+  if(changedRemote&&serverState.last_knockback) {
+    changedRemote.knockback={
+      x:Number(serverState.last_knockback.x)||0,
+      y:Number(serverState.last_knockback.y)||0,
+      progress:0
+    };
+  }
   if (!state.profileCache.has(String(row.user_id))) {
     state.profileCache.set(String(row.user_id), true);
     void supabase.from("ktk_profiles").select("display_name,character")
@@ -158,14 +173,6 @@ function acceptCombat(payload) {
   state.seenCombatEvents.add(eventId);
   if (state.seenCombatEvents.size > 256) {
     state.seenCombatEvents = new Set([...state.seenCombatEvents].slice(-128));
-  }
-  if (kind === "pvp_hit" && String(payload.target_user_id || "") === String(state.user?.id || "")) {
-    window.KTKWorldEntities?.applyRemoteDamage?.({
-      damage: payload.damage,
-      knockback_x: payload.knockback_x,
-      knockback_y: payload.knockback_y,
-      event_id: eventId
-    });
   }
   const id = String(payload.user_id);
   let remote = state.remote.get(id);
@@ -307,7 +314,7 @@ async function subscribeWorld() {
     .on("broadcast", { event: "combat" }, ({ payload }) => acceptCombat(payload))
     .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => acceptWorldEntityChange(payload))
     .on("broadcast", { event: "ENTITY_UPDATE" }, ({ payload }) => acceptWorldEntityChange(payload))
-    .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) => acceptWorldEntityChange(payload))
+    .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) => acceptWorldEntityChange(payload,true))
     .on("presence", { event: "sync" }, rebuildPresence)
     .on("presence", { event: "join" }, rebuildPresence)
     .on("presence", { event: "leave" }, ({key}) => {
