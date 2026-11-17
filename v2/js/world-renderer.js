@@ -208,7 +208,7 @@ export function renderWorld(
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
 
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = Math.min(2, typeof window !== "undefined" ? (window.devicePixelRatio || 1) : 1);
   const width = Math.round(rect.width * dpr);
   const height = Math.round(rect.height * dpr);
   if (canvas.width !== width || canvas.height !== height) {
