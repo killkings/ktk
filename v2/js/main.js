@@ -4,9 +4,9 @@ import {
   reconcilePlayerView,
   advancePlayerView,
   shouldSendMovement
-} from "./client-rules.js?v=v2-006";
-import { renderWorld } from "./world-renderer.js?v=v2-006";
-import { LPCRenderer } from "./lpc-renderer.js?v=v2-006";
+} from "./client-rules.js?v=v2-007";
+import { renderWorld } from "./world-renderer.js?v=v2-007";
+import { LPCRenderer } from "./lpc-renderer.js?v=v2-007";
 
 const SUPABASE_URL = "https://mtddtvqtljtgzggpdogl.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U5CdIRdPg0Brfn7x2Bj2hQ_VCXjwRQH";
