@@ -15,6 +15,9 @@ test("normalizes controls and prevents running without movement", () => {
   assert.deepEqual(normalizeControls({x:0,y:0,running:true,guarding:true}), {
     x:0,y:0,running:false,guarding:true
   });
+  assert.deepEqual(normalizeControls({x:1,y:0,running:false,guarding:true}), {
+    x:1,y:0,running:false,guarding:true
+  });
   assert.deepEqual(normalizeControls({x:NaN,y:Infinity}), {
     x:0,y:0,running:false,guarding:false
   });
