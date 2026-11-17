@@ -802,8 +802,8 @@ $$;
 -- eventually die and leave their server-owned inventory as public loot.
 do $$
 declare
-  v_paused_uid uuid := '10000000-0000-4000-8000-000000000017';
-  v_disconnected_uid uuid := '10000000-0000-4000-8000-000000000018';
+  v_paused_uid uuid := 'a1000000-1000-4000-8000-000000000001';
+  v_disconnected_uid uuid := 'a2000000-2000-4000-8000-000000000002';
   v_paused public.ktk_v2_players;
   v_disconnected public.ktk_v2_players;
   v_skeleton public.ktk_v2_entities;
