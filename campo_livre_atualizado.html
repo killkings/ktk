@@ -991,11 +991,12 @@
 
   async function loadRemoteCharacterLayers(remote) {
     const characterData=remote.character||{};
-    const signature=JSON.stringify(characterData);
+    const wearables=remote.wearables||{};
+    const signature=JSON.stringify({characterData,wearables});
     if(remote.appearanceSignature===signature && remote.layersReady) return;
     remote.appearanceSignature=signature;
     remote.layersReady=false;
-    const definitions=buildLayerDefinitions(characterData,{});
+    const definitions=buildLayerDefinitions(characterData,wearables);
     const loadSet=defs=>Promise.all(defs.map(def=>loadLayer(def.path,def.mode,def.palette).then(result=>({
       ...result,definition:def,fallbackMotion:result.path!==def.path
     }))));
@@ -2484,10 +2485,13 @@
       entity.direction=Number.isFinite(remote.direction)?remote.direction:2;
       entity.displayName=remote.displayName||remote.display_name||entity.displayName||'Aventureiro';
       entity.character=remote.character||entity.character||{};
+      entity.wearables=remote.wearables||entity.wearables||{};
       entity.type='player';
       entity.radius=COLLISION_RADIUS;
       remotePlayers.set(id,entity);
-      if(!entity.layersReady || entity.appearanceSignature!==JSON.stringify(entity.character)) {
+      if(!entity.layersReady || entity.appearanceSignature!==JSON.stringify({
+        characterData:entity.character||{},wearables:entity.wearables||{}
+      })) {
         void loadRemoteCharacterLayers(entity).catch(error=>console.warn('KTK remote appearance:',error));
       }
     });
@@ -2500,7 +2504,24 @@
       x:camera.x*(canvas.clientWidth||0)+player.x,
       y:camera.y*(canvas.clientHeight||0)+player.y,
       direction:player.direction,
-      character:{...character}
+      character:{...character},
+      wearables:Object.fromEntries(wearableSlotOrder.map(slot=>{
+        const item=equippedWearables[slot];
+        if(!item) return [slot,null];
+        return [slot,{
+          displayName:item.displayName||slot,
+          wearCategory:item.wearCategory||'cosmetic',
+          durability:Number.isFinite(Number(item.durability))?Number(item.durability):1,
+          appearanceLayers:Array.isArray(item.appearanceLayers)
+            ? item.appearanceLayers.map(layer=>({
+                path:String(layer.path||''),
+                z:Number(layer.z)||0,
+                mode:layer.mode||null,
+                palette:layer.palette||null
+              })).filter(layer=>layer.path)
+            : []
+        }];
+      }))
     }),
     setLocalState:(x,y,direction)=>{
       if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
@@ -2799,6 +2820,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-4"></script>
+<script type="module" src="./js/online.js?v=20261117-5"></script>
 </body>
 </html>
