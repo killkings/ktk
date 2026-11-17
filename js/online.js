@@ -136,7 +136,7 @@ function acceptRemote(payload, source = "broadcast") {
 function acceptCombat(payload) {
   if (!payload?.user_id || payload.user_id === state.user?.id) return;
   const kind = String(payload.kind || "");
-  if (!["attack_start","projectile_start","skeleton_hit","player_damaged","skeleton_attack","pvp_hit"].includes(kind)) return;
+  if (!["attack_start","projectile_start","skeleton_hit","player_damaged","skeleton_attack","pvp_hit","crown_claimed","crown_dropped"].includes(kind)) return;
   const eventId = String(payload.event_id || "");
   if (!eventId || state.seenCombatEvents.has(eventId)) return;
   state.seenCombatEvents.add(eventId);
@@ -167,6 +167,11 @@ function acceptCombat(payload) {
     remote = state.remote.get(id);
   }
   if (!remote) return;
+  if (payload.wearables && typeof payload.wearables === "object") {
+    remote.wearables = payload.wearables;
+    remote.isKing = Boolean(payload.wearables.head?.isKingCrown);
+    remote.hasKingCrown = remote.isKing;
+  }
   const events = remote.combatEvents || [];
   if (events.some(event => event.event_id === eventId)) return;
   events.push({
@@ -193,7 +198,9 @@ function acceptCombat(payload) {
       Number.isFinite(Number(payload.target_health)) ? Number(payload.target_health) : null,
     combat_stats: payload.combat_stats || {},
     knockback_x: Number(payload.knockback_x) || 0,
-    knockback_y: Number(payload.knockback_y) || 0
+    knockback_y: Number(payload.knockback_y) || 0,
+    crown_x: Number.isFinite(Number(payload.crown_x)) ? Number(payload.crown_x) : null,
+    crown_y: Number.isFinite(Number(payload.crown_y)) ? Number(payload.crown_y) : null
   });
   remote.combatEvents = events.slice(-16);
   updateRemotes();
@@ -357,6 +364,7 @@ async function sendPosition(force = false) {
       .catch(error => console.warn("KTK position broadcast:", error));
   }
 
+  if (appearanceChanged) void trackPresence();
   if (now - state.lastTrack >= 10000) void trackPresence();
   if (now - state.lastCheckpoint >= 1000) {
     state.lastCheckpoint = now;
