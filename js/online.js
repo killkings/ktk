@@ -243,7 +243,15 @@ async function enter(options = {}) {
     return { ok: true, player };
   } catch (error) {
     console.error("KTK online:", error);
-    return { ok: false, error: error?.message || "Falha ao conectar ao servidor." };
+    const code = error?.code || error?.error_code || "";
+    const message = String(error?.message || "");
+    if (code === "anonymous_provider_disabled" || message.includes("Anonymous sign-ins are disabled")) {
+      return {
+        ok: false,
+        error: "O login de jogadores está desativado no servidor. No Supabase, abra Authentication → Sign In / Providers → Anonymous e ative Anonymous Sign-Ins."
+      };
+    }
+    return { ok: false, error: message || "Falha ao conectar ao servidor." };
   } finally {
     state.connecting = false;
   }
