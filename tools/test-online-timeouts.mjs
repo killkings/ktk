@@ -34,11 +34,11 @@ assert.doesNotMatch(session, /options\.onProgress|setStatus\("● " \+ message/)
 assert.match(realtimeSource, /A autorização do canal multiplayer/);
 assert.match(realtimeSource, /A consulta dos jogadores presentes/);
 assert.match(realtimeSource, /A consulta do estado compartilhado do mundo/);
-assert.match(realtimeSource, /Promise\\.allSettled/);
-assert.match(realtimeSource, /\\.subscribe\\(\\(status, err\\) =>/);
-assert.doesNotMatch(realtimeSource, /\\bsetStatus\\s*\\(/);
-assert.doesNotMatch(realtimeSource, /\\.track\\s*\\(/);
-assert.doesNotMatch(realtimeSource, /presence\\s*:/);
+assert.match(realtimeSource, /Promise\.allSettled/);
+assert.match(realtimeSource, /\.subscribe\(\(status, err\) =>/);
+assert.doesNotMatch(realtimeSource, /\bsetStatus\s*\(/);
+assert.doesNotMatch(realtimeSource, /\.track\s*\(/);
+assert.doesNotMatch(realtimeSource, /presence\s*:/);
 assert.doesNotMatch(session, /trackPresence|Lendo o estado inicial do personagem|getPlayerState\\(signal\\)/);
 assert.match(playerSyncSource, /request = request\.abortSignal\(signal\)/);
 assert.match(catalog, /request=request\.abortSignal\(signal\)/);
