@@ -12,7 +12,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 const state = {
   user: null, channel: null, joined: false, online: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0,
-  lastPosition: null, lastAppearanceSignature: "", remote: new Map(), profileCache: new Map(), connecting: false
+  lastPosition: null, lastAppearanceSignature: "", positionSequence: 0,
+  sessionId: window.crypto?.randomUUID?.() || `1794916022522-a7dw10fe6ba`,
+  remote: new Map(), profileCache: new Map(), connecting: false
 };
 
 function setStatus(message, connected = false) {
@@ -56,10 +58,13 @@ function acceptDatabaseChange(payload) {
     updateRemotes();
     return;
   }
+  // Eventos do banco são apenas uma fonte de entrada inicial. Depois que
+  // chega um broadcast ao vivo, uma atualização atrasada do checkpoint não
+  // pode sobrescrever a posição mais recente.
   acceptRemote({
     user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
     display_name: row.display_name, character: row.character
-  });
+  }, "database");
   if (!state.profileCache.has(String(row.user_id))) {
     state.profileCache.set(String(row.user_id), true);
     void supabase.from("ktk_profiles").select("display_name,character")
@@ -75,30 +80,47 @@ function acceptDatabaseChange(payload) {
   }
 }
 
-function acceptRemote(payload) {
+function acceptRemote(payload, source = "broadcast") {
   if (!payload || !payload.user_id || payload.user_id === state.user?.id) return;
   const x = Number(payload.x), y = Number(payload.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
   const id = String(payload.user_id);
   const previous = state.remote.get(id);
+
+  // Presence e banco servem para descobrir quem já está no mundo, mas seus
+  // retratos podem ter até vários segundos. Nunca deixam um jogador já
+  // sincronizado voltar para uma coordenada antiga.
+  if (previous && source !== "broadcast") return;
+
+  const sessionId = String(payload.session_id || "");
+  const rawSequence = Number(payload.sequence);
+  const hasSequence = Number.isSafeInteger(rawSequence) && rawSequence >= 0;
+  const sentAt = Number(payload.sent_at) || 0;
+
+  // Bloqueia pacotes de posição fora de ordem e pacotes atrasados de uma
+  // sessão anterior do mesmo jogador.
+  if (previous && source === "broadcast") {
+    if (sentAt > 0 && previous.lastPositionAt > 0 && sentAt <= previous.lastPositionAt) return;
+    if (sessionId && sessionId === previous.sessionId &&
+        hasSequence && rawSequence <= previous.lastSequence) return;
+  }
+
   const hasCharacter = payload.character && Object.keys(payload.character).length > 0;
   state.remote.set(id, {
     id,
     display_name: String(payload.display_name || payload.displayName || previous?.display_name || "Aventureiro").slice(0, 24),
     displayName: String(payload.display_name || payload.displayName || previous?.displayName || "Aventureiro").slice(0, 24),
-    // Cada pacote representa a posição mais recente do jogador remoto.
-    // A interpolação visual acontece no cliente que recebe o pacote.
-    x,
-    y,
-    targetX: x,
-    targetY: y,
+    x, y, targetX: x, targetY: y,
     direction: Math.max(0, Math.min(3, Number(payload.direction) || 2)),
     character: hasCharacter ? payload.character : (previous?.character || {}),
     wearables: payload.wearables && Object.keys(payload.wearables).length
       ? payload.wearables
       : (previous?.wearables || {}),
     type: "player",
-    lastUpdate: Date.now()
+    lastUpdate: Date.now(),
+    sessionId: sessionId || previous?.sessionId || "",
+    lastSequence: hasSequence ? rawSequence : (previous?.lastSequence ?? -1),
+    lastPositionAt: source === "broadcast" ? (sentAt || Date.now()) : (previous?.lastPositionAt || 0)
   });
   updateRemotes();
 }
@@ -110,7 +132,8 @@ function rebuildPresence() {
   Object.values(presence).flat().forEach(entry => {
     if (!entry?.user_id || entry.user_id === state.user?.id) return;
     active.add(String(entry.user_id));
-    acceptRemote(entry);
+    // Um sync de presença não deve substituir coordenadas já recebidas por broadcast.
+    acceptRemote(entry, "presence");
   });
   for (const id of state.remote.keys()) if (!active.has(id)) state.remote.delete(id);
   updateRemotes();
@@ -141,7 +164,7 @@ async function loadExistingPlayers() {
     acceptRemote({
       user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
       display_name: profile.display_name, character: profile.character
-    });
+    }, "database-snapshot");
   });
 }
 
@@ -217,7 +240,10 @@ async function sendPosition(force = false) {
       x: payload.x, y: payload.y,
       direction: payload.direction,
       character: payload.character,
-      wearables: payload.wearables
+      wearables: payload.wearables,
+      session_id: state.sessionId,
+      sequence: ++state.positionSequence,
+      sent_at: now
     };
     // Broadcast de baixa latência: não espera a gravação periódica no banco.
     void state.channel.send({ type: "broadcast", event: "position", payload: packet })
