@@ -15,7 +15,7 @@ const state = {
   lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(),
-  lastLocalKnockbackAt: "", intentInFlight: false, connecting: false
+  lastLocalKnockbackAt: "", intentInFlight: false, worldStateRequestId: 0, connecting: false
 };
 
 function setStatus(message, connected = false) {
@@ -61,9 +61,13 @@ function acceptWorldEntityChange(payload, deleted = false) {
 }
 
 async function loadWorldState() {
+  const requestId=++state.worldStateRequestId;
   const {data,error}=await supabase.rpc("ktk_get_world_state");
   if(error) throw error;
-  window.KTKWorldEntities?.applyWorldState?.(data);
+  // Se duas fotografias se cruzarem na rede, só aplica a última solicitada.
+  if(requestId===state.worldStateRequestId) {
+    window.KTKWorldEntities?.applyWorldState?.(data);
+  }
   return data;
 }
 
