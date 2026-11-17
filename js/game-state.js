@@ -254,7 +254,7 @@ var  camera = {x:0,y:0};
       // Reproduz a colisão autoritativa em passos curtos, usando os mesmos
       // obstáculos dinâmicos conhecidos pelo cliente (jogadores e esqueleto).
       const obstacles=[];
-      if(typeof remotePlayers!=="undefined" && remotePlayers instanceof Map) remotePlayers.forEach(remote=>{
+      if(typeof remotePlayers!=="undefined" && remotePlayers && typeof remotePlayers.forEach==="function") remotePlayers.forEach(remote=>{
         if(remote&&Number.isFinite(Number(remote.x))&&Number.isFinite(Number(remote.y))) {
           obstacles.push({x:Number(remote.x),y:Number(remote.y),radius:COLLISION_RADIUS*2});
         }
