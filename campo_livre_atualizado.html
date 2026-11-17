@@ -283,7 +283,6 @@
       <div class="world-label"><i class="world-dot"></i><div><strong>KILL THE KING</strong><br><span>mundo aberto · campo 01</span><br><span id="king-status">Coroa Real livre</span></div></div>
       <div class="hud-actions">
         <button id="edit-character">PERSONAGEM</button>
-        <button id="reset-world">RECOMEÇAR</button>
       </div>
     </div>
     <div class="coords" id="coords">X 0000 · Y 0000</div>
@@ -535,8 +534,48 @@
   let rightMouseHeld = false;
   let shieldStaminaExhausted = false;
   const player = {x:0,y:0,direction:2,knockback:null,knockbackHeight:0};
+  // player.x/y guardam somente a última posição confirmada pelo servidor.
+  // playerVisual é exclusivamente uma interpolação de desenho entre respostas.
+  const playerVisual = {x:0,y:0,targetX:0,targetY:0,initialized:false};
   // Posição fixa no mundo: não acompanha o deslocamento do jogador.
   const camera = {x:0,y:0};
+
+  function setAuthoritativePlayerPosition(x,y,direction,snap=false) {
+    const serverX=Number(x),serverY=Number(y);
+    if(!Number.isFinite(serverX)||!Number.isFinite(serverY)) return false;
+    camera.x=0; camera.y=0;
+    player.x=serverX; player.y=serverY;
+    if(Number.isFinite(Number(direction))) {
+      player.direction=Math.max(0,Math.min(3,Number(direction)));
+    }
+    if(snap||!playerVisual.initialized) {
+      playerVisual.x=serverX; playerVisual.y=serverY;
+      playerVisual.targetX=serverX; playerVisual.targetY=serverY;
+      playerVisual.initialized=true;
+    } else {
+      playerVisual.targetX=serverX;
+      playerVisual.targetY=serverY;
+    }
+    return true;
+  }
+
+  function updateLocalPlayerVisual(deltaSeconds) {
+    if(!playerVisual.initialized) {
+      setAuthoritativePlayerPosition(player.x,player.y,player.direction,true);
+      return;
+    }
+    const dt=Math.max(0,Math.min(.05,Number(deltaSeconds)||0));
+    const blend=1-Math.exp(-dt*24);
+    const maxStep=520*dt;
+    const dx=playerVisual.targetX-playerVisual.x;
+    const dy=playerVisual.targetY-playerVisual.y;
+    const stepX=Math.sign(dx)*Math.min(Math.abs(dx*blend),maxStep);
+    const stepY=Math.sign(dy)*Math.min(Math.abs(dy*blend),maxStep);
+    playerVisual.x+=stepX;
+    playerVisual.y+=stepY;
+    if(Math.abs(playerVisual.targetX-playerVisual.x)<.15) playerVisual.x=playerVisual.targetX;
+    if(Math.abs(playerVisual.targetY-playerVisual.y)<.15) playerVisual.y=playerVisual.targetY;
+  }
   const TILE = 72;
   const SPEED = 225;
   const COLLISION_RADIUS = 18;
@@ -1693,6 +1732,7 @@
 
     try {
       update(dt,w,h);
+      updateLocalPlayerVisual(dt);
       updateRemotePlayerMotion(dt);
       if(window.KTKWorldMap) window.KTKWorldMap.setViewport(w,h);
 
@@ -1715,7 +1755,7 @@
         ...(arrowProjectile.active?[{entity:arrowProjectile,depth:arrowProjectile.y}]:[]),
         ...(stoneProjectile.active?[{entity:stoneProjectile,depth:stoneProjectile.y}]:[]),
         ...(magicProjectile.active?[{entity:magicProjectile,depth:magicProjectile.y}]:[]),
-        {entity:{type:'local-player'},depth:camera.y*h+player.y}
+        {entity:{type:'local-player'},depth:camera.y*h+playerVisual.y}
       ].sort((a,b)=>a.depth-b.depth);
       const playerWorldX=camera.x*w+player.x;
       const playerWorldY=camera.y*h+player.y;
@@ -1731,8 +1771,8 @@
       });
       renderables.forEach(({entity})=>{
         const localPlayer=entity.type==='local-player';
-        const screenX=localPlayer?player.x+w/2:entity.x-camera.x*w+w/2;
-        const screenY=localPlayer?player.y+h/2:entity.y-camera.y*h+h/2;
+        const screenX=localPlayer?playerVisual.x+w/2:entity.x-camera.x*w+w/2;
+        const screenY=localPlayer?playerVisual.y+h/2:entity.y-camera.y*h+h/2;
         if(entity.type==='local-player'||entity.type==='player') drawGroundShadow(ctx,screenX,screenY+33,17,7,.34);
         else if(entity.type==='enemy') drawGroundShadow(ctx,screenX,screenY+33,18,7,.36);
         else if(entity.type==='item') drawGroundShadow(ctx,screenX,screenY+15,14,5,.28);
@@ -1873,20 +1913,12 @@
     }
     playerRunning=movement.running;
     if(playerMoving) {
-      const magnitude=Math.hypot(dx,dy);
-      dx/=magnitude; dy/=magnitude;
-      movePlayerWithCollisions(dx*SPEED*(movement.speed/2)*dt,dy*SPEED*(movement.speed/2)*dt);
-      // O LPC possui quatro linhas direcionais; diagonais usam o eixo dominante.
-      if(Math.abs(dx)>Math.abs(dy)) player.direction=dx>0?3:1;
-      else player.direction=dy>0?2:0;
+      // O cliente lê apenas a intenção. Não altera coordenadas, direção oficial
+      // nem colisões: o próximo estado de posição chega do RPC do servidor.
       walkTime+=dt;
     } else {
       walkTime=0;
     }
-    const halfW=roomWidth/2,halfH=roomHeight/2;
-    const edgePadding=FRAME_SIZE*WORLD_SCALE/2;
-    player.x=Math.max(-halfW+edgePadding,Math.min(halfW-edgePadding,player.x));
-    player.y=Math.max(-halfH+edgePadding,Math.min(halfH-edgePadding,player.y));
     updateKnockbacks(dt);
     updateEnemyCombat(dt);
   }
@@ -2577,12 +2609,12 @@
       const previous=knockback.progress;
       knockback.progress=Math.min(1,previous+deltaSeconds/KNOCKBACK_SECONDS);
       const distance=KNOCKBACK_DISTANCE*(knockback.progress-previous);
-      if(target===player) {
-        if(!knockback.authoritative) movePlayerWithCollisions(knockback.x*distance,knockback.y*distance);
-      } else if(!knockback.authoritative) {
+      if(target!==player&&!knockback.authoritative) {
         target.x+=knockback.x*distance;
         target.y+=knockback.y*distance;
       }
+      // Knockback local só anima a elevação/sombra. O deslocamento real do
+      // jogador vem exclusivamente da coordenada confirmada pelo servidor.
       target.knockbackHeight=Math.sin(knockback.progress*Math.PI)*KNOCKBACK_HEIGHT;
       if(knockback.progress>=1) {
         target.knockback=null;
@@ -3049,31 +3081,6 @@
     renderInventory();
     toast(`${selectedItem.displayName||'Item'} solto.`);
   }
-  function getSolidEntities() {
-    return getWorldEntities().filter(entity=>entity.solid!==false && (entity.type==='enemy' || entity.type==='player'));
-  }
-
-  // Move por eixo, permitindo deslizar ao longo de inimigos e outros jogadores.
-  function movePlayerWithCollisions(dx,dy) {
-    const solids=getSolidEntities();
-    const offsetX=camera.x*canvas.clientWidth;
-    const offsetY=camera.y*canvas.clientHeight;
-    const currentWorldX=offsetX+player.x;
-    const currentWorldY=offsetY+player.y;
-    const blocked=(x,y,fromX,fromY)=>solids.some(entity=>{
-      const minDistance=COLLISION_RADIUS+(entity.radius||COLLISION_RADIUS);
-      const nextDistance=Math.hypot(offsetX+x-entity.x,offsetY+y-entity.y);
-      const currentDistance=Math.hypot(offsetX+fromX-entity.x,offsetY+fromY-entity.y);
-      // A colisão impede aproximar-se, mas permite sair de uma sobreposição
-      // causada pelo nascimento junto de outro jogador ou inimigo.
-      return nextDistance<minDistance && nextDistance+0.01<currentDistance;
-    });
-    const nextX=player.x+dx;
-    if(!blocked(nextX,player.y,player.x,player.y)) player.x=nextX;
-    const nextY=player.y+dy;
-    if(!blocked(player.x,nextY,player.x,player.y)) player.y=nextY;
-  }
-
   // Entrada para sincronização futura de posições vindas do servidor online.
   function normalizeRemoteWearables(source,previous={}) {
     const result={};
@@ -3318,9 +3325,7 @@
     applyServerKnockback:(event,x,y,direction)=>{
       if(playerDead) return false;
       if(Number.isFinite(Number(x))&&Number.isFinite(Number(y))) {
-        camera.x=0; camera.y=0;
-        player.x=Number(x); player.y=Number(y);
-        player.direction=Number.isFinite(Number(direction))?Math.max(0,Math.min(3,Number(direction))):player.direction;
+        setAuthoritativePlayerPosition(x,y,direction,false);
       }
       if(event) {
         player.knockback={
@@ -3332,29 +3337,8 @@
     applyRemoteDamage:()=>false,
     applyWorldEntity,applyWorldState,
     serverDeath:()=>handlePlayerDeath(true),
-    setLocalState:(x,y,direction)=>{
-      if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
-      camera.x=0; camera.y=0;
-      player.x=Number(x); player.y=Number(y);
-      player.direction=Number.isFinite(Number(direction))?Math.max(0,Math.min(3,Number(direction))):2;
-      return true;
-    },
-    reconcileLocalPosition:(x,y,direction)=>{
-      if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
-      const currentX=camera.x*(canvas.clientWidth||0)+player.x;
-      const currentY=camera.y*(canvas.clientHeight||0)+player.y;
-      const errorX=Number(x)-currentX;
-      const errorY=Number(y)-currentY;
-      if(Math.hypot(errorX,errorY)>96) {
-        camera.x=0; camera.y=0;
-        player.x=Number(x); player.y=Number(y);
-      } else {
-        player.x+=errorX*0.35;
-        player.y+=errorY*0.35;
-      }
-      if(Number.isFinite(Number(direction))) player.direction=Math.max(0,Math.min(3,Number(direction)));
-      return true;
-    }
+    setLocalState:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,true),
+    reconcileLocalPosition:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,false)
   };
   function handlePlayerDeath(serverConfirmed=false) {
     if(playerDead) return;
@@ -3463,12 +3447,6 @@
         toast('Aparência atualizada. Boa exploração!');
       }
 
-      if(onlinePlayer) {
-        player.x=Number.isFinite(serverSpawnX)?serverSpawnX:0;
-        player.y=Number.isFinite(serverSpawnY)?serverSpawnY:96;
-        player.direction=Number.isFinite(Number(onlinePlayer.direction))?Math.max(0,Math.min(3,Number(onlinePlayer.direction))):2;
-        camera.x=0; camera.y=0;
-      }
       if(button) button.textContent='Entrar no mundo →';
       showScreen('game');
 
@@ -3558,10 +3536,6 @@
     document.getElementById('enter-world').textContent='Voltar ao mundo →';
     showScreen('creator');
     updateCreator();
-  });
-  document.getElementById('reset-world').addEventListener('click',()=>{
-    player.x=0; player.y=96; camera.x=0; camera.y=0;
-    toast('Você voltou ao ponto inicial.');
   });
 
   document.querySelectorAll('[data-gender]').forEach(btn=>btn.addEventListener('click',()=>{
@@ -3678,6 +3652,7 @@
   });
   window.addEventListener('blur',()=>{
     keys.clear();
+    playerInputX=0; playerInputY=0; playerMoving=false; playerRunning=false;
     if(rightMouseHeld) {
       rightMouseHeld=false;
       shieldStaminaExhausted=false;
@@ -3685,6 +3660,14 @@
     }
   });
 
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='hidden') {
+      keys.clear();
+      playerInputX=0; playerInputY=0; playerMoving=false; playerRunning=false;
+      rightMouseHeld=false;
+      shieldStaminaExhausted=false;
+    }
+  });
   window.addEventListener('resize',resize);
   updateCreator();
   renderInventory();
@@ -3692,6 +3675,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-server-movement-v2"></script>
+<script type="module" src="./js/online.js?v=20261117-server-movement-v3"></script>
 </body>
 </html>
