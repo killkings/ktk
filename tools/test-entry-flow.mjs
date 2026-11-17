@@ -71,6 +71,7 @@ const context = vm.createContext({
   clearTimeout() {},
   character: {},
   newCharacterRequired: false,
+  gameStarted: false,
   toastTimer: 0
 });
 
