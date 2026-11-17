@@ -3,7 +3,8 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch] = await Promise.all([
+const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch,
+  playerSync, realtime, sweptMigration, index] = await Promise.all([
   read("../input/input-controller.js"),
   read("../multiplayer/player-replica.js"),
   read("../js/game-state.js"),
@@ -12,7 +13,11 @@ const [input, replica, gameState, renderer, movement, online, html, migration, r
   read("../js/online.js"),
   read("../campo_livre_atualizado.html"),
   read("../supabase/migrations/20261117204627_authoritative_movement_latency_and_intent_timeline.sql"),
-  read("../supabase/migrations/20261117204956_ignore_stale_movement_intent_after_lifecycle_reset.sql")
+  read("../supabase/migrations/20261117204956_ignore_stale_movement_intent_after_lifecycle_reset.sql"),
+  read("../online/player-sync.js"),
+  read("../online/realtime.js"),
+  read("../supabase/migrations/20261117211930_swept_path_player_collisions.sql"),
+  read("../index.html")
 ]);
 
 // Keyboard state includes the age of the exact active intent, not the last
@@ -70,7 +75,7 @@ assert.ok(blockStart >= 0 && blockEnd > blockStart);
 const context = {
   playerMoving: false, playerRunning: false, playerInputX: 0, playerInputY: 0,
   playerStats: { stats: { speed: { value: 2 } } },
-  window: { KTKOnline: { connected: true } }, SPEED: 225, COLLISION_RADIUS: 18
+  window: { KTKOnline: { connected: true }, KTKWorldEntities: { entities: () => [] } }, SPEED: 225, COLLISION_RADIUS: 18
 };
 vm.createContext(context);
 vm.runInContext(gameState.slice(blockStart, blockEnd), context);
@@ -86,34 +91,112 @@ assert.equal(context.playerVisual.direction, 3);
 
 const requestInput = { inputX:1,inputY:0,running:false,guarding:false };
 
-// Regression: completing a network correction while walking must never snap
-// the sprite back to the target captured before those extra movement frames.
-const rollbackContext = {
-  playerMoving: false, playerRunning: false, playerInputX: 0, playerInputY: 0,
-  playerStats: { stats: { speed: { value: 2 } } },
-  window: { KTKOnline: { connected: true } }, SPEED: 225, COLLISION_RADIUS: 18
-};
-vm.createContext(rollbackContext);
-vm.runInContext(gameState.slice(blockStart, blockEnd), rollbackContext);
-rollbackContext.setAuthoritativePlayerPosition(100, 120, 2, true);
-rollbackContext.playerMoving = true;
-rollbackContext.playerInputX = 1;
-rollbackContext.setAuthoritativePlayerPosition(
-  103,120,3,false,750,requestInput,
-  { inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0 }
-);
-let previousVisualX = rollbackContext.playerVisual.x;
-let correctionFrames = 0;
-while(rollbackContext.playerVisual.correctionRemaining > 0 && correctionFrames < 20) {
-  rollbackContext.updateLocalPlayerVisual(0.05);
-  assert.ok(rollbackContext.playerVisual.x >= previousVisualX - 0.01,
-    "Finishing a correction must not move a continuously walking player backwards.");
-  previousVisualX = rollbackContext.playerVisual.x;
-  correctionFrames++;
+// Negative reconciliation must never reverse an axis still controlled by the player.
+function makeVisualContext(obstacles=[]) {
+  const ctx={
+    playerMoving:false,playerRunning:false,playerInputX:0,playerInputY:0,
+    playerStats:{stats:{speed:{value:2}}},
+    window:{KTKOnline:{connected:true},KTKWorldEntities:{entities:()=>obstacles}},
+    SPEED:225,COLLISION_RADIUS:18
+  };
+  vm.createContext(ctx);
+  vm.runInContext(gameState.slice(blockStart,blockEnd),ctx);
+  return ctx;
 }
-assert.ok(correctionFrames > 0);
-assert.ok(Math.abs(rollbackContext.playerVisual.x - rollbackContext.playerVisual.targetX) < 0.01,
-  "The visual position must converge to the moving target without a rollback.");
+const directions=[
+  {x:1,y:0},{x:-1,y:0},{x:0,y:1},{x:0,y:-1},{x:1,y:1},{x:-1,y:-1}
+];
+for(const direction of directions) {
+  const movementContext=makeVisualContext();
+  movementContext.setAuthoritativePlayerPosition(0,0,2,true);
+  const length=Math.hypot(direction.x,direction.y);
+  movementContext.playerMoving=true;
+  movementContext.playerInputX=direction.x;
+  movementContext.playerInputY=direction.y;
+  movementContext.playerVisual.x=direction.x/length*100;
+  movementContext.playerVisual.y=direction.y/length*100;
+  movementContext.setAuthoritativePlayerPosition(
+    0,0,2,false,0,
+    {inputX:direction.x,inputY:direction.y,running:false,guarding:false},
+    {inputX:direction.x,inputY:direction.y,running:false,guarding:false,inputAgeMs:0}
+  );
+  let previousProjection=movementContext.playerVisual.x*direction.x
+    +movementContext.playerVisual.y*direction.y;
+  for(let frame=0;frame<20;frame++) {
+    movementContext.updateLocalPlayerVisual(0.05);
+    const projection=movementContext.playerVisual.x*direction.x
+      +movementContext.playerVisual.y*direction.y;
+    assert.ok(projection>=previousProjection-0.01,
+      "Negative correction reversed active direction "+JSON.stringify(direction));
+    previousProjection=projection;
+  }
+  assert.ok(previousProjection>100*length,
+    "Movement must continue while opposing correction is pending.");
+}
+
+// Swept collision: even a long RTT extrapolation cannot cross another player's circle.
+const collisionContext=makeVisualContext([
+  {type:"player",x:40,y:0,targetX:40,targetY:0,radius:18}
+]);
+collisionContext.setAuthoritativePlayerPosition(0,0,2,true);
+collisionContext.playerMoving=true;
+collisionContext.playerInputX=1;
+collisionContext.setAuthoritativePlayerPosition(
+  0,0,3,false,750,
+  {inputX:1,inputY:0,running:false,guarding:false},
+  {inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0}
+);
+assert.equal(collisionContext.playerVisual.targetX,0,
+  "RTT extrapolation must stop before tunneling through another player.");
+collisionContext.updateLocalPlayerVisual(0.05);
+assert.equal(collisionContext.playerVisual.x,0,
+  "Frame prediction must use the same swept collision rule.");
+
+// Queue own Realtime updates while the step RPC is in flight. Preserve the newest
+// database timestamp and reject duplicates delivered after the RPC response.
+const movementExecutable=movement
+  .replace(/^import[\s\S]*?from\s+["'][^"']+["'];\s*/gm,"")
+  .replace(/^export\s+/gm,"");
+const appliedOwnPositions=[];
+const movementState={
+  stepInFlight:true,leaving:false,lastPosition:null,pendingOwnPosition:null,
+  lastMovementLatencyMs:150
+};
+const movementHarness={
+  state:movementState,
+  supabase:{rpc(){throw new Error("Unexpected RPC in test.");}},
+  window:{KTKWorldEntities:{reconcileLocalPosition(...args){appliedOwnPositions.push(args);}}},
+  console:{warn(){}},Date,Math,setTimeout,clearTimeout,AbortController
+};
+vm.createContext(movementHarness);
+vm.runInContext(movementExecutable,movementHarness,{filename:"online/movement.js"});
+const ownOlder={x:10,y:10,direction:3,position_updated_at:"2026-11-17T21:00:00.000001Z"};
+const ownNewer={x:20,y:20,direction:3,position_updated_at:"2026-11-17T21:00:00.000002Z"};
+assert.equal(movementHarness.compareServerTimestamps(
+  ownNewer.position_updated_at,ownOlder.position_updated_at
+),1,"Timestamp ordering must retain PostgreSQL microseconds.");
+assert.equal(movementHarness.acceptOwnDatabasePosition(ownOlder),false);
+assert.equal(movementHarness.acceptOwnDatabasePosition(ownNewer),false);
+assert.equal(appliedOwnPositions.length,0,"Realtime cannot compete with an in-flight RPC.");
+movementState.stepInFlight=false;
+assert.equal(movementHarness.flushPendingOwnPosition(),true);
+assert.equal(appliedOwnPositions.length,1);
+assert.equal(appliedOwnPositions[0][0],20,"Newest queued position must be applied.");
+assert.equal(movementHarness.acceptOwnDatabasePosition(ownOlder),false,
+  "Late stale events cannot roll back the accepted position.");
+
+assert.match(sweptMigration,/movement_segment_hits_circle/);
+assert.match(sweptMigration,/v_closest_distance<p_radius/);
+assert.match(sweptMigration,/ktk_private\.movement_segment_hits_circle/);
+assert.match(sweptMigration,/from public,anon,authenticated/);
+assert.match(playerSync,/acceptOwnDatabasePosition\(row\)/);
+assert.match(playerSync,/compareServerTimestamps\(positionTimestamp/);
+assert.match(playerSync,/movement-pipeline-004/);
+assert.match(realtime,/player-sync\.js\?v=20261117-movement-pipeline-004/);
+assert.match(movement,/export function compareServerTimestamps/);
+assert.match(movement,/flushPendingOwnPosition\(\)/);
+assert.match(index,/campo_livre_atualizado\.html\?v=20261117-movement-pipeline-004/);
+
 context.setAuthoritativePlayerPosition(
   103,120,3,false,150,requestInput,
   { inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0 }
@@ -144,10 +227,16 @@ context.setAuthoritativePlayerPosition(
   { inputX:0,inputY:0,running:false,guarding:false,inputAgeMs:0 }
 );
 assert.ok(context.playerVisual.correctionRemaining > 0);
-const beforeStopCorrection = context.playerVisual.x;
+const beforeStopCorrection = {x:context.playerVisual.x,y:context.playerVisual.y};
 context.updateLocalPlayerVisual(0.05);
-assert.notEqual(context.playerVisual.x,beforeStopCorrection,
+const stopCorrectionDistance=Math.hypot(
+  context.playerVisual.x-beforeStopCorrection.x,
+  context.playerVisual.y-beforeStopCorrection.y
+);
+assert.ok(stopCorrectionDistance>0,
   "Reconciliation must continue after releasing the key.");
+assert.ok(stopCorrectionDistance<=225*0.5*0.05+0.01,
+  "A delayed correction after key release must remain speed-limited.");
 
 // SQL contract: larger intervals are processed, old/new controls are segmented,
 // equipment penalties match the client, and exit/death reset is respected.
@@ -175,11 +264,16 @@ assert.match(online,/sendPosition/);
 for(const [path,version] of [
   ["render/world-renderer.js","20261117-movement-authority-002"],
   ["multiplayer/player-replica.js","20261117-movement-authority-002"],
-  ["js/game-state.js","20261117-movement-visual-003"],
+  ["js/game-state.js","20261117-movement-pipeline-004"],
   ["input/input-controller.js","20261117-movement-authority-002"],
-  ["js/online.js","20261117-movement-authority-002"]
+  ["js/online.js","20261117-movement-pipeline-004"]
 ]) {
   assert.ok(html.includes("./"+path+"?v="+version),
     "Cache bust ausente: "+path);
 }
-console.log("Timestamped server movement, RTT extrapolation, gear speed and continuous correction passed.");
+assert.match(gameState,/moveLocalPlayerSegment/);
+assert.match(gameState,/movementSegmentHitsCircle/);
+assert.match(gameState,/if\(\(playerInputX>0&&correctionX<0\)/);
+assert.match(index,/movement-pipeline-004/);
+assert.match(index,/campo_livre_atualizado\.html\?v=20261117-movement-pipeline-004/);
+console.log("Movement prediction, monotonic reconciliation, own-position ordering, swept collision and cache redirect passed.");

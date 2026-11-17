@@ -31,7 +31,7 @@ function serverTimestampValue(value) {
   return milliseconds + subMillisecond;
 }
 
-function compareServerTimestamps(a, b) {
+export function compareServerTimestamps(a, b) {
   const left = serverTimestampValue(a);
   const right = serverTimestampValue(b);
   if (Number.isFinite(left) && Number.isFinite(right)) {
@@ -70,6 +70,27 @@ export function applyOwnServerPosition(position, latencyMs = 0, requestInput = n
   };
   window.KTKWorldEntities?.reconcileLocalPosition?.(x, y, direction, latencyMs, requestInput);
   return true;
+}
+
+export function acceptOwnDatabasePosition(position) {
+  const incomingTimestamp=String(position?.position_updated_at||position?.positionUpdatedAt||"");
+  if(!incomingTimestamp||!Number.isFinite(serverTimestampValue(incomingTimestamp))) return false;
+  if(state.stepInFlight) {
+    const pending=state.pendingOwnPosition;
+    const pendingTimestamp=String(pending?.position_updated_at||pending?.positionUpdatedAt||"");
+    if(!pending||compareServerTimestamps(incomingTimestamp,pendingTimestamp)>0) {
+      state.pendingOwnPosition={...position};
+    }
+    return false;
+  }
+  return applyOwnServerPosition(position);
+}
+
+export function flushPendingOwnPosition() {
+  const pending=state.pendingOwnPosition;
+  state.pendingOwnPosition=null;
+  if(!pending||state.leaving) return false;
+  return applyOwnServerPosition(pending);
 }
 
 export async function sendPosition(force = false) {
@@ -159,6 +180,9 @@ export async function sendPosition(force = false) {
     if (state.activeStepId === stepId) {
       state.activeStepId = 0;
       state.stepInFlight = false;
+      // Aplica eventos recebidos durante a RPC somente após sua resposta;
+      // o comparador rejeita qualquer coordenada que já tenha ficado antiga.
+      flushPendingOwnPosition();
 
       // A key change made while the request was pending is sent immediately
       // instead of waiting for the next 100 ms heartbeat.

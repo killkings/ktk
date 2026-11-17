@@ -1,7 +1,7 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
 import { state } from "./state.js?v=20261117-online-separation-001";
 import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-online-separation-001";
-import { applyOwnServerPosition } from "./movement.js?v=20261117-online-separation-001";
+import { acceptOwnDatabasePosition, compareServerTimestamps } from "./movement.js?v=20261117-movement-pipeline-004";
 
 function mergeRemoteAppearance(current, incoming, options = {}) {
   const contract = window.KTKRemoteAppearance;
@@ -113,7 +113,7 @@ export function acceptDatabaseChange(payload) {
   if (!row?.user_id) return;
   if (row.user_id === state.user?.id) {
     if (row.state) window.KTKWorldEntities?.applyServerState?.(row.state);
-    if (row.is_alive !== false) applyOwnServerPosition(row);
+    if (row.is_alive !== false) acceptOwnDatabasePosition(row);
     const knockbackAt=String(row.state?.last_knockback_at||"");
     if (row.is_alive !== false && knockbackAt && knockbackAt!==state.lastLocalKnockbackAt) {
       state.lastLocalKnockbackAt=knockbackAt;
@@ -314,4 +314,5 @@ export function resetPlayerSyncState() {
   state.profileRetryCounts.clear();
   state.seenCombatEvents.clear();
   state.lastLocalKnockbackAt = "";
+  state.pendingOwnPosition = null;
 }
