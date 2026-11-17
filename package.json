@@ -1,0 +1,11 @@
+{
+  "name": "kill-the-king",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test v2/tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
