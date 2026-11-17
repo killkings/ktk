@@ -168,6 +168,14 @@ using (
   and extension = 'presence'
 );
 
+drop policy if exists "KTK V2 clients can publish own presence" on realtime.messages;
+create policy "KTK V2 clients can publish own presence"
+on realtime.messages for insert to authenticated
+with check (
+  (select realtime.topic()) = 'v2:world:main'
+  and extension = 'presence'
+);
+
 create or replace function public.ktk_v2_enter_world(
   p_display_name text,
   p_appearance jsonb default '{}'::jsonb
