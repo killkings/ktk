@@ -463,6 +463,23 @@ async function enter(options = {}) {
   }
 }
 
+async function getPlayerState() {
+  const { data, error } = await supabase.rpc("ktk_get_player_state");
+  if (error) throw error;
+  return data;
+}
+
+async function gameAction(action, payload = {}) {
+  const { data, error } = await supabase.rpc("ktk_game_action", {
+    p_action: String(action),
+    p_payload: payload || {}
+  });
+  if (error) throw error;
+  if (data?.state) window.KTKWorldEntities?.applyServerState?.(data.state);
+  await loadWorldState();
+  return data;
+}
+
 async function markDead() {
   if (!state.user) return;
   const { error } = await supabase.rpc("ktk_mark_dead");
@@ -504,7 +521,7 @@ async function dropKingCrown(x,y) {
 }
 
 window.KTKOnline = {
-  enter, markDead, broadcastCombat, claimKingCrown, dropKingCrown,
+  enter, markDead, broadcastCombat, claimKingCrown, dropKingCrown, getPlayerState, gameAction,
   get userId() { return state.user?.id || null; },
   get connected() { return state.online; }
 };
