@@ -367,7 +367,7 @@ async function subscribeWorld() {
 }
 
 async function trackPresence() {
-  if (!state.channel || !state.online) return;
+  if (state.leaving || !state.channel || !state.online || !state.joined) return;
   const payload = readLocal();
   if (!payload) return;
   const { error } = await state.channel.track(payload);
@@ -376,7 +376,7 @@ async function trackPresence() {
 }
 
 async function sendPosition(force = false) {
-  if (!state.online || !state.channel || !state.joined) return;
+  if (state.leaving || !state.online || !state.channel || !state.joined) return;
   const payload = readLocal();
   if (!payload) return;
   const now = Date.now();
@@ -435,6 +435,9 @@ async function sendPosition(force = false) {
     }
   }
 
+  // Uma solicitação antiga não pode iniciar um checkpoint depois que a saída começou.
+  if (state.leaving || !state.online || !state.joined) return;
+
   if ((moved || force) && now - state.lastCheckpoint >= 90 && !state.positionInFlight) {
     state.lastCheckpoint = now;
     state.positionInFlight = true;
@@ -446,6 +449,7 @@ async function sendPosition(force = false) {
         console.warn("KTK authoritative movement:", checkpointError.message);
         return;
       }
+      if (state.leaving || !state.online || !state.joined) return;
       if (checkpoint && Number.isFinite(Number(checkpoint.x)) && Number.isFinite(Number(checkpoint.y))) {
         const serverX=Number(checkpoint.x), serverY=Number(checkpoint.y);
         const dx=serverX-payload.x, dy=serverY-payload.y;
@@ -604,13 +608,59 @@ async function markDead() {
   setStatus("○ Personagem morto · fora do mundo", false);
 }
 
+// Saída voluntária encerra a vida no banco antes de desligar a sessão multiplayer.
+// A identidade Auth só é trocada quando o jogador escolhe criar o próximo personagem.
+async function leaveWorld() {
+  if (state.leaving) return { ok: false, error: "A saída do mundo já está sendo processada." };
+  if (!state.user) return { ok: false, error: "Não há uma sessão de jogador ativa para encerrar." };
+
+  state.leaving = true;
+  try {
+    const { data, error } = await supabase.rpc("ktk_leave_world");
+    if (error) throw error;
+    if (data && data.ok === false) throw new Error("O servidor não confirmou a morte do personagem.");
+
+    if (state.channel) {
+      try {
+        await supabase.removeChannel(state.channel);
+      } catch (cleanupError) {
+        // A morte já foi confirmada no banco; uma falha de limpeza do canal não a desfaz.
+        console.warn("KTK channel cleanup after exit:", cleanupError);
+      }
+    }
+
+    state.channel = null;
+    state.online = false;
+    state.joined = false;
+    state.user = null;
+    state.remote.clear();
+    state.lastPosition = null;
+    state.lastIntentSignature = "";
+    state.lastAppearanceSignature = "";
+    state.lastDbHeartbeat = 0;
+    state.lastTrack = 0;
+    updateRemotes();
+    setStatus("○ Personagem morto ao sair · fora do mundo", false);
+    return { ok: true, data };
+  } catch (error) {
+    state.leaving = false;
+    console.error("KTK voluntary exit:", error);
+    return {
+      ok: false,
+      error: error?.message || "Não foi possível encerrar o personagem no servidor."
+    };
+  }
+}
+
 function startHeartbeat() {
   setInterval(() => {
     if (!state.online || !state.joined) return;
     void sendPosition(false).catch(error=>console.warn("KTK position heartbeat:",error));
   }, 100);
   window.addEventListener("pagehide", () => {
-    if (!state.online || !state.joined || state.leaving || !state.accessToken) return;
+    // Mesmo se uma saída pelo Esc já começou, pagehide envia uma segunda
+    // solicitação idempotente keepalive como proteção contra fechamento da página.
+    if (!state.online || !state.joined || !state.accessToken) return;
     state.leaving = true;
     const token = state.accessToken;
     const endpoint = SUPABASE_URL + "/rest/v1/rpc/ktk_leave_world";
@@ -653,7 +703,7 @@ async function dropKingCrown(x,y) {
 }
 
 window.KTKOnline = {
-  enter, markDead, broadcastCombat, claimKingCrown, dropKingCrown, getPlayerState, gameAction,
+  enter, markDead, leaveWorld, broadcastCombat, claimKingCrown, dropKingCrown, getPlayerState, gameAction,
   get userId() { return state.user?.id || null; },
   get connected() { return state.online; }
 };
