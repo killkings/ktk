@@ -267,6 +267,8 @@ test("the shared V2 world is populated with persistent resources and obstacles",
 test("V2 suspension pauses simulation without killing the character", () => {
   for (const required of [
     "create or replace function public.ktk_v2_set_suspended",
+    "create or replace function public.ktk_v2_launch_projectile",
+    "create or replace function public.ktk_v2_choose_clan",
     "p_sequence bigint",
     "visibility_sequence",
     "PLAYER_SUSPENDED",
