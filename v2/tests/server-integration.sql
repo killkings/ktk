@@ -758,7 +758,7 @@ $$;
 -- player movement on the server instead of being cosmetic client objects.
 do $$
 declare
-  v_uid uuid := '10000000-0000-4000-8000-000000000015';
+  v_uid uuid := '10000000-0000-4000-8000-000000000017';
   v_player public.ktk_v2_players;
   v_before double precision;
   v_step jsonb;
@@ -802,8 +802,8 @@ $$;
 -- eventually die and leave their server-owned inventory as public loot.
 do $$
 declare
-  v_paused_uid uuid := '10000000-0000-4000-8000-000000000015';
-  v_disconnected_uid uuid := '10000000-0000-4000-8000-000000000016';
+  v_paused_uid uuid := '10000000-0000-4000-8000-000000000017';
+  v_disconnected_uid uuid := '10000000-0000-4000-8000-000000000018';
   v_paused public.ktk_v2_players;
   v_disconnected public.ktk_v2_players;
   v_skeleton public.ktk_v2_entities;
