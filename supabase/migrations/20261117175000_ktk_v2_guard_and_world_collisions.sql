@@ -498,14 +498,15 @@ begin
     end if;
   end loop;
 
-  -- The skeleton is a server-owned world entity and only advances while a
-  -- connected character is present to give the world an active player target.
-  select * into v_enemy
-  from public.ktk_v2_entities
-  where world_id='main' and entity_id='skeleton-1' and entity_type='enemy'
-  for update;
-
-  if found and not coalesce((v_enemy.state->>'defeated')::boolean,false) then
+  -- Every living enemy is simulated by the server; their target selection,
+  -- pursuit, attack interval and damage are never computed by clients.
+  for v_enemy in
+    select * from public.ktk_v2_entities
+    where world_id='main' and entity_type='enemy'
+      and not coalesce((state->>'defeated')::boolean,false)
+    order by entity_id
+    for update skip locked
+  loop
     v_enemy_x:=v_enemy.x;
     v_enemy_y:=v_enemy.y;
     v_enemy_state:=coalesce(v_enemy.state,'{}'::jsonb);
@@ -552,7 +553,7 @@ begin
     set x=v_enemy_x,y=v_enemy_y,state=v_enemy_state,
         revision=revision+1,updated_at=v_now
     where world_id='main' and entity_id='skeleton-1';
-  end if;
+  end loop;
 end;
 $function$;
 
