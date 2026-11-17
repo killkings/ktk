@@ -2628,6 +2628,8 @@
     if(index<0||index>=inventory.length) return;
     selectedInventorySlot=index;
     renderInventory();
+    void window.KTKOnline?.gameAction?.('select_slot',{slot:index})
+      .catch(error=>toast(error?.message||'O servidor não confirmou o espaço selecionado.'));
   }
 
   function findEmptyInventorySlot() {
