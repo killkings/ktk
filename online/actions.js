@@ -1,7 +1,7 @@
 /* Ações validadas pelo servidor: combate, inventário, interação e coroa. */
-import { state } from "./state.js?v=20261117-online-separation-001";
-import { supabase } from "./supabase-client.js?v=20261117-online-separation-001";
-import { loadWorldState } from "./realtime.js?v=20261117-realtime-entry-fix-001";
+import { state } from "./state.js?v=20261117-movement-reconciliation-005";
+import { supabase } from "./supabase-client.js?v=20261117-movement-reconciliation-005";
+import { loadWorldState } from "./realtime.js?v=20261117-movement-reconciliation-005";
 
 export async function gameAction(action, payload = {}) {
   const sessionId=state.sessionId;

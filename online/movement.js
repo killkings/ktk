@@ -1,6 +1,6 @@
 /* Movimento: o cliente envia intenções e só aplica coordenadas oficiais do servidor. */
-import { state } from "./state.js?v=20261117-online-separation-001";
-import { supabase } from "./supabase-client.js?v=20261117-online-separation-001";
+import { state } from "./state.js?v=20261117-movement-reconciliation-005";
+import { supabase } from "./supabase-client.js?v=20261117-movement-reconciliation-005";
 
 state.lastMovementLatencyMs = Math.max(
   0, Math.min(750, Number(state.lastMovementLatencyMs) || 150)

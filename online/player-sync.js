@@ -1,6 +1,7 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
-import { state } from "./state.js?v=20261117-online-separation-001";
-import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-online-separation-001";
+import { state } from "./state.js?v=20261117-movement-reconciliation-005";
+import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-movement-reconciliation-005";
+import { applyOwnServerPosition } from "./movement.js?v=20261117-movement-reconciliation-005";
 
 // Ordena timestamps timestamptz incluindo os microssegundos do PostgreSQL.
 function compareServerTimestamps(a, b) {
@@ -128,12 +129,12 @@ export function acceptDatabaseChange(payload) {
   if (!row?.user_id) return;
   if (row.user_id === state.user?.id) {
     if (row.state) window.KTKWorldEntities?.applyServerState?.(row.state);
-    // Realtime também transmite a linha do próprio jogador. A posição local\n    // só pode ser reconciliada pela resposta da RPC, que contém RTT e intenção\n    // da requisição; o Broadcast continua servindo para estado/vida/knockback.
+    // A posição contínua vem das respostas RPC. Um golpe é um deslocamento
+    // discreto do servidor e só entra se seu timestamp superar a posição atual.
     const knockbackAt=String(row.state?.last_knockback_at||"");
     if (row.is_alive !== false && knockbackAt && knockbackAt!==state.lastLocalKnockbackAt) {
       state.lastLocalKnockbackAt=knockbackAt;
-      // Position was applied only if this server timestamp is newer. Knockback
-      // now affects the sprite animation, never a second competing coordinate.
+      applyOwnServerPosition(row,Number(state.lastMovementLatencyMs)||0);
       window.KTKWorldEntities?.applyServerKnockback?.(row.state?.last_knockback);
     }
     if (row.is_alive === false) window.KTKWorldEntities?.serverDeath?.();
