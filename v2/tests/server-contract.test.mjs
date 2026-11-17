@@ -44,7 +44,7 @@ test("server movement and crown transitions are transaction-serialized", () => {
   assert.match(sql, /pg_advisory_xact_lock\(pg_catalog\.hashtext\('ktk-v2:main:movement'\)\)/i);
   assert.match(sql, /create or replace function public\.ktk_v2_claim_crown/i);
   assert.match(sql, /where id = 'main' for update/i);
-  assert.match(sql, /where world_id = 'main' and entity_id = 'crown-main' and entity_type = 'crown'\\s+for update/i);
+  assert.match(sql, /where world_id = 'main' and entity_id = 'crown-main' and entity_type = 'crown'\s+for update/i);
 });
 
 test("client has no durable browser storage", () => {
