@@ -5,10 +5,18 @@ import { readFile } from "node:fs/promises";
 const migrationUrl = new URL("../../supabase/migrations/20261117170000_ktk_v2_foundation.sql", import.meta.url);
 const clientUrl = new URL("../js/main.js", import.meta.url);
 const htmlUrl = new URL("../index.html", import.meta.url);
-const [sql, client, html] = await Promise.all([
+const rendererUrl = new URL("../js/world-renderer.js", import.meta.url);
+const lpcUrl = new URL("../js/lpc-renderer.js", import.meta.url);
+const rulesUrl = new URL("../js/client-rules.js", import.meta.url);
+const catalogUrl = new URL("../../personagem.js", import.meta.url);
+const [sql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
   readFile(migrationUrl, "utf8"),
   readFile(clientUrl, "utf8"),
-  readFile(htmlUrl, "utf8")
+  readFile(htmlUrl, "utf8"),
+  readFile(rendererUrl, "utf8"),
+  readFile(lpcUrl, "utf8"),
+  readFile(rulesUrl, "utf8"),
+  readFile(catalogUrl, "utf8")
 ]);
 
 test("V2 schema is isolated and does not rewrite V1 data", () => {
@@ -57,4 +65,42 @@ test("the browser sends controls and never increments world coordinates", () => 
   assert.match(client, /ktk_v2_step_player/);
   assert.doesNotMatch(client, /(?:player|local)\.(?:x|y)\s*\+=/);
   assert.doesNotMatch(client, /(?:player|local)\.(?:x|y)\s*=/);
+});
+
+
+test("private presence channel has narrowly-scoped receive and publish policies", () => {
+  assert.match(sql, /KTK V2 clients can receive world presence/i);
+  assert.match(sql, /KTK V2 clients can publish own presence/i);
+  assert.match(sql, /for insert to authenticated\s+with check \([\s\S]*extension = 'presence'/i);
+  assert.match(client, /await supabase\.realtime\.setAuth\(\)/);
+});
+
+test("creator and local/remote players use the same real LPC sprite catalog", () => {
+  assert.match(html, /\.\.\/personagem\.js/);
+  assert.match(catalog, /"id":"hair_pixie"/);
+  assert.match(catalog, /hair\/pixie\/adult\/walk\.png/);
+  assert.match(lpc, /Universal-LPC-Spritesheet-Character-Generator\/04140673ec02906f8233523639733c83690df750/);
+  assert.match(lpc, /body\/bodies\/\" \+ gender/);
+  assert.match(lpc, /mode === "skin" \? appearance\.skin/);
+  assert.match(lpc, /mode === "face" \? appearance\.skin \+ ":" \+ appearance\.eyes/);
+  assert.match(lpc, /mode === "hair" \? appearance\.hair/);
+  assert.match(lpc, /drawClothedFallback/);
+  assert.match(renderer, /lpcRenderer\.draw\(ctx, player, x, y, deltaSeconds\)/);
+  assert.match(client, /new LPCRenderer\(\)/);
+});
+
+test("all V2 JavaScript modules parse as ES modules", () => {
+  const stripImports = source => source
+    .replace(/^import\\s+[\\s\\S]*?from\\s+["'][^"']+["'];\\s*/gm, "")
+    .replace(/^export\\s+/gm, "");
+  assert.doesNotThrow(() => new Function(stripImports(client)), "main.js");
+  assert.doesNotThrow(() => new Function(stripImports(renderer)), "world-renderer.js");
+  assert.doesNotThrow(() => new Function(stripImports(lpc)), "lpc-renderer.js");
+  assert.doesNotThrow(() => new Function(stripImports(rules)), "client-rules.js");
+});
+
+test("old player-death and entity-delete broadcasts cannot roll back newer state", () => {
+  assert.match(client, /incomingRevision <= previous\.revision/);
+  assert.match(client, /if \(revision < knownRevision\) return/);
+  assert.match(client, /if \(revision <= knownRevision\) return/);
 });
