@@ -2178,53 +2178,6 @@
     return inventory.find(isArrowAmmo)||null;
   }
 
-  function getArrowAmmoCount(item) {
-    const quantity=Math.floor(Number(item?.quantity));
-    return Number.isFinite(quantity)&&quantity>0?quantity:1;
-  }
-
-  function addArrowToExistingStack(item) {
-    const arrowStack=getArrowAmmoStack();
-    if(!arrowStack) return false;
-    arrowStack.itemType='ammo';
-    arrowStack.ammoKey='arrow';
-    arrowStack.quantity=getArrowAmmoCount(arrowStack)+getArrowAmmoCount(item);
-    item.collected=true;
-    renderInventory();
-    toast(`Flechas: ${arrowStack.quantity}.`);
-    return true;
-  }
-
-  function collectNearbyArrowIntoStack() {
-    if(!getArrowAmmoStack()) return false;
-    const worldX=camera.x*canvas.clientWidth+player.x;
-    const worldY=camera.y*canvas.clientHeight+player.y;
-    let nearestArrow=null;
-    let nearestDistance=Infinity;
-    worldItems.forEach(item=>{
-      if(item.collected||!isArrowAmmo(item)) return;
-      const distance=Math.hypot(worldX-item.x,worldY-item.y);
-      if(distance<nearestDistance) {
-        nearestArrow=item;
-        nearestDistance=distance;
-      }
-    });
-    return nearestArrow&&nearestDistance<=64?addArrowToExistingStack(nearestArrow):false;
-  }
-
-  function consumeArrowAmmo(stack,amount) {
-    const current=Math.max(1,Math.floor(Number(stack.quantity)||1));
-    const remaining=Math.max(0,current-Math.max(1,Math.floor(Number(amount)||1)));
-    if(remaining===0) {
-      const slot=inventory.indexOf(stack);
-      if(slot>=0) inventory[slot]=null;
-    } else {
-      stack.quantity=remaining;
-    }
-    renderInventory();
-    if(remaining===1) toast('Última flecha no inventário.');
-  }
-
   function requestServerProjectile(item,direction) {
     void window.KTKOnline?.gameAction?.('launch_projectile',{
       weapon_id:String(item?.id||''),
@@ -2387,24 +2340,6 @@
     return ({head:'cabeca',chest:'peito',waist:'costas',legs:'pernas',feet:'pes'})[slot]||slot;
   }
 
-  function wearEquippedArmor() {
-    const wornArmor=wearableSlotOrder.filter(slot=>{
-      const item=equippedWearables[slot];
-      return item?.wearCategory==='armor'&&item.durability>0;
-    });
-    if(!wornArmor.length) return;
-    const slot=wornArmor[armorDamageCursor%wornArmor.length];
-    armorDamageCursor++;
-    const item=equippedWearables[slot];
-    item.durability=Math.max(0,item.durability-1);
-    if(item.durability===0) {
-      equippedWearables[slot]=null;
-      toast(`${item.displayName||'Armadura'} quebrou.`);
-      rebuildCharacterLayers();
-    }
-    renderInventory();
-  }
-
   function describeEquipment(item) {
     return [item.displayName||'Item',item.category,...getEquipmentAttributeDetails(item)].filter(Boolean).join(' | ');
   }
@@ -2485,9 +2420,7 @@
   }
 
   function selectInventorySlot(index) {
-    if(index<0||index>=inventory.length) return;
-    selectedInventorySlot=index;
-    renderInventory();
+    if(!Number.isInteger(index)||index<0||index>=inventory.length) return;
     void window.KTKOnline?.gameAction?.('select_slot',{slot:index})
       .catch(error=>toast(error?.message||'O servidor não confirmou o espaço selecionado.'));
   }
@@ -2599,6 +2532,8 @@
   }
 
   async function collectNearbyItem() {
+    // This is only target selection for the interaction button. The server
+    // rechecks distance, capacity, stack rules and the actual pickup operation.
     const worldX=camera.x*canvas.clientWidth+player.x;
     const worldY=camera.y*canvas.clientHeight+player.y;
     const hasArrowStack=Boolean(getArrowAmmoStack());
@@ -2627,55 +2562,26 @@
       if(!inventory[selectedInventorySlot]) toast(`Chegue mais perto de ${itemToCollect.displayName||'item'} para coletar.`);
       return false;
     }
-    if(itemToCollect.equipmentClass==='shield'&&inventory.some(item=>item?.equipmentClass==='shield')) {
-      toast('Você só pode carregar um escudo no inventário.');
+
+    if(itemToCollect.isKingCrown) {
+      if(itemToCollect.wearSlot) {
+        await equipCollectedWearable(itemToCollect);
+      } else {
+        const claim=await window.KTKOnline?.claimKingCrown?.();
+        if(!claim?.ok) toast(claim?.error||'O servidor não confirmou a posse da Coroa Real.');
+        else if(claim.data?.state) applyServerState(claim.data.state);
+      }
       return true;
     }
-    if(itemToCollect.isKingCrown) {
-      if(itemToCollect.wearSlot&&await equipCollectedWearable(itemToCollect)) return true;
-    } else {
-      try {
-        await window.KTKOnline?.gameAction?.('pickup',{entity_id:itemToCollect.entityId});
-        return true;
-      } catch(error) {
-        toast(error?.message||'O servidor recusou a coleta.');
-        return true;
-      }
-    }
 
-    const previousItem=inventory[selectedInventorySlot];
-    if(previousItem&&previousItem!==itemToCollect) {
-      dropItemAtPlayer(previousItem,(player.direction+2)%4);
+    try {
+      const result=await window.KTKOnline?.gameAction?.('pickup',{entity_id:itemToCollect.entityId});
+      if(result?.ok===false) toast(result?.error||'O servidor recusou a coleta.');
+      return true;
+    } catch(error) {
+      toast(error?.message||'O servidor recusou a coleta.');
+      return true;
     }
-    inventory[selectedInventorySlot]=itemToCollect;
-    itemToCollect.collected=true;
-    renderInventory();
-    [itemToCollect.image,itemToCollect.iconImage].filter(Boolean).forEach(image=>{
-      if(!image.complete) image.addEventListener('load',renderInventory,{once:true});
-    });
-    toast(previousItem&&previousItem!==itemToCollect
-      ? `${itemToCollect.displayName||'Item'} coletado; ${previousItem.displayName||'item anterior'} solto.`
-      : `${itemToCollect.displayName||'Item'} coletado.`);
-    return true;
-  }
-
-  function dropItemAtPlayer(item,directionIndex=player.direction) {
-    const directions=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}];
-    const direction=directions[directionIndex]||directions[2];
-    item.x=camera.x*canvas.clientWidth+player.x+direction.x*48;
-    item.y=camera.y*canvas.clientHeight+player.y+direction.y*48;
-    item.collected=false;
-    item.isStartingWearable=false;
-    if(item.isKingCrown) {
-      item.collected=true;
-      worldItems.delete(item);
-      void window.KTKOnline?.dropKingCrown?.(item.x,item.y).then(result=>{
-        if(!result?.ok) toast(result?.error||'O servidor não confirmou a devolução da coroa.');
-      });
-    } else {
-      worldItems.add(item);
-    }
-    updateKingStatus();
   }
 
   function drawResourceEntity(g,resource,x,y) {
