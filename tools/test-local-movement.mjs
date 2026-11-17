@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch] = await Promise.all([
+const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch, playerSync, rootHtml] = await Promise.all([
   read("../input/input-controller.js"),
   read("../multiplayer/player-replica.js"),
   read("../js/game-state.js"),
@@ -12,7 +12,9 @@ const [input, replica, gameState, renderer, movement, online, html, migration, r
   read("../js/online.js"),
   read("../campo_livre_atualizado.html"),
   read("../supabase/migrations/20261117204627_authoritative_movement_latency_and_intent_timeline.sql"),
-  read("../supabase/migrations/20261117204956_ignore_stale_movement_intent_after_lifecycle_reset.sql")
+  read("../supabase/migrations/20261117204956_ignore_stale_movement_intent_after_lifecycle_reset.sql"),
+  read("../online/player-sync.js"),
+  read("../index.html")
 ]);
 
 // Keyboard state includes the age of the exact active intent, not the last
@@ -70,7 +72,7 @@ assert.ok(blockStart >= 0 && blockEnd > blockStart);
 const context = {
   playerMoving: false, playerRunning: false, playerInputX: 0, playerInputY: 0,
   playerStats: { stats: { speed: { value: 2 } } },
-  window: { KTKOnline: { connected: true } }, SPEED: 225, COLLISION_RADIUS: 18
+  window: { KTKOnline: { connected: true }, KTKEnemySkeleton: { entity: {x:1000,y:1000,defeated:false,collision_radius:18} } }, remotePlayers: new Map(), SPEED: 225, COLLISION_RADIUS: 18
 };
 vm.createContext(context);
 vm.runInContext(gameState.slice(blockStart, blockEnd), context);
@@ -85,6 +87,19 @@ assert.equal(context.player.x, 100);
 assert.equal(context.playerVisual.direction, 3);
 
 const requestInput = { inputX:1,inputY:0,running:false,guarding:false };
+// Local collision prediction must stop at the same 36px player separation.
+context.playerVisual.x=100;
+context.playerVisual.y=120;
+context.playerVisual.targetX=100;
+context.playerVisual.targetY=120;
+context.remotePlayers.set("other",{x:130,y:120});
+context.playerMoving=true;
+context.playerInputX=1;
+context.playerInputY=0;
+context.updateLocalPlayerVisual(0.05);
+assert.equal(context.playerVisual.x,100,
+  "The visual prediction must not walk through another player's collision radius.");
+context.remotePlayers.clear();
 
 // Regression: completing a network correction while walking must never snap
 // the sprite back to the target captured before those extra movement frames.
@@ -95,16 +110,16 @@ const rollbackContext = {
 };
 vm.createContext(rollbackContext);
 vm.runInContext(gameState.slice(blockStart, blockEnd), rollbackContext);
-rollbackContext.setAuthoritativePlayerPosition(100, 120, 2, true);
+rollbackContext.setAuthoritativePlayerPosition(200, 120, 2, true);
 rollbackContext.playerMoving = true;
 rollbackContext.playerInputX = 1;
 rollbackContext.setAuthoritativePlayerPosition(
-  103,120,3,false,750,requestInput,
+  0,120,3,false,0,requestInput,
   { inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0 }
 );
 let previousVisualX = rollbackContext.playerVisual.x;
 let correctionFrames = 0;
-while(rollbackContext.playerVisual.correctionRemaining > 0 && correctionFrames < 20) {
+while(rollbackContext.playerVisual.correctionRemaining > 0 && correctionFrames < 5) {
   rollbackContext.updateLocalPlayerVisual(0.05);
   assert.ok(rollbackContext.playerVisual.x >= previousVisualX - 0.01,
     "Finishing a correction must not move a continuously walking player backwards.");
@@ -112,8 +127,13 @@ while(rollbackContext.playerVisual.correctionRemaining > 0 && correctionFrames <
   correctionFrames++;
 }
 assert.ok(correctionFrames > 0);
-assert.ok(Math.abs(rollbackContext.playerVisual.x - rollbackContext.playerVisual.targetX) < 0.01,
-  "The visual position must converge to the moving target without a rollback.");
+assert.ok(rollbackContext.playerVisual.correctionRemaining > 0,
+  "A backward correction must remain pending while forward movement is held.");
+rollbackContext.playerMoving = false;
+rollbackContext.playerInputX = 0;
+rollbackContext.updateLocalPlayerVisual(0.05);
+assert.ok(rollbackContext.playerVisual.x < previousVisualX + 0.01,
+  "A deferred correction may converge after movement stops.");
 context.setAuthoritativePlayerPosition(
   103,120,3,false,150,requestInput,
   { inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0 }
@@ -170,14 +190,30 @@ assert.match(input,/if\(!wasPressed\)[\s\S]*?sendImmediateMovementIntent\(\)/);
 assert.match(input,/window\.addEventListener\('keyup'[\s\S]*?sendImmediateMovementIntent\(\)/);
 assert.match(renderer,/playerMoving\?playerVisual.direction:player.direction/);
 assert.match(gameState,/errorDistance\/correctionSpeed/);
-assert.doesNotMatch(gameState,/latencyTolerance/);
+assert.match(gameState,/maxBackward/);
+assert.match(gameState,/Math.ceil\(Math.max\(Math.abs\(wantedX\),Math.abs\(wantedY\)\)\/6\)/);
+assert.match(playerSync,/function compareServerTimestamps\(/);
+assert.doesNotMatch(playerSync,/applyOwnServerPosition\(row\)/);
+assert.match(rootHtml,/20261117-movement-reconciliation-004/);
+assert.doesNotMatch(playerSync,/applyOwnServerPosition/);
+assert.doesNotMatch(playerSync,/compareServerTimestamps is not defined/);
+const timestampHelper = playerSync.slice(
+  playerSync.indexOf("function compareServerTimestamps"),
+  playerSync.indexOf("function mergeRemoteAppearance")
+);
+const timestampContext = {};
+vm.createContext(timestampContext);
+vm.runInContext(timestampHelper + ";globalThis.compare=compareServerTimestamps;", timestampContext);
+assert.equal(timestampContext.compare("2026-11-17T21:00:00.000002Z","2026-11-17T21:00:00.000001Z"),1,
+  "Remote timestamps must preserve PostgreSQL microsecond ordering.");
+assert.equal(timestampContext.compare("2026-11-17T21:00:00.000001Z","2026-11-17T21:00:00.000001Z"),0);
 assert.match(online,/sendPosition/);
 for(const [path,version] of [
-  ["render/world-renderer.js","20261117-movement-authority-002"],
-  ["multiplayer/player-replica.js","20261117-movement-authority-002"],
-  ["js/game-state.js","20261117-movement-visual-003"],
-  ["input/input-controller.js","20261117-movement-authority-002"],
-  ["js/online.js","20261117-movement-authority-002"]
+  ["render/world-renderer.js","20261117-movement-reconciliation-004"],
+  ["multiplayer/player-replica.js","20261117-movement-reconciliation-004"],
+  ["js/game-state.js","20261117-movement-reconciliation-004"],
+  ["input/input-controller.js","20261117-movement-reconciliation-004"],
+  ["js/online.js","20261117-movement-reconciliation-004"]
 ]) {
   assert.ok(html.includes("./"+path+"?v="+version),
     "Cache bust ausente: "+path);

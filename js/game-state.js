@@ -244,34 +244,73 @@ var  camera = {x:0,y:0};
     const dt=Math.max(0,Math.min(.05,Number(deltaSeconds)||0));
     const inputLength=Math.hypot(playerInputX,playerInputY);
     const isMoving=playerMoving&&inputLength>0&&window.KTKOnline?.connected!==false;
+    let actualMoveX=0,actualMoveY=0;
     if(isMoving) {
       const speedLevel=Number(playerStats?.stats?.speed?.value);
       const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
       const travel=movementSpeed*dt;
-      const movementX=(playerInputX/inputLength)*travel;
-      const movementY=(playerInputY/inputLength)*travel;
-      playerVisual.x+=movementX;
-      playerVisual.y+=movementY;
-      // O alvo reconciliado também avança com a previsão local. Sem isso, ele
-      // fica congelado no instante da resposta e puxa o personagem para trás
-      // quando a suavização termina ou quando o jogador solta a tecla.
-      playerVisual.targetX+=movementX;
-      playerVisual.targetY+=movementY;
+      const wantedX=(playerInputX/inputLength)*travel;
+      const wantedY=(playerInputY/inputLength)*travel;
+      // Reproduz a colisão autoritativa em passos curtos, usando os mesmos
+      // obstáculos dinâmicos conhecidos pelo cliente (jogadores e esqueleto).
+      const obstacles=[];
+      if(typeof remotePlayers!=="undefined" && remotePlayers && typeof remotePlayers.forEach==="function") remotePlayers.forEach(remote=>{
+        if(remote&&Number.isFinite(Number(remote.x))&&Number.isFinite(Number(remote.y))) {
+          obstacles.push({x:Number(remote.x),y:Number(remote.y),radius:COLLISION_RADIUS*2});
+        }
+      });
+      const skeleton=window.KTKEnemySkeleton?.entity;
+      if(skeleton&&!skeleton.defeated&&Number.isFinite(Number(skeleton.x))&&Number.isFinite(Number(skeleton.y))) {
+        obstacles.push({x:Number(skeleton.x),y:Number(skeleton.y),radius:COLLISION_RADIUS+Math.max(0,Number(skeleton.collision_radius)||18)});
+      }
+      const blocked=(x,y,fromX,fromY)=>obstacles.some(obstacle=>{
+        const before=Math.hypot(fromX-obstacle.x,fromY-obstacle.y);
+        const after=Math.hypot(x-obstacle.x,y-obstacle.y);
+        return after<obstacle.radius && after+0.01<before;
+      });
+      const steps=Math.max(1,Math.ceil(Math.max(Math.abs(wantedX),Math.abs(wantedY))/6));
+      const stepX=wantedX/steps,stepY=wantedY/steps;
+      for(let i=0;i<steps;i++) {
+        const nextX=playerVisual.x+stepX;
+        if(!blocked(nextX,playerVisual.y,playerVisual.x,playerVisual.y)) {
+          playerVisual.x=nextX; actualMoveX+=stepX;
+        }
+        const nextY=playerVisual.y+stepY;
+        if(!blocked(playerVisual.x,nextY,playerVisual.x,playerVisual.y)) {
+          playerVisual.y=nextY; actualMoveY+=stepY;
+        }
+      }
+      // O destino acompanha apenas o deslocamento que passou pela colisão.
+      playerVisual.targetX+=actualMoveX;
+      playerVisual.targetY+=actualMoveY;
       playerVisual.direction=Math.abs(playerInputX)>Math.abs(playerInputY)
         ? (playerInputX>0?3:1)
         : (playerInputY>0?2:0);
     }
 
-    // Corrections continue while moving and after releasing the key.
+    // A correção nunca pode inverter o deslocamento enquanto a tecla segue
+    // pressionada. O componente contrário fica pendente até haver espaço ou
+    // o jogador parar; isso evita o "passo para frente e puxão para trás".
     if(playerVisual.correctionRemaining>0) {
       const fraction=Math.min(1,dt/playerVisual.correctionRemaining);
-      const correctionX=playerVisual.correctionX*fraction;
-      const correctionY=playerVisual.correctionY*fraction;
+      let correctionX=playerVisual.correctionX*fraction;
+      let correctionY=playerVisual.correctionY*fraction;
+      if(isMoving) {
+        const dirX=playerInputX/inputLength,dirY=playerInputY/inputLength;
+        const parallel=correctionX*dirX+correctionY*dirY;
+        const maxBackward=Math.hypot(actualMoveX,actualMoveY);
+        if(parallel < -maxBackward) {
+          const adjustment=(-maxBackward-parallel);
+          correctionX+=dirX*adjustment;
+          correctionY+=dirY*adjustment;
+        }
+      }
       playerVisual.x+=correctionX;
       playerVisual.y+=correctionY;
       playerVisual.correctionX-=correctionX;
       playerVisual.correctionY-=correctionY;
-      playerVisual.correctionRemaining=Math.max(0,playerVisual.correctionRemaining-dt);
+      const remainingDistance=Math.hypot(playerVisual.correctionX,playerVisual.correctionY);
+      playerVisual.correctionRemaining=remainingDistance<0.15?0:Math.max(dt,Math.min(0.42,remainingDistance/Math.max(180,SPEED*2.4)));
       if(playerVisual.correctionRemaining===0) {
         playerVisual.x=playerVisual.targetX;
         playerVisual.y=playerVisual.targetY;
