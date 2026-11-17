@@ -8,7 +8,7 @@ function compareServerTimestamps(a, b) {
   const rightText=String(b||"");
   const leftMs=Date.parse(leftText), rightMs=Date.parse(rightText);
   if(Number.isFinite(leftMs)&&Number.isFinite(rightMs)) {
-    const fraction=value=>Number((String(value).match(/\\.(\\d+)(?=(?:Z|[+-]\\d{2}:?\\d{2})$)/i)?.[1]||"").padEnd(6,"0").slice(3,6)||0);
+    const fraction=value=>Number((String(value).match(/\.(\d+)(?=(?:Z|[+-]\d{2}:?\d{2})$)/i)?.[1]||"").padEnd(6,"0").slice(3,6)||0);
     const left=leftMs*1000+fraction(leftText);
     const right=rightMs*1000+fraction(rightText);
     return left===right?0:(left<right?-1:1);
