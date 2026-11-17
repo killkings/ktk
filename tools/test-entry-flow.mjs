@@ -77,6 +77,7 @@ const context = vm.createContext({
 vm.runInContext(lifecycle, context, { filename: "game/game-lifecycle.js" });
 
 const button = element("enter-world");
+button.textContent = "Entrar no mundo →";
 const nameInput = element("ktk-display-name");
 const click = button.listeners.get("click")?.[0];
 assert.equal(typeof click, "function", "O botão Entrar no mundo precisa ter um listener.");
@@ -98,6 +99,7 @@ window.KTKOnline = {
   async enter(options) {
     enterCalls++;
     receivedOptions = options;
+    options.onProgress?.("Carregando estado do mundo...");
     return { ok: false, error: "Falha simulada da RPC." };
   }
 };
@@ -107,6 +109,8 @@ await pendingEntry;
 assert.equal(enterCalls, 1, "O módulo online deve ser chamado depois de ficar pronto.");
 assert.equal(receivedOptions.displayName, "Uriel");
 assert.equal(button.disabled, false, "O botão deve ser reativado após uma resposta.");
+assert.equal(button.textContent, "Entrar no mundo →",
+  "O botão deve restaurar o rótulo após falha em uma etapa intermediária.");
 assert.equal(element("toast").textContent, "Falha simulada da RPC.");
 
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);

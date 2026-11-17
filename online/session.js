@@ -4,9 +4,10 @@ import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
 } from "./supabase-client.js?v=20261117-online-separation-001";
 import { sendPosition } from "./movement.js?v=20261117-online-separation-001";
-import { subscribeWorld, trackPresence } from "./realtime.js?v=20261117-online-separation-001";
-import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-online-separation-001";
-import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-authoritative-equipment-001";
+import { subscribeWorld, trackPresence } from "./realtime.js?v=20261117-entry-timeouts-001";
+import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-entry-timeouts-001";
+import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-entry-timeouts-001";
+import { withTimeout } from "./request-timeout.js?v=20261117-entry-timeouts-001";
 
 export function setStatus(message, connected = false) {
   let el = document.getElementById("ktk-online-status");
@@ -20,6 +21,12 @@ export function setStatus(message, connected = false) {
   el.style.borderColor = connected ? "rgba(155,215,135,.55)" : "rgba(238,190,120,.45)";
 }
 
+function reportEntryProgress(options, message) {
+  try { options.onProgress?.(message); }
+  catch (error) { console.warn("KTK entry progress callback:", error); }
+  setStatus("● " + message, false);
+}
+
 export async function enter(options = {}) {
   if (state.connecting) return { ok: false, error: "A conexão já está sendo iniciada." };
   state.connecting = true;
@@ -31,65 +38,82 @@ export async function enter(options = {}) {
     state.displayName = displayName;
 
     let sessionData;
+    reportEntryProgress(options, "Autenticando sua conta...");
     if (options.newCharacter) {
       // Morte é permanente: a nova tentativa recebe um auth.uid() totalmente novo.
       // O servidor remove o histórico morto deste nome quando o personagem é recriado.
       if (state.channel) {
-        try { await supabase.removeChannel(state.channel); } catch (cleanupError) {
+        try { await withTimeout("O encerramento do canal anterior", 7000, () => supabase.removeChannel(state.channel)); } catch (cleanupError) {
           console.warn("KTK old session cleanup:", cleanupError);
         }
         state.channel = null;
       }
-      const { data: previousSession, error: previousSessionError } = await supabase.auth.getSession();
+      const { data: previousSession, error: previousSessionError } = await withTimeout("A leitura da sessão anterior", 10000, () => supabase.auth.getSession());
       if (previousSessionError) throw previousSessionError;
       if (previousSession?.session) {
-        const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
-        const { data: afterSignOut, error: afterSignOutError } = await supabase.auth.getSession();
+        const { error: signOutError } = await withTimeout("O encerramento da conta anterior", 10000, () => supabase.auth.signOut({ scope: "local" }));
+        const { data: afterSignOut, error: afterSignOutError } = await withTimeout("A confirmação do encerramento anterior", 10000, () => supabase.auth.getSession());
         if (afterSignOutError) throw afterSignOutError;
         if (afterSignOut?.session) {
           throw signOutError || new Error("Não foi possível encerrar a conta anterior para criar outra.");
         }
         if (signOutError) console.warn("KTK old anonymous session was cleared locally:",signOutError.message);
       }
-      const result = await supabase.auth.signInAnonymously();
+      reportEntryProgress(options, "Criando a conta temporária do jogador...");
+      const result = await withTimeout("A criação da conta anônima", 15000, () => supabase.auth.signInAnonymously());
       if (result.error) throw new Error("Não foi possível criar outra conta de jogador. Confira se o login anônimo está ativado no Supabase: " + result.error.message);
       sessionData = { session: result.data.session };
     } else {
-      const { data, error } = await supabase.auth.getSession();
+      const { data, error } = await withTimeout("A leitura da sessão autenticada", 10000, () => supabase.auth.getSession());
       if (error) throw error;
       sessionData = data;
       if (!sessionData.session) {
-        const result = await supabase.auth.signInAnonymously();
+        reportEntryProgress(options, "Criando a conta temporária do jogador...");
+      const result = await withTimeout("A criação da conta anônima", 15000, () => supabase.auth.signInAnonymously());
         if (result.error) throw new Error("Não foi possível criar sua conta de jogador. Confira se o login anônimo está ativado no Supabase: " + result.error.message);
         sessionData = { session: result.data.session };
       }
     }
-    await syncEquipmentCatalog(supabase);
+    if (!sessionData?.session?.user) throw new Error("O Supabase não devolveu uma sessão autenticada para o jogador.");
+    reportEntryProgress(options, "Sincronizando o catálogo de equipamentos...");
+    await withTimeout("A sincronização do catálogo de equipamentos", 15000,
+      signal => syncEquipmentCatalog(supabase, signal));
     state.user = sessionData.session.user;
     state.accessToken = sessionData.session.access_token || state.accessToken;
     state.leaving = false;
 
     let player;
     if (options.newCharacter) {
-      const { data, error } = await supabase.rpc("ktk_create_new_character", {
-        p_display_name: displayName, p_character: options.character || {}
-      });
+      reportEntryProgress(options, "Criando seu personagem no servidor...");
+      const { data, error } = await withTimeout("A criação do personagem no servidor", 15000,
+        signal => supabase.rpc("ktk_create_new_character", {
+          p_display_name: displayName, p_character: options.character || {}
+        }).abortSignal(signal));
       if (error) throw error;
       player = data?.player;
     } else {
-      const { data, error } = await supabase.rpc("ktk_join_world", {
-        p_display_name: displayName, p_character: options.character || {}
-      });
+      reportEntryProgress(options, "Entrando no mundo...");
+      const { data, error } = await withTimeout("A entrada do personagem no servidor", 15000,
+        signal => supabase.rpc("ktk_join_world", {
+          p_display_name: displayName, p_character: options.character || {}
+        }).abortSignal(signal));
       if (error) throw error;
       player = data?.player;
     }
     if (player?.is_alive) {
-      try { player.state = (await getPlayerState()).state; } catch (stateError) { console.warn("KTK initial player state:", stateError); }
+      reportEntryProgress(options, "Lendo o estado inicial do personagem...");
+      try {
+        player.state = (await withTimeout("A leitura do estado inicial do personagem", 8000,
+          signal => getPlayerState(signal))).state;
+      } catch (stateError) {
+        console.warn("KTK initial player state:", stateError);
+      }
     }
     if (!player?.is_alive) {
       return { ok: false, dead: true, player, error: "Este personagem morreu. Crie outro para voltar ao mundo." };
     }
-    await subscribeWorld();
+    reportEntryProgress(options, "Conectando ao canal multiplayer...");
+    await subscribeWorld(message => reportEntryProgress(options, message));
     setStatus("● Online · mundo principal", true);
     state.joined = true;
     void trackPresence();
@@ -104,7 +128,7 @@ export async function enter(options = {}) {
   } catch (error) {
     console.error("KTK online:", error);
     if (state.channel) {
-      try { await supabase.removeChannel(state.channel); } catch (cleanupError) {
+      try { await withTimeout("O encerramento do canal anterior", 7000, () => supabase.removeChannel(state.channel)); } catch (cleanupError) {
         console.warn("KTK channel cleanup:", cleanupError);
       }
     }
@@ -141,8 +165,10 @@ export async function enter(options = {}) {
   }
 }
 
-export async function getPlayerState() {
-  const { data, error } = await supabase.rpc("ktk_get_player_state");
+export async function getPlayerState(signal) {
+  let request = supabase.rpc("ktk_get_player_state");
+  if (signal) request = request.abortSignal(signal);
+  const { data, error } = await request;
   if (error) throw error;
   return data;
 }

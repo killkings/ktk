@@ -132,7 +132,10 @@ var  leavingGame = false;
       const onlineResult=await online.enter({
         displayName,
         character:{...character},
-        newCharacter:newCharacterRequired
+        newCharacter:newCharacterRequired,
+        onProgress:message=>{
+          if(button) button.textContent=message;
+        }
       });
       if(!onlineResult.ok) {
         toast(onlineResult.error||'Não foi possível entrar no mundo online.');
@@ -201,7 +204,7 @@ var  leavingGame = false;
         button.disabled=false;
         button.style.opacity='';
         button.style.cursor='';
-        if(button.textContent==='Conectando ao mundo…') button.textContent=button.dataset.previousText||'Entrar no mundo →';
+        if(!gameStarted) button.textContent=button.dataset.previousText||'Entrar no mundo →';
       }
     }
   }
