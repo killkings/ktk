@@ -1,7 +1,22 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
 import { state } from "./state.js?v=20261117-online-separation-001";
 import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-online-separation-001";
-import { applyOwnServerPosition } from "./movement.js?v=20261117-online-separation-001";
+
+// Ordena timestamps timestamptz incluindo os microssegundos do PostgreSQL.
+function compareServerTimestamps(a, b) {
+  const leftText=String(a||"");
+  const rightText=String(b||"");
+  const leftMs=Date.parse(leftText), rightMs=Date.parse(rightText);
+  if(Number.isFinite(leftMs)&&Number.isFinite(rightMs)) {
+    const fraction=value=>Number((String(value).match(/\\.(\\d+)(?=(?:Z|[+-]\\d{2}:?\\d{2})$)/i)?.[1]||"").padEnd(6,"0").slice(3,6)||0);
+    const left=leftMs*1000+fraction(leftText);
+    const right=rightMs*1000+fraction(rightText);
+    return left===right?0:(left<right?-1:1);
+  }
+  if(!leftText) return rightText?-1:0;
+  if(!rightText) return 1;
+  return leftText===rightText?0:(leftText<rightText?-1:1);
+}
 
 function mergeRemoteAppearance(current, incoming, options = {}) {
   const contract = window.KTKRemoteAppearance;
@@ -113,7 +128,7 @@ export function acceptDatabaseChange(payload) {
   if (!row?.user_id) return;
   if (row.user_id === state.user?.id) {
     if (row.state) window.KTKWorldEntities?.applyServerState?.(row.state);
-    if (row.is_alive !== false) applyOwnServerPosition(row);
+    // Realtime também transmite a linha do próprio jogador. A posição local\n    // só pode ser reconciliada pela resposta da RPC, que contém RTT e intenção\n    // da requisição; o Broadcast continua servindo para estado/vida/knockback.
     const knockbackAt=String(row.state?.last_knockback_at||"");
     if (row.is_alive !== false && knockbackAt && knockbackAt!==state.lastLocalKnockbackAt) {
       state.lastLocalKnockbackAt=knockbackAt;
