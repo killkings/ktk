@@ -495,7 +495,7 @@ window.addEventListener("pagehide", event => {
 window.addEventListener("resize", () => {
   if (state.joined) renderWorld(
     ui.canvas, [...state.players.values()], state.userId, 0,
-    [...state.entities.values()], state.worldSeed, state.kingUserId
+    [...state.entities.values()], state.worldSeed, state.kingUserId, lpcRenderer
   );
 });
 
