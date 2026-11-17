@@ -162,12 +162,6 @@ test("all V2 gameplay RPCs are authenticated-only", () => {
   assert.equal(gameplaySql.trimEnd().toLowerCase().endsWith("commit;"), true);
 });
 
-test("the V2 migration has one clean commit boundary", () => {");
-    assert.match(gameplaySql, new RegExp("revoke all on function public\\\\." + escaped + " from public,anon", "i"));
-    assert.match(gameplaySql, new RegExp("grant execute on function public\\\\." + escaped + " to authenticated", "i"));
-  }
-});
-
 test("the V2 migration has one clean commit boundary", () => {
   assert.equal((sql.match(/\bcommit;/gi) || []).length, 1);
   assert.equal(sql.trimEnd().toLowerCase().endsWith("commit;"), true);
