@@ -2705,6 +2705,60 @@
       entity.type='player';
       entity.radius=COLLISION_RADIUS;
       remotePlayers.set(id,entity);
+      if(Array.isArray(remote.combatEvents)) {
+        if(!entity.seenCombatEventIds) entity.seenCombatEventIds=new Set();
+        remote.combatEvents.forEach(event=>{
+          if(!event?.event_id||entity.seenCombatEventIds.has(event.event_id)) return;
+          entity.seenCombatEventIds.add(event.event_id);
+          if(event.kind==='attack_start') {
+            const type=['punch','slash','thrust','shoot'].includes(event.attack_type)?event.attack_type:'slash';
+            entity.attackAnimation={
+              type,weaponId:event.weapon_id,direction:event.direction,
+              duration:event.duration||PUNCH_ANIMATION_SECONDS,
+              frameCount:event.frame_count||6,
+              startedAt:performance.now()
+            };
+          } else if(event.kind==='projectile_start') {
+            if(!Number.isFinite(event.projectile_x)||!Number.isFinite(event.projectile_y)) return;
+            if(!entity.remoteProjectiles) entity.remoteProjectiles=[];
+            entity.remoteProjectiles.push({
+              id:event.event_id,type:'remote-projectile',
+              projectileType:event.projectile_type,weaponId:event.weapon_id,
+              x:event.projectile_x,y:event.projectile_y,
+              vectorX:event.vector_x,vectorY:event.vector_y,
+              direction:event.direction,speed:event.speed,
+              maxDistance:event.max_distance,distance:0,elapsed:0,phase:'outbound'
+            });
+          } else if(event.kind==='player_damaged') {
+            entity.knockback={x:event.knockback_x,y:event.knockback_y,progress:0};
+            entity.knockbackHeight=0;
+          } else if(event.kind==='skeleton_hit') {
+            const skeleton=window.KTKEnemySkeleton.entity;
+            if(!skeleton.defeated&&event.damage>0) {
+              skeleton.health=Math.max(0,skeleton.health-event.damage);
+              skeleton.attacking=false;
+              skeleton.attackElapsed=0;
+              if(Number.isFinite(event.target_x)) skeleton.x=event.target_x;
+              if(Number.isFinite(event.target_y)) skeleton.y=event.target_y;
+              startKnockback(skeleton,{x:event.knockback_x,y:event.knockback_y});
+              if(skeleton.health===0) skeleton.defeated=true;
+              refreshSkeletonCombatStats();
+            }
+          } else if(event.kind==='skeleton_attack') {
+            const skeleton=window.KTKEnemySkeleton.entity;
+            if(!skeleton.defeated) {
+              skeleton.direction=event.direction;
+              skeleton.attacking=true;
+              skeleton.attackElapsed=0;
+              skeleton.attackHitApplied=true;
+              skeleton.attackCooldown=PUNCH_COOLDOWN_SECONDS;
+            }
+          }
+        });
+        if(entity.seenCombatEventIds.size>128) {
+          entity.seenCombatEventIds=new Set([...entity.seenCombatEventIds].slice(-64));
+        }
+      }
       if(!entity.layersReady || entity.appearanceSignature!==JSON.stringify({
         characterData:entity.character||{},wearables:entity.wearables||{}
       })) {
