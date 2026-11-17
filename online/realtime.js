@@ -3,7 +3,7 @@ import { state } from "./state.js?v=20261117-online-separation-001";
 import { supabase, TOPIC } from "./supabase-client.js?v=20261117-online-separation-001";
 import {
   acceptDatabaseChange, acceptWorldEntityChange, loadExistingPlayers
-} from "./player-sync.js?v=20261117-entry-timeouts-001";
+} from "./player-sync.js?v=20261117-movement-pipeline-004";
 import { withTimeout } from "./request-timeout.js?v=20261117-entry-timeouts-001";
 
 export async function loadWorldState(signal) {
