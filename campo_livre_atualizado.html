@@ -2530,7 +2530,7 @@
       if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
       camera.x=0; camera.y=0;
       player.x=Number(x); player.y=Number(y);
-      player.direction=Math.max(0,Math.min(3,Number(direction)||2));
+      player.direction=Number.isFinite(Number(direction))?Math.max(0,Math.min(3,Number(direction))):2;
       return true;
     }
   };
