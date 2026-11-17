@@ -260,6 +260,7 @@ begin
   where world_id='main' and entity_type='item' and state->>'dropped_by'=v_uid::text;
   if v_loot_count<2 then raise exception 'V2_KING_DID_NOT_DROP_INVENTORY_AND_EQUIPMENT'; end if;
 
+  perform set_config('request.jwt.claim.sub',v_uid::text,true);
   v_failed := false;
   begin
     perform public.ktk_v2_enter_world('Teste V2','{}'::jsonb);
