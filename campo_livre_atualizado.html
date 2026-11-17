@@ -2483,13 +2483,24 @@
     updateKingStatus();
   }
 
+  let startingGame = false;
+
   async function startGame() {
-    if(!window.KTKOnline) {
-      toast('O módulo online não carregou. Atualize a página e tente novamente.');
-      return;
+    const button=document.getElementById('enter-world');
+    if(startingGame) return;
+    startingGame=true;
+    if(button) {
+      button.disabled=true;
+      button.dataset.previousText=button.textContent;
+      button.textContent='Conectando ao mundo…';
+      button.style.opacity='.7';
+      button.style.cursor='wait';
     }
-    let onlinePlayer=null;
-    {
+    try {
+      if(!window.KTKOnline) {
+        toast('O módulo online não carregou. Atualize a página e tente novamente.');
+        return;
+      }
       const onlineResult=await window.KTKOnline.enter({
         displayName:document.getElementById('ktk-display-name')?.value||'',
         character:{...character},
@@ -2504,53 +2515,74 @@
         }
         return;
       }
-      onlinePlayer=onlineResult.player;
+
+      const onlinePlayer=onlineResult.player;
+      if(newCharacterRequired) {
+        equipStartingWearables();
+        playerStats?.resetForNewCharacter?.();
+        player.x=0; player.y=96; player.direction=2;
+        player.knockback=null; player.knockbackHeight=0;
+        camera.x=0; camera.y=0; walkTime=0; idleTime=0;
+        keys.clear();
+        rightMouseHeld=false;
+        shieldStaminaExhausted=false;
+        punch.active=false; punch.elapsed=0; punch.cooldown=0; punch.hitApplied=false; punch.weaponAttack=false; punch.weaponItem=null;
+        boomerangProjectile.active=false;
+        arrowProjectile.active=false;
+        stoneProjectile.active=false;
+        magicProjectile.active=false;
+        const enemy=window.KTKEnemySkeleton?.entity;
+        if(enemy) {
+          enemy.attacking=false; enemy.attackElapsed=0; enemy.attackHitApplied=false; enemy.attackCooldown=0.5;
+        }
+        playerDead=false;
+        newCharacterRequired=false;
+        gameStarted=true;
+        renderInventory();
+        rebuildCharacterLayers();
+        toast('Novo personagem criado. Boa exploração!');
+      } else if(!gameStarted) {
+        gameStarted=true;
+        player.x=0; player.y=96; player.direction=2;
+        camera.x=0; camera.y=0; walkTime=0;
+        toast('Você chegou ao mundo. Explore à vontade!');
+      } else {
+        toast('Aparência atualizada. Boa exploração!');
+      }
+
+      if(onlinePlayer) {
+        player.x=Number(onlinePlayer.x)||0;
+        player.y=Number(onlinePlayer.y)||96;
+        player.direction=Number(onlinePlayer.direction)||2;
+        camera.x=0; camera.y=0;
+      }
+      if(button) button.textContent='Entrar no mundo →';
+      showScreen('game');
+
+      if(!equipmentItemsArranged&&equipmentCatalog) {
+        try {
+          const wearableDrops=equipmentCatalog.buildMapWearableDrops();
+          equipmentCatalog.arrangeFirstMap(canvas.clientWidth,canvas.clientHeight,wearableDrops);
+          wearableDrops.forEach(item=>worldItems.add(item));
+          equipmentItemsArranged=true;
+        } catch(error) {
+          console.error('KTK map initialization:',error);
+          toast('Você entrou no mundo, mas alguns itens do mapa não carregaram.');
+        }
+      }
+      updateKingStatus();
+    } catch(error) {
+      console.error('KTK startGame:',error);
+      toast('O personagem conectou, mas houve um erro ao preparar o jogo. Tente entrar novamente.');
+    } finally {
+      startingGame=false;
+      if(button) {
+        button.disabled=false;
+        button.style.opacity='';
+        button.style.cursor='';
+        if(button.textContent==='Conectando ao mundo…') button.textContent=button.dataset.previousText||'Entrar no mundo →';
+      }
     }
-    if(newCharacterRequired) {
-      equipStartingWearables();
-      playerStats?.resetForNewCharacter();
-      player.x=0; player.y=96; player.direction=2;
-      player.knockback=null; player.knockbackHeight=0;
-      camera.x=0; camera.y=0; walkTime=0; idleTime=0;
-      keys.clear();
-      rightMouseHeld=false;
-      shieldStaminaExhausted=false;
-      punch.active=false; punch.elapsed=0; punch.cooldown=0; punch.hitApplied=false; punch.weaponAttack=false; punch.weaponItem=null;
-      boomerangProjectile.active=false;
-      arrowProjectile.active=false;
-      stoneProjectile.active=false;
-      magicProjectile.active=false;
-      const enemy=window.KTKEnemySkeleton.entity;
-      enemy.attacking=false; enemy.attackElapsed=0; enemy.attackHitApplied=false; enemy.attackCooldown=0.5;
-      playerDead=false;
-      newCharacterRequired=false;
-      gameStarted=true;
-      renderInventory();
-      rebuildCharacterLayers();
-      toast('Novo personagem criado. Boa exploração!');
-    } else if(!gameStarted) {
-      gameStarted=true;
-      player.x=0; player.y=96; player.direction=2;
-      camera.x=0; camera.y=0; walkTime=0;
-      toast('Você chegou ao mundo. Explore à vontade!');
-    } else {
-      toast('Aparência atualizada. Boa exploração!');
-    }
-    if(onlinePlayer) {
-      player.x=Number(onlinePlayer.x)||0;
-      player.y=Number(onlinePlayer.y)||96;
-      player.direction=Number(onlinePlayer.direction)||2;
-      camera.x=0; camera.y=0;
-    }
-    document.getElementById('enter-world').textContent='Entrar no mundo →';
-    showScreen('game');
-    if(!equipmentItemsArranged&&equipmentCatalog) {
-      const wearableDrops=equipmentCatalog.buildMapWearableDrops();
-      equipmentCatalog.arrangeFirstMap(canvas.clientWidth,canvas.clientHeight,wearableDrops);
-      wearableDrops.forEach(item=>worldItems.add(item));
-      equipmentItemsArranged=true;
-    }
-    updateKingStatus();
   }
 
   function toast(message) {
