@@ -4,6 +4,8 @@
 var localMovementIntentSignature = null;
 var localMovementIntentChangedAt = 0;
 var localMovementIntentRevision = 0;
+var localMovementIntentHistory = [];
+var LOCAL_MOVEMENT_INTENT_HISTORY_LIMIT = 128;
 
 function getLocalMovementControls() {
   const inputX=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
@@ -17,12 +19,51 @@ function getLocalMovementControls() {
     localMovementIntentSignature=signature;
     localMovementIntentChangedAt=now;
     localMovementIntentRevision++;
+    localMovementIntentHistory.push({
+      inputX,inputY,running,guarding,
+      intentRevision:localMovementIntentRevision,
+      changedAt:now
+    });
+    if(localMovementIntentHistory.length>LOCAL_MOVEMENT_INTENT_HISTORY_LIMIT) {
+      localMovementIntentHistory.splice(0,localMovementIntentHistory.length-LOCAL_MOVEMENT_INTENT_HISTORY_LIMIT);
+    }
   }
   return {
     inputX,inputY,running,guarding,
     intentRevision:localMovementIntentRevision,
-    inputAgeMs:Math.max(0,Math.min(750,Math.round(now-localMovementIntentChangedAt)))
+    inputAgeMs:Math.max(0,Math.min(750,Math.round(now-localMovementIntentChangedAt))),
+    observedAtMs:now
   };
+}
+
+function getLocalMovementIntentTimeline(startAtMs, initialIntent) {
+  // Registra também uma tecla alterada entre o último heartbeat e a resposta.
+  const current=getLocalMovementControls();
+  const endAt=Number(current.observedAtMs)||performance.now();
+  const startValue=Number(startAtMs);
+  const startAt=Number.isFinite(startValue)?Math.min(endAt,Math.max(0,startValue)):endAt;
+  let active={
+    inputX:Number(initialIntent?.inputX)||0,
+    inputY:Number(initialIntent?.inputY)||0,
+    running:Boolean(initialIntent?.running),
+    guarding:Boolean(initialIntent?.guarding)
+  };
+  let cursor=startAt;
+  const changes=localMovementIntentHistory
+    .filter(entry=>entry.changedAt>startAt&&entry.changedAt<=endAt)
+    .sort((a,b)=>a.changedAt-b.changedAt);
+  const segments=[];
+  changes.forEach(change=>{
+    const changeAt=Math.max(cursor,Math.min(endAt,change.changedAt));
+    if(changeAt>cursor) segments.push({...active,durationMs:changeAt-cursor});
+    active={
+      inputX:change.inputX,inputY:change.inputY,
+      running:change.running,guarding:change.guarding
+    };
+    cursor=changeAt;
+  });
+  if(endAt>cursor) segments.push({...active,durationMs:endAt-cursor});
+  return segments;
 }
 
   var REMOTE_MOTION_SNAPSHOT_DELAY_MS = 180;
@@ -296,6 +337,7 @@ function getLocalMovementControls() {
   window.KTKWorldEntities={
     setRemotePlayers,entities:getWorldEntities,applyServerState,
     getLocalControls:getLocalMovementControls,
+    getLocalIntentTimeline:getLocalMovementIntentTimeline,
     applyServerKnockback:(event,x,y,direction)=>{
       if(playerDead) return false;
       if(Number.isFinite(Number(x))&&Number.isFinite(Number(y))) {
@@ -312,6 +354,6 @@ function getLocalMovementControls() {
     applyWorldEntity,applyWorldState,
     serverDeath:()=>handlePlayerDeath(true),
     setLocalState:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,true),
-    reconcileLocalPosition:(x,y,direction,latencyMs=0,requestInput=null)=>
-      setAuthoritativePlayerPosition(x,y,direction,false,latencyMs,requestInput,getLocalMovementControls())
+    reconcileLocalPosition:(x,y,direction,latencyMs=0,requestInput=null,intentTimeline=null)=>
+      setAuthoritativePlayerPosition(x,y,direction,false,latencyMs,requestInput,getLocalMovementControls(),intentTimeline)
   };
