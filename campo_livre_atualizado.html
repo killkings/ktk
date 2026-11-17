@@ -2269,19 +2269,12 @@
   }
 
   function updateKnockbacks(deltaSeconds) {
-    const skeleton=window.KTKEnemySkeleton.entity;
-    [player,skeleton].forEach(target=>{
+    // Knockback aqui é apenas animação de elevação/sombra.
+    // Nem mesmo entidades remotas recebem deslocamento calculado no navegador.
+    [player,window.KTKEnemySkeleton.entity].forEach(target=>{
       const knockback=target.knockback;
       if(!knockback) return;
-      const previous=knockback.progress;
-      knockback.progress=Math.min(1,previous+deltaSeconds/KNOCKBACK_SECONDS);
-      const distance=KNOCKBACK_DISTANCE*(knockback.progress-previous);
-      if(target!==player&&!knockback.authoritative) {
-        target.x+=knockback.x*distance;
-        target.y+=knockback.y*distance;
-      }
-      // Knockback local só anima a elevação/sombra. O deslocamento real do
-      // jogador vem exclusivamente da coordenada confirmada pelo servidor.
+      knockback.progress=Math.min(1,knockback.progress+deltaSeconds/KNOCKBACK_SECONDS);
       target.knockbackHeight=Math.sin(knockback.progress*Math.PI)*KNOCKBACK_HEIGHT;
       if(knockback.progress>=1) {
         target.knockback=null;
