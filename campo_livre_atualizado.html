@@ -1942,29 +1942,8 @@
       durabilityUnit:'blocks',
       twoHanded:false
     }:selectedWeapon;
-    const arrowStack=weapon&&isArrowWeapon(weapon)?getArrowAmmoStack():null;
-    if(weapon&&isArrowWeapon(weapon)&&!arrowStack) {
-      toast('Você precisa de uma flecha no inventário para atirar.');
-      return;
-    }
-    let manaCost=isMagicWeapon(weapon)?Math.max(0,Number(weapon.manaCost)||0):0;
-    if(isMagicWeapon(weapon)&&!window.KTKPlayerStats.canConsumeMana(manaCost)) {
-      if(innateMagic) {
-        weapon=null;
-        manaCost=0;
-      } else {
-        toast(`Mana insuficiente para usar ${weapon.displayName||'o item'}.`);
-        return;
-      }
-    }
+    // O servidor valida munição, mana e estamina na ação de ataque/projétil.
     const innateCast=innateMagic&&weapon?.id==='level-six-innate-magic';
-    const staminaCost=innateCast?magicProfile.staminaCost:weapon?.staminaCost>0?weapon.staminaCost:PUNCH_STAMINA_COST;
-    if(!window.KTKPlayerStats.consumeStamina(staminaCost)) {
-      toast(weapon?`Estamina insuficiente para usar ${weapon.displayName||'o item'}.`:'Estamina insuficiente para socar.');
-      return;
-    }
-    if(manaCost>0) window.KTKPlayerStats.consumeMana(manaCost);
-    if(arrowStack) consumeArrowAmmo(arrowStack,Math.max(1,Number(weapon.ammoPerAttack)||1));
     punch.active=true;
     punch.elapsed=0;
     punch.cooldown=weapon?.attackInterval>0?weapon.attackInterval:PUNCH_COOLDOWN_SECONDS;
@@ -2160,19 +2139,23 @@
     });
   }
 
+  function requestServerProjectile(item,direction) {
+    void window.KTKOnline?.gameAction?.('launch_projectile',{
+      weapon_id:String(item?.id||''),
+      direction:Number(direction)
+    }).catch(error=>toast(error?.message||'O servidor recusou o disparo.'));
+  }
+
   function launchArrowProjectile(item,direction) {
-    const path=getRangedProjectilePath(item,direction,18,ARROW_PROJECTILE_RADIUS);
-    launchRangedProjectile(arrowProjectile,item,direction,path,item.id==='equipment-crossbow'?840:720);
+    requestServerProjectile(item,direction);
   }
 
   function launchStoneProjectile(item,direction) {
-    const path=getRangedProjectilePath(item,direction,14,STONE_PROJECTILE_RADIUS);
-    launchRangedProjectile(stoneProjectile,item,direction,path,600);
+    requestServerProjectile(item,direction);
   }
 
   function launchMagicProjectile(item,direction) {
-    const path=getRangedProjectilePath(item,direction,16,MAGIC_PROJECTILE_RADIUS);
-    launchRangedProjectile(magicProjectile,item,direction,path,620);
+    requestServerProjectile(item,direction);
   }
 
   function updateRangedProjectile(projectile,deltaSeconds,projectileRadius) {
@@ -2228,32 +2211,7 @@
   }
 
   function launchBoomerang(item,direction) {
-    const vector=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}][direction]||{x:0,y:1};
-    const origin=getEntityWorldPosition(player);
-    const handOffset=14;
-    boomerangProjectile.active=true;
-    boomerangProjectile.item=item;
-    boomerangProjectile.vectorX=vector.x;
-    boomerangProjectile.vectorY=vector.y;
-    boomerangProjectile.startX=origin.x+vector.x*handOffset;
-    boomerangProjectile.startY=origin.y+vector.y*handOffset;
-    boomerangProjectile.x=boomerangProjectile.startX;
-    boomerangProjectile.y=boomerangProjectile.startY;
-    boomerangProjectile.direction=direction;
-    boomerangProjectile.elapsed=0;
-    boomerangProjectile.distance=0;
-    boomerangProjectile.maxDistance=(Number(item.range)>0?Number(item.range):1)*TILE;
-    boomerangProjectile.speed=Number(item.projectileSpeed)>0?Number(item.projectileSpeed):480;
-    boomerangProjectile.phase='outbound';
-    boomerangProjectile.hitApplied=false;
-    window.KTKOnline?.broadcastCombat({
-      kind:'projectile_start',
-      projectile_type:'boomerang',
-      projectile_x:boomerangProjectile.x,projectile_y:boomerangProjectile.y,
-      vector_x:boomerangProjectile.vectorX,vector_y:boomerangProjectile.vectorY,
-      speed:boomerangProjectile.speed,max_distance:boomerangProjectile.maxDistance,
-      direction,weapon_id:item?.id||null
-    });
+    requestServerProjectile(item,direction);
   }
 
   function updateBoomerangProjectile(deltaSeconds) {
@@ -2816,44 +2774,6 @@
     }
     if(itemToCollect.equipmentClass==='shield'&&inventory.some(item=>item?.equipmentClass==='shield')) {
       toast('Você só pode carregar um escudo no inventário.');
-      return true;
-    }
-    if(isArrowAmmo(itemToCollect)) {
-      const arrowStack=getArrowAmmoStack();
-      if(arrowStack) {
-        addArrowToExistingStack(itemToCollect);
-        return true;
-      }
-      const emptySlot=findEmptyInventorySlot();
-      if(emptySlot<0&&inventory[selectedInventorySlot]) {
-        const previousItem=inventory[selectedInventorySlot];
-        dropItemAtPlayer(previousItem,(player.direction+2)%4);
-        itemToCollect.itemType='ammo';
-        itemToCollect.ammoKey='arrow';
-        itemToCollect.quantity=getArrowAmmoCount(itemToCollect);
-        inventory[selectedInventorySlot]=itemToCollect;
-        itemToCollect.collected=true;
-        renderInventory();
-        [itemToCollect.image,itemToCollect.iconImage].filter(Boolean).forEach(image=>{
-          if(!image.complete) image.addEventListener('load',renderInventory,{once:true});
-        });
-        toast(`${itemToCollect.displayName||'Flecha'} coletada; ${previousItem.displayName||'item anterior'} solto.`);
-        return true;
-      }
-      if(emptySlot<0) {
-        toast('Inventário cheio. Solte um item para coletar as flechas.');
-        return;
-      }
-      itemToCollect.itemType='ammo';
-      itemToCollect.ammoKey='arrow';
-      itemToCollect.quantity=getArrowAmmoCount(itemToCollect);
-      inventory[emptySlot]=itemToCollect;
-      itemToCollect.collected=true;
-      renderInventory();
-      [itemToCollect.image,itemToCollect.iconImage].filter(Boolean).forEach(image=>{
-        if(!image.complete) image.addEventListener('load',renderInventory,{once:true});
-      });
-      toast('Flecha coletada.');
       return true;
     }
     if(itemToCollect.isKingCrown) {
