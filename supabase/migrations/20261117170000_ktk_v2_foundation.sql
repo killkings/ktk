@@ -220,7 +220,14 @@ begin
     'hairstyle', left(coalesce(nullif(p_appearance->>'hairstyle',''),'hair_pixie'), 100),
     'beard', left(coalesce(nullif(p_appearance->>'beard',''),'none'), 100),
     'mustache', left(coalesce(nullif(p_appearance->>'mustache',''),'none'), 100),
-    'clothing', case when p_appearance->>'clothing' ~* '^#[0-9a-f]{6}
+    'clothing', case
+      when length(coalesce(p_appearance->>'clothing','')) = 7
+        and left(coalesce(p_appearance->>'clothing',''),1) = '#'
+        and translate(substr(coalesce(p_appearance->>'clothing',''),2),
+          '0123456789abcdefABCDEF','') = ''
+      then p_appearance->>'clothing'
+      else '#e7e2c9'
+    end
 
   perform 1 from public.ktk_v2_worlds where id = 'main' for update;
   if not found then raise exception 'WORLD_NOT_FOUND'; end if;
