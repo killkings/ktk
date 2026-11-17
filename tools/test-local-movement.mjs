@@ -72,7 +72,7 @@ assert.ok(blockStart >= 0 && blockEnd > blockStart);
 const context = {
   playerMoving: false, playerRunning: false, playerInputX: 0, playerInputY: 0,
   playerStats: { stats: { speed: { value: 2 } } },
-  window: { KTKOnline: { connected: true } }, SPEED: 225, COLLISION_RADIUS: 18
+  window: { KTKOnline: { connected: true }, KTKEnemySkeleton: { entity: {x:1000,y:1000,defeated:false,collision_radius:18} } }, remotePlayers: new Map(), SPEED: 225, COLLISION_RADIUS: 18
 };
 vm.createContext(context);
 vm.runInContext(gameState.slice(blockStart, blockEnd), context);
@@ -176,10 +176,10 @@ assert.doesNotMatch(gameState,/latencyTolerance/);
 assert.match(online,/sendPosition/);
 for(const [path,version] of [
   ["render/world-renderer.js","20261117-movement-reconciliation-004"],
-  ["multiplayer/player-replica.js","20261117-movement-authority-002"],
+  ["multiplayer/player-replica.js","20261117-movement-reconciliation-004"],
   ["js/game-state.js","20261117-movement-reconciliation-004"],
-  ["input/input-controller.js","20261117-movement-authority-002"],
-  ["js/online.js","20261117-movement-authority-002"]
+  ["input/input-controller.js","20261117-movement-reconciliation-004"],
+  ["js/online.js","20261117-movement-reconciliation-004"]
 ]) {
   assert.ok(html.includes("./"+path+"?v="+version),
     "Cache bust ausente: "+path);
