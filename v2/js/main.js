@@ -164,6 +164,7 @@ async function claimCrown() {
 }
 
 async function subscribeWorld() {
+  await supabase.realtime.setAuth();
   const channel = supabase.channel(TOPIC, {
     config: {
       private: true,
@@ -210,11 +211,6 @@ async function subscribeWorld() {
     });
   });
 
-  const { error } = await state.channel.track({
-    user_id: state.userId,
-    joined_at: new Date().toISOString()
-  });
-  if (error) console.warn("KTK V2 presence:", error.message);
 }
 
 async function loadWorldSnapshot() {
@@ -239,6 +235,10 @@ async function enterWorld(displayName, appearance) {
   state.userId = authData.user.id;
   state.accessToken = authData.session.access_token;
 
+  // Create the private Realtime subscription before any INSERT/UPDATE trigger
+  // can broadcast from Postgres. This also supplies the JWT for channel RLS.
+  await subscribeWorld();
+
   const { data: player, error: enterError } = await supabase.rpc("ktk_v2_enter_world", {
     p_display_name: displayName,
     p_appearance: appearance
@@ -248,9 +248,12 @@ async function enterWorld(displayName, appearance) {
 
   state.joined = true;
   state.leaving = false;
-  state.players.clear();
   upsertPlayer(player);
-  await subscribeWorld();
+  const { error: presenceError } = await state.channel.track({
+    user_id: state.userId,
+    joined_at: new Date().toISOString()
+  });
+  if (presenceError) console.warn("KTK V2 presence:", presenceError.message);
   await loadWorldSnapshot();
   state.lastInputSignature = "";
   state.lastStepAt = 0;
