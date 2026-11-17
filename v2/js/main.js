@@ -40,7 +40,21 @@ const ui = {
   connection: $("#connection-state"),
   position: $("#hud-position"),
   players: $("#hud-players"),
-  gameError: $("#game-error")
+  gameError: $("#game-error"),
+  health: $("#hud-health"),
+  stamina: $("#hud-stamina"),
+  satiety: $("#hud-satiety"),
+  hydration: $("#hud-hydration"),
+  clanChoice: $("#clan-choice"),
+  clanChoose: $("#clan-choose"),
+  clanStatus: $("#clan-status"),
+  slots: [$("#inventory-slot-0"), $("#inventory-slot-1")],
+  itemUse: $("#item-use"),
+  itemEquip: $("#item-equip"),
+  itemDrop: $("#item-drop"),
+  wearables: Array.from(document.querySelectorAll(".wearable-slot")),
+  interact: $("#interact-button"),
+  attack: $("#attack-button")
 };
 
 const lpcRenderer = new LPCRenderer();
@@ -52,6 +66,8 @@ const state = {
   busy: false,
   movementController: null,
   claimBusy: false,
+  actionBusy: false,
+  rightMouseHeld: false,
   userId: "",
   accessToken: "",
   channel: null,
@@ -107,7 +123,7 @@ function readControls() {
     x: Number(right) - Number(left),
     y: Number(down) - Number(up),
     running: state.keys.has("shift"),
-    guarding: false
+    guarding: state.rightMouseHeld
   });
 }
 
@@ -135,11 +151,59 @@ function upsertPlayer(row) {
   updateHud();
 }
 
+function itemLabel(item) {
+  if (!item || item === "null") return "Vazio";
+  const name = String(item.displayName || item.display_name || item.item_id || "Item");
+  const quantity = Math.max(1, Number(item.quantity) || 1);
+  return quantity > 1 ? name + " ×" + quantity : name;
+}
+
+function renderCharacterPanel(local) {
+  const stats = local?.state || {};
+  const value = (key, fallback) => {
+    const n = Number(stats[key]);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  ui.health.textContent = Math.round(value("health", 100)) + "/" + Math.round(value("max_health", 100));
+  ui.stamina.textContent = Math.round(value("stamina", 100)) + "/" + Math.round(value("max_stamina", 100));
+  ui.satiety.textContent = Math.round(value("satiety", 99)) + "/99";
+  ui.hydration.textContent = Math.round(value("hydration", 99)) + "/99";
+
+  const inventory = Array.isArray(stats.inventory) ? stats.inventory : [null, null];
+  const selectedSlot = Math.max(0, Math.min(1, Number(stats.selected_slot) || 0));
+  ui.slots.forEach((button, index) => {
+    button.textContent = (index + 1) + " · " + itemLabel(inventory[index]);
+    button.classList.toggle("selected", selectedSlot === index);
+    button.disabled = !state.joined || state.actionBusy;
+  });
+  const selectedItem = inventory[selectedSlot];
+  ui.itemUse.disabled = !state.joined || state.actionBusy || !selectedItem || !["food", "drink"].includes(String(selectedItem.itemType || selectedItem.item_type || ""));
+  ui.itemEquip.disabled = !state.joined || state.actionBusy || !selectedItem || !selectedItem.wearSlot && !selectedItem.wear_slot;
+  ui.itemDrop.disabled = !state.joined || state.actionBusy || !selectedItem;
+
+  const wearables = stats.wearables && typeof stats.wearables === "object" ? stats.wearables : {};
+  const names = {head:"Cabeça",chest:"Peito",waist:"Cintura",legs:"Pernas",feet:"Pés"};
+  ui.wearables.forEach(button => {
+    const slot = button.dataset.wearSlot;
+    const item = wearables[slot];
+    button.textContent = names[slot] + " · " + itemLabel(item);
+    button.disabled = !state.joined || state.actionBusy || !item || item === "null";
+  });
+
+  const clanColor = String(local?.clanColor || "");
+  ui.clanChoice.value = clanColor || "";
+  ui.clanChoice.disabled = Boolean(clanColor) || !state.joined || state.actionBusy;
+  ui.clanChoose.disabled = Boolean(clanColor) || !state.joined || state.actionBusy || !ui.clanChoice.value;
+  ui.clanStatus.textContent = clanColor ? "Clã definido" : "Escolha uma cor";
+  ui.clanStatus.style.color = clanColor || "";
+}
+
 function updateHud() {
   const local = state.players.get(state.userId);
   if (local) {
     ui.hudName.textContent = local.displayName;
     ui.position.textContent = Math.round(local.x) + ", " + Math.round(local.y);
+    renderCharacterPanel(local);
   }
   const count = state.players.size;
   ui.players.textContent = count + (count === 1 ? " jogador" : " jogadores");
@@ -203,6 +267,57 @@ async function claimCrown() {
   } finally {
     state.claimBusy = false;
   }
+}
+
+async function runGameAction(rpcName, args = {}) {
+  if (!state.joined || state.leaving || state.actionBusy) return null;
+  state.actionBusy = true;
+  updateHud();
+  try {
+    const { data, error } = await supabase.rpc(rpcName, args);
+    if (error) throw error;
+    if (data?.player) upsertPlayer(data.player);
+    if (data?.attacker) upsertPlayer(data.attacker);
+    if (data?.target_type === "player" && data?.target) upsertPlayer(data.target);
+    if (data?.target_type === "enemy" && data?.target) upsertEntity(data.target);
+    if (data?.world) applyWorldRow(data.world);
+    if (data?.crown) upsertEntity(data.crown);
+    await loadWorldSnapshot();
+    return data;
+  } catch (error) {
+    showError(error?.message || "A ação foi recusada pelo servidor.");
+    return null;
+  } finally {
+    state.actionBusy = false;
+    updateHud();
+  }
+}
+
+async function chooseClan() {
+  const color = String(ui.clanChoice.value || "");
+  if (!color) return;
+  const player = await runGameAction("ktk_v2_choose_clan", { p_color: color });
+  if (player) showError("Seu clã foi definido.");
+}
+
+async function runItemAction(action, payload = {}) {
+  const result = await runGameAction("ktk_v2_item_action", {
+    p_action: action,
+    p_payload: payload
+  });
+  if (result?.ok) showError("Ação confirmada pelo servidor.");
+}
+
+async function interactWithWorld() {
+  const result = await runGameAction("ktk_v2_interact");
+  if (result?.ok) showError("Interação confirmada pelo servidor.");
+  else if (result?.reason === "NOTHING_NEARBY") showError("Não há nada próximo para interagir.");
+}
+
+async function attackTarget() {
+  const result = await runGameAction("ktk_v2_attack");
+  if (result?.hit) showError("Ataque confirmado · " + result.damage + " de dano.");
+  else if (result?.reason === "NO_TARGET") showError("Nenhum alvo à frente.");
 }
 
 async function subscribeWorld() {
@@ -493,19 +608,66 @@ window.addEventListener("keydown", event => {
     void leaveWorld(false);
     return;
   }
+  if (event.target?.matches?.("input,select,textarea")) return;
   if (state.joined && keyIsCrown(event)) {
     event.preventDefault();
-    void claimCrown();
+    void interactWithWorld();
+    return;
+  }
+  if (state.joined && (event.code === "Space" || event.key === " ")) {
+    event.preventDefault();
+    void attackTarget();
     return;
   }
   const key = event.key.toLowerCase();
+  if (state.joined && (key === "1" || key === "2")) {
+    event.preventDefault();
+    void runItemAction("select_slot", { slot: Number(key) - 1 });
+    return;
+  }
   if (["w","a","s","d","arrowup","arrowdown","arrowleft","arrowright","shift"].includes(key)) {
     event.preventDefault();
     state.keys.add(key);
   }
 });
 window.addEventListener("keyup", event => state.keys.delete(event.key.toLowerCase()));
-window.addEventListener("blur", () => state.keys.clear());
+window.addEventListener("blur", () => {
+  state.keys.clear();
+  state.rightMouseHeld = false;
+});
+ui.slots[0].addEventListener("click", () => void runItemAction("select_slot",{slot:0}));
+ui.slots[1].addEventListener("click", () => void runItemAction("select_slot",{slot:1}));
+ui.itemUse.addEventListener("click", () => {
+  const local = state.players.get(state.userId);
+  const slot = Math.max(0,Math.min(1,Number(local?.state?.selected_slot)||0));
+  void runItemAction("consume",{slot});
+});
+ui.itemEquip.addEventListener("click", () => {
+  const local = state.players.get(state.userId);
+  const slot = Math.max(0,Math.min(1,Number(local?.state?.selected_slot)||0));
+  void runItemAction("equip",{slot});
+});
+ui.itemDrop.addEventListener("click", () => {
+  const local = state.players.get(state.userId);
+  const slot = Math.max(0,Math.min(1,Number(local?.state?.selected_slot)||0));
+  void runItemAction("drop",{slot});
+});
+ui.wearables.forEach(button => button.addEventListener("click", () => {
+  void runItemAction("unequip",{wear_slot:button.dataset.wearSlot});
+}));
+ui.clanChoose.addEventListener("click", () => void chooseClan());
+ui.interact.addEventListener("click", () => void interactWithWorld());
+ui.attack.addEventListener("click", () => void attackTarget());
+ui.canvas.addEventListener("pointerdown", event => {
+  if (event.button === 2) {
+    state.rightMouseHeld = true;
+    event.preventDefault();
+  }
+});
+window.addEventListener("pointerup", event => {
+  if (event.button === 2) state.rightMouseHeld = false;
+});
+ui.canvas.addEventListener("contextmenu", event => event.preventDefault());
 window.addEventListener("pagehide", event => {
   // A back-forward-cache suspension is not an explicit exit from the world.
   if (!event.persisted) void leaveWorld(true);
