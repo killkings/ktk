@@ -62,6 +62,7 @@ const state = {
   lastFrameAt: 0,
   players: new Map(),
   entities: new Map(),
+  entityRevisions: new Map(),
   worldSeed: 20261117,
   kingUserId: null,
   keys: new Set(),
@@ -112,7 +113,14 @@ function readControls() {
 function upsertPlayer(row) {
   if (!row || typeof row !== "object" || !row.user_id) return;
   const id = String(row.user_id);
+  const previous = state.players.get(id) || null;
+  const incomingRevision = Number(row.revision);
   if (row.is_alive === false) {
+    // Death is a newer server revision too; a delayed death packet must not
+    // erase a character that the world has already advanced past it.
+    if (previous && Number.isSafeInteger(incomingRevision) &&
+        incomingRevision <= previous.revision) return;
+    if (!previous) return;
     state.players.delete(id);
     lpcRenderer.remove(id);
     updateHud();
@@ -121,7 +129,6 @@ function upsertPlayer(row) {
     }
     return;
   }
-  const previous = state.players.get(id) || null;
   const next = reconcilePlayerView(previous, row);
   if (next) state.players.set(id, next);
   updateHud();
@@ -155,14 +162,19 @@ function applyRealtimePlayer(payload) {
 function upsertEntity(row, deleted = false) {
   if (!row?.entity_id) return;
   const id = String(row.entity_id);
+  const revision = Number(row.revision);
+  if (!Number.isSafeInteger(revision) || revision < 1) return;
+  const knownRevision = state.entityRevisions.get(id) ?? -1;
   if (deleted) {
+    if (revision < knownRevision) return;
     state.entities.delete(id);
+    state.entityRevisions.set(id, revision);
     return;
   }
-  const previous = state.entities.get(id);
-  if (previous && Number(row.revision) <= Number(previous.revision)) return;
+  if (revision <= knownRevision) return;
   if (!Number.isFinite(Number(row.x)) || !Number.isFinite(Number(row.y))) return;
   state.entities.set(id, row);
+  state.entityRevisions.set(id, revision);
 }
 
 function applyWorldRow(row) {
@@ -373,6 +385,7 @@ async function cleanupLocalSession() {
   state.players.clear();
   lpcRenderer.clear();
   state.entities.clear();
+  state.entityRevisions.clear();
   state.kingUserId = null;
   state.worldRevision = 0;
   state.keys.clear();
