@@ -67,7 +67,8 @@ function acceptRemote(payload) {
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
   state.remote.set(String(payload.user_id), {
     id: String(payload.user_id),
-    display_name: String(payload.display_name || "Aventureiro").slice(0, 24),
+    display_name: String(payload.display_name || payload.displayName || "Aventureiro").slice(0, 24),
+    displayName: String(payload.display_name || payload.displayName || "Aventureiro").slice(0, 24),
     x, y,
     direction: Math.max(0, Math.min(3, Number(payload.direction) || 2)),
     character: payload.character || {},
