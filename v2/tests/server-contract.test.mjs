@@ -185,7 +185,7 @@ test("V2 simulation owns survival, loot expiry, resource respawn and enemy AI", 
     assert.ok(simulationSql.includes(required), `Missing simulation contract: ${required}`);
   }
   assert.ok(simulationSql.includes("from public,anon,authenticated"));
-  assert.equal((simulationSql.match(/\\bcommit;/gi) || []).length, 1);
+  assert.equal((simulationSql.match(/\bcommit;/gi) || []).length, 1);
   assert.equal(simulationSql.trimEnd().toLowerCase().endsWith("commit;"), true);
 });
 
