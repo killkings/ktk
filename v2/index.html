@@ -81,7 +81,50 @@
         <div class="hud-stats"><span id="hud-position">—</span><span id="hud-players">1 jogador</span></div>
         <button id="leave-button" class="danger" type="button">Sair · morrer</button>
       </header>
-      <div class="controls-hint">WASD / setas · Shift corre · E reivindica a coroa · Esc sai</div>
+      <section class="game-panel" aria-label="Personagem e ações">
+        <div class="panel-stats">
+          <span>Vida <strong id="hud-health">100/100</strong></span>
+          <span>Estamina <strong id="hud-stamina">100/100</strong></span>
+          <span>Fome <strong id="hud-satiety">99/99</strong></span>
+          <span>Sede <strong id="hud-hydration">99/99</strong></span>
+        </div>
+        <div class="clan-row">
+          <span>Clã</span>
+          <select id="clan-choice" aria-label="Cor do clã">
+            <option value="">Escolher clã</option>
+            <option value="#d94343">Vermelho</option>
+            <option value="#3d75d6">Azul</option>
+            <option value="#4b9f62">Verde</option>
+            <option value="#d9ae38">Amarelo</option>
+            <option value="#8b61c2">Roxo</option>
+            <option value="#e97e28">Laranja</option>
+            <option value="#45a9a2">Turquesa</option>
+            <option value="#c05a9b">Rosa</option>
+          </select>
+          <button id="clan-choose" type="button">Confirmar</button>
+          <span id="clan-status">Sem clã</span>
+        </div>
+        <div class="inventory-row">
+          <button id="inventory-slot-0" class="inventory-slot selected" type="button">1 · Vazio</button>
+          <button id="inventory-slot-1" class="inventory-slot" type="button">2 · Vazio</button>
+          <button id="item-use" type="button">Usar</button>
+          <button id="item-equip" type="button">Equipar</button>
+          <button id="item-drop" type="button">Soltar</button>
+        </div>
+        <div class="wearables-row" aria-label="Equipamentos vestidos">
+          <span>Vestidos:</span>
+          <button class="wearable-slot" data-wear-slot="head" type="button">Cabeça · Vazio</button>
+          <button class="wearable-slot" data-wear-slot="chest" type="button">Peito · Vazio</button>
+          <button class="wearable-slot" data-wear-slot="waist" type="button">Cintura · Vazio</button>
+          <button class="wearable-slot" data-wear-slot="legs" type="button">Pernas · Vazio</button>
+          <button class="wearable-slot" data-wear-slot="feet" type="button">Pés · Vazio</button>
+        </div>
+        <div class="game-actions">
+          <button id="interact-button" type="button">Interagir · E</button>
+          <button id="attack-button" type="button">Atacar · Espaço</button>
+        </div>
+      </section>
+      <div class="controls-hint">WASD / setas · Shift corre · botão direito bloqueia · E interage · Espaço ataca · Esc sai</div>
       <div id="game-error" class="game-error" role="status" aria-live="polite"></div>
     </section>
   </main>
