@@ -27,7 +27,8 @@ const state = {
   leaving: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
   lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", lastInputSignature: "",
-  stepInFlight: false, combatSequence: 0,
+  stepInFlight: false, stepController: null, stepSequence: 0, activeStepId: 0,
+  combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), profileLoads: new Map(),
   profileRetryTimers: new Map(), profileRetryCounts: new Map(), seenCombatEvents: new Set(),
@@ -464,9 +465,15 @@ async function sendPosition(force = false) {
 
   if (now - state.lastDbHeartbeat >= 10000) {
     state.lastDbHeartbeat = now;
-    void supabase.rpc("ktk_touch_player").then(({ error }) => {
-      if (error) console.warn("KTK world heartbeat:", error.message);
-    }).catch(error => console.warn("KTK world heartbeat:", error));
+    const heartbeatController = new AbortController();
+    const heartbeatTimeout = setTimeout(() => heartbeatController.abort(), 1200);
+    void supabase.rpc("ktk_touch_player")
+      .abortSignal(heartbeatController.signal)
+      .then(({ error }) => {
+        if (error) console.warn("KTK world heartbeat:", error.message);
+      })
+      .catch(error => console.warn("KTK world heartbeat:", error?.message || error))
+      .finally(() => clearTimeout(heartbeatTimeout));
   }
 
   // O cliente envia somente a intenção de movimento. A posição, a velocidade
@@ -477,13 +484,21 @@ async function sendPosition(force = false) {
 
   state.stepInFlight = true;
   state.lastCheckpoint = now;
+  const stepId = ++state.stepSequence;
+  state.activeStepId = stepId;
+  const stepController = new AbortController();
+  state.stepController = stepController;
+  const stepTimeout = setTimeout(() => stepController.abort(), 900);
+
   try {
     const { data: step, error } = await supabase.rpc("ktk_step_player", {
       p_input_x: inputX,
       p_input_y: inputY,
       p_running: running,
       p_guarding: guarding
-    });
+    }).abortSignal(stepController.signal);
+
+    if (stepId !== state.stepSequence) return;
     if (error) {
       state.lastInputSignature = "";
       console.warn("KTK server movement:", error.message);
@@ -507,10 +522,21 @@ async function sendPosition(force = false) {
       window.KTKWorldEntities?.reconcileLocalPosition?.(serverX, serverY, direction);
     }
   } catch (error) {
-    state.lastInputSignature = "";
-    console.warn("KTK server movement:", error?.message || error);
+    if (stepId === state.stepSequence) {
+      state.lastInputSignature = "";
+      if (error?.name === "AbortError") {
+        console.warn("KTK server movement: request timed out; the next heartbeat will retry.");
+      } else {
+        console.warn("KTK server movement:", error?.message || error);
+      }
+    }
   } finally {
-    state.stepInFlight = false;
+    clearTimeout(stepTimeout);
+    if (state.stepController === stepController) state.stepController = null;
+    if (state.activeStepId === stepId) {
+      state.activeStepId = 0;
+      state.stepInFlight = false;
+    }
   }
 }
 
@@ -585,6 +611,9 @@ async function enter(options = {}) {
     state.lastInputSignature = "";
     state.lastCheckpoint = 0;
     state.stepInFlight = false;
+    state.stepController = null;
+    state.activeStepId = 0;
+    state.stepSequence++;
     void setPlayerVisibility(document.visibilityState === "visible");
     return { ok: true, player };
   } catch (error) {
@@ -601,6 +630,10 @@ async function enter(options = {}) {
     state.lastPosition = null;
     state.lastIntentSignature = "";
     state.lastInputSignature = "";
+    state.stepController?.abort();
+    state.stepController = null;
+    state.stepSequence++;
+    state.activeStepId = 0;
     state.stepInFlight = false;
     updateRemotes();
     const code = error?.code || error?.error_code || "";
@@ -661,6 +694,10 @@ async function markDead() {
   state.lastPosition = null;
   state.lastIntentSignature = "";
   state.lastInputSignature = "";
+  state.stepSequence++;
+  state.stepController?.abort();
+  state.stepController = null;
+  state.activeStepId = 0;
   state.stepInFlight = false;
   updateRemotes();
   setStatus("○ Personagem morto · fora do mundo", false);
@@ -673,6 +710,11 @@ async function leaveWorld() {
   if (!state.user) return { ok: false, error: "Não há uma sessão de jogador ativa para encerrar." };
 
   state.leaving = true;
+  state.stepSequence++;
+  state.activeStepId = 0;
+  state.stepInFlight = false;
+  state.stepController?.abort();
+  state.stepController = null;
   try {
     const { data, error } = await supabase.rpc("ktk_leave_world");
     if (error) throw error;
@@ -738,6 +780,11 @@ function startHeartbeat() {
     // solicitação idempotente keepalive como proteção contra fechamento da página.
     if (!state.online || !state.joined || !state.accessToken) return;
     state.leaving = true;
+    state.stepSequence++;
+    state.stepController?.abort();
+    state.stepController = null;
+    state.activeStepId = 0;
+    state.stepInFlight = false;
     const token = state.accessToken;
     const endpoint = SUPABASE_URL + "/rest/v1/rpc/ktk_leave_world";
     // keepalive permite que a requisição continue mesmo quando a página fecha.
