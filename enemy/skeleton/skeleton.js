@@ -2,7 +2,6 @@
 (() => {
   'use strict';
 
-  const LPC_ROOT = 'https://raw.githubusercontent.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator/04140673ec02906f8233523639733c83690df750/spritesheets/';
   const WORLD_SCALE = 1.28;
   const images = new Map();
   const damageTintCache = new WeakMap();
@@ -44,7 +43,7 @@
     if (!images.has(path)) {
       const image = new Image();
       image.crossOrigin = 'anonymous';
-      image.src = LPC_ROOT + path;
+      image.src = window.KTKLPC_CONFIG.spritesRoot + path;
       images.set(path, image);
     }
     return images.get(path);

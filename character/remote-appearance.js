@@ -82,7 +82,7 @@
     if(Date.now()<(Number(remote.appearanceRetryAt)||0)) return;
 
     const definitions=buildLayerDefinitions(characterData,wearables);
-    const loadSet=defs=>Promise.all(defs.map(def=>loadLayer(def.path,def.mode,def.palette).then(result=>({
+    const loadSet=defs=>Promise.all(defs.map(def=>window.KTKLPCAssetLoader.loadLayer(def.path,def.mode,def.palette).then(result=>({
       ...result,definition:def,fallbackMotion:result.path!==def.path
     }))));
     const loadMotion=motion=>loadSet(definitions.map(def=>({

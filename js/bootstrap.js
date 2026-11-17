@@ -15,7 +15,8 @@
     const context = preview && preview.getContext('2d');
     if (!preview || !context) return;
 
-    const root = 'https://raw.githubusercontent.com/LiberatedPixelCup/Universal-LPC-Spritesheet-Character-Generator/04140673ec02906f8233523639733c83690df750/spritesheets/';
+    const root = window.KTKLPC_CONFIG?.spritesRoot;
+    if (!root) throw new Error('A configuração central do LPC não foi carregada.');
     const paths = [
       'body/bodies/male/walk.png',
       'legs/pants2/male/walk.png',
