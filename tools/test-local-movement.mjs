@@ -114,7 +114,7 @@ context.remotePlayers.clear();
 
 // Réplica remota: a renderização usa snapshots atrasados e não recua
 // quando chega um pacote oficial posterior ao movimento já desenhado.
-const remoteMotionStart=replica.indexOf("function getRemoteMotionSample(remote, now)");
+const remoteMotionStart=replica.indexOf("var REMOTE_MOTION_SNAPSHOT_DELAY_MS");
 const remoteMotionEnd=replica.indexOf("\n  function normalizeRemoteWearables",remoteMotionStart);
 assert.ok(remoteMotionStart>=0&&remoteMotionEnd>remoteMotionStart);
 let remoteClock=1190;
@@ -157,6 +157,21 @@ remoteMotionContext.stepRemoteMotion(0.016);
 assert.ok(Math.abs(remoteEntity.x-90)<0.1);
 assert.equal(remoteEntity.moving,false,
   "A animação e o deslocamento devem parar na posição oficial confirmada.");
+
+const noRollbackAfterLongGap={
+  remotePlayers:new Map([["late",{
+    x:70,y:0,targetX:20,targetY:0,velocityX:0,velocityY:0,
+    direction:3,renderDirection:3,moving:true,
+    motionSnapshots:[{timestamp:"late-stop",receivedAt:2000,x:20,y:0,moving:false,direction:3}]
+  }]]),
+  window:{},performance:{now:()=>2180},SPEED:225,
+  KNOCKBACK_SECONDS:0.28,KNOCKBACK_HEIGHT:12,PUNCH_ANIMATION_SECONDS:0.42
+};
+vm.createContext(noRollbackAfterLongGap);
+vm.runInContext(replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",noRollbackAfterLongGap);
+noRollbackAfterLongGap.stepRemoteMotion(0.016);
+assert.equal(noRollbackAfterLongGap.remotePlayers.get("late").x,70,
+  "Uma posição de parada atrasada não pode puxar para trás o personagem que já foi exibido à frente.");
 
 const staleMotionContext={
   remotePlayers:new Map([["stale",{x:0,y:0,targetX:0,targetY:0,velocityX:225,velocityY:0,
@@ -331,8 +346,9 @@ assert.match(replica,/remote\.positionUpdatedAt/);
 assert.doesNotMatch(replica,/Math\.min\(450,packetAgeMs\)/);
 assert.match(playerSync,/moving:serverState\.moving/);
 assert.match(playerSync,/moving:row\.state\?\.moving/);
-assert.match(replica,/const extrapolationMs=Math\.min\(450,packetAgeMs\)/);
-assert.match(replica,/const hasFreshServerMotion/);
+assert.match(replica,/const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
+assert.match(replica,/const extrapolationMs=Math\.min\(REMOTE_MOTION_MAX_EXTRAPOLATION_MS,elapsed\)/);
+assert.match(replica,/const previousDirection=Number\.isFinite\(remote\.renderDirection\)/);
 assert.match(playerSync,/applyOwnServerPosition\(row,Number\(state\.lastMovementLatencyMs\)\|\|0\)/);
 assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-remote-snapshot-007"/);
 assert.match(session,/state\.lastLocalKnockbackAt=String\(player\.state\?\.last_knockback_at/);
