@@ -2602,7 +2602,14 @@
     return slot===undefined?-1:slot;
   }
 
-  function equipWearableFromInventory(inventoryIndex,targetSlot) {
+  async function equipWearableFromInventory(inventoryIndex,targetSlot) {
+    try {
+      await window.KTKOnline?.gameAction?.('equip',{slot_index:inventoryIndex,wear_slot:targetSlot});
+      return true;
+    } catch(error) {
+      toast(error?.message||'O servidor recusou o equipamento.');
+      return false;
+    }
     const item=inventory[inventoryIndex];
     if(!item?.wearSlot||!wearableSlotOrder.includes(targetSlot)) return false;
     if(item.wearSlot!==targetSlot) {
@@ -2663,7 +2670,14 @@
     return true;
   }
 
-  function unequipWearable(slot) {
+  async function unequipWearable(slot) {
+    try {
+      await window.KTKOnline?.gameAction?.('unequip',{wear_slot:slot});
+      return true;
+    } catch(error) {
+      toast(error?.message||'O servidor recusou a retirada.');
+      return false;
+    }
     const item=equippedWearables[slot];
     if(!item) return false;
     equippedWearables[slot]=null;
