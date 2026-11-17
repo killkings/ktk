@@ -2567,10 +2567,10 @@
       slot.classList.toggle('durability-worn',Boolean(item&&maximum>0&&durabilityPercent<=50&&durabilityPercent>25));
       slot.classList.toggle('durability-low',Boolean(item&&maximum>0&&durabilityPercent<=25));
       if(durabilityFill) durabilityFill.style.setProperty('--fill',`${durabilityPercent}%`);
-      const arrowCount=isArrowAmmo(item)?getArrowAmmoCount(item):0;
+      const stackCount=item?Math.max(1,Math.floor(Number(item.quantity)||1)):0;
       const quantityBadge=slot.querySelector('.inventory-quantity');
-      if(quantityBadge) quantityBadge.textContent=arrowCount>1?String(arrowCount):'';
-      slot.classList.toggle('has-quantity',arrowCount>1);
+      if(quantityBadge) quantityBadge.textContent=stackCount>1?String(stackCount):'';
+      slot.classList.toggle('has-quantity',stackCount>1);
       if(!item) {
         slot.title='Espaço vazio';
         slot.setAttribute('aria-label',`Espaço ${index+1}`);
@@ -2726,7 +2726,14 @@
   }
 
   function drawInventoryIcon(context,item) {
-    if(item?.iconCanvas) {
+    if(item?.iconEmoji) {
+      context.save();
+      context.font='30px system-ui';
+      context.textAlign='center';
+      context.textBaseline='middle';
+      context.fillText(item.iconEmoji,32,32);
+      context.restore();
+    } else if(item?.iconCanvas) {
       context.imageSmoothingEnabled=false;
       context.drawImage(item.iconCanvas,0,0,64,64);
     } else if(item?.image?.complete&&item.image.naturalWidth) {
