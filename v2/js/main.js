@@ -35,6 +35,7 @@ const ui = {
   joinError: $("#join-error"),
   leave: $("#leave-button"),
   canvas: $("#world"),
+  preview: $("#character-preview"),
   hudName: $("#hud-name"),
   connection: $("#connection-state"),
   position: $("#hud-position"),
@@ -65,6 +66,7 @@ const state = {
   kingUserId: null,
   keys: new Set(),
   animationFrame: 0,
+  previewFrame: 0,
   movementTimer: 0,
   errorTimer: 0
 };
@@ -86,6 +88,8 @@ function showGame(active) {
   ui.welcome.classList.toggle("screen-active", !active);
   ui.game.classList.toggle("active", active);
   if (!active) ui.game.classList.remove("active");
+  if (active) stopCreatorPreview();
+  else startCreatorPreview();
 }
 
 function controlSignature(controls) {
@@ -440,16 +444,7 @@ ui.form.addEventListener("submit", async event => {
   ui.join.disabled = true;
   ui.join.textContent = "Conectando…";
   try {
-    await enterWorld(displayName, {
-      gender: ui.gender.value,
-      skin: ui.skin.value,
-      eyes: "brown",
-      hair: ui.hair.value,
-      hairstyle: ui.hairstyle.value,
-      beard: "none",
-      mustache: "none",
-      clothing: ui.clothing.value
-    });
+    await enterWorld(displayName, creatorAppearance());
   } catch (error) {
     if (state.entryAttempted && state.userId) {
       try {
@@ -499,6 +494,49 @@ window.addEventListener("resize", () => {
   );
 });
 
+function creatorAppearance() {
+  return {
+    gender: ui.gender.value,
+    skin: ui.skin.value,
+    eyes: "brown",
+    hair: ui.hair.value,
+    hairstyle: ui.hairstyle.value,
+    beard: "none",
+    mustache: "none",
+    clothing: ui.clothing.value
+  };
+}
+
+function stopCreatorPreview() {
+  if (state.previewFrame) cancelAnimationFrame(state.previewFrame);
+  state.previewFrame = 0;
+}
+
+function startCreatorPreview() {
+  if (state.joined || state.previewFrame || !ui.preview) return;
+  const draw = () => {
+    if (state.joined || !ui.preview) {
+      state.previewFrame = 0;
+      return;
+    }
+    const context = ui.preview.getContext("2d");
+    if (context) {
+      context.clearRect(0,0,ui.preview.width,ui.preview.height);
+      const previewPlayer = {
+        userId: "__ktk_v2_creator_preview__",
+        appearance: creatorAppearance(),
+        direction: 2,
+        moving: false,
+        running: false,
+        state: { moving:false, running:false, wearables:{} }
+      };
+      lpcRenderer.draw(context,previewPlayer,ui.preview.width/2,ui.preview.height/2,1/60);
+    }
+    state.previewFrame = requestAnimationFrame(draw);
+  };
+  state.previewFrame = requestAnimationFrame(draw);
+}
+
 function refreshHairstyleOptions() {
   if (!ui.hairstyle) return;
   const gender = ui.gender?.value || "male";
@@ -530,6 +568,15 @@ async function handleServerDeath() {
 
 ui.gender.addEventListener("change", refreshHairstyleOptions);
 refreshHairstyleOptions();
+[ui.gender,ui.skin,ui.hair,ui.hairstyle,ui.clothing].forEach(control=>{
+  control.addEventListener("change",()=>{
+    if(!state.joined) {
+      stopCreatorPreview();
+      startCreatorPreview();
+    }
+  });
+});
+startCreatorPreview();
 
 function keyIsCrown(event) {
   return event.key.toLowerCase() === "e";
