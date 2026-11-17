@@ -2256,6 +2256,7 @@
       ? Math.max(1,Number(weaponItem?.materialDamageBonuses?.[target.creatureType])||1)
       : 1;
     const damage=Math.floor(baseDamage*damageMultiplier*materialDamageMultiplier);
+    let targetHealth=null;
     if(weaponAttack&&weaponItem&&weaponItem.durabilityUnit!=='blocks') {
       weaponItem.durability=Math.max(0,weaponItem.durability-1);
       if(weaponItem.durability===0) {
@@ -2277,7 +2278,7 @@
       if(health.value<=health.min) handlePlayerDeath();
     } else if(target?.type==='player'&&target.id) {
       const previousHealth=Number(target.combatStats?.health);
-      const targetHealth=Number.isFinite(previousHealth)?Math.max(0,previousHealth-damage):null;
+      targetHealth=Number.isFinite(previousHealth)?Math.max(0,previousHealth-damage):null;
       target.combatStats={
         ...(target.combatStats||{}),
         ...(targetHealth===null?{}:{health:targetHealth})
@@ -2793,6 +2794,7 @@
       entity.displayName=remote.displayName||remote.display_name||entity.displayName||'Aventureiro';
       entity.character=remote.character||entity.character||{};
       entity.wearables=remote.wearables||entity.wearables||{};
+      entity.combatStats=remote.combatStats||entity.combatStats||{};
       entity.type='player';
       entity.radius=COLLISION_RADIUS;
       remotePlayers.set(id,entity);
