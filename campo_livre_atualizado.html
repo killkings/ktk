@@ -377,7 +377,7 @@
 })();
 </script>
 <script src="./personagem.js?v=stable-20261115-13"></script>
-<script src="./mapa/player/stats.js?v=20261117-world-revisions1"></script>
+<script src="./mapa/player/stats.js?v=20261117-final-authority-audit1"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
 <script src="./enemy/skeleton/skeleton.js?v=stable-20261117-combat1"></script>
 <script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
@@ -2055,12 +2055,8 @@
   }
 
   function resolvePunchHit() {
-    const remoteTarget=findRemotePlayerInAttackArc(punch.direction,punch.range);
-    if(remoteTarget) {
-      applyCombatHit(player,remoteTarget,punch.direction);
-      return;
-    }
-    applyCombatHit(player,window.KTKEnemySkeleton.entity,punch.direction);
+    // O servidor escolhe o alvo real pela posição oficial dos jogadores e inimigos.
+    applyCombatHit(player,null,punch.direction);
   }
 
   function isArrowWeapon(item) {
@@ -2366,6 +2362,9 @@
         .catch(error=>toast(error?.message||'O servidor recusou o ataque.'));
       return true;
     }
+    // Nenhum cliente pode aplicar dano, desgaste ou knockback a outro
+    // jogador/inimigo. Os impactos de todas as entidades são confirmados pelo banco.
+    if(attacker!==player) return false;
     if(target===window.KTKEnemySkeleton.entity && target.defeated) return false;
     if(target?.type==='player'&&target.id&&target.combatStats?.health===0) return false;
     const vector=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}][direction];
@@ -2486,37 +2485,8 @@
     return dy<0?0:2;
   }
 
-  function updateEnemyCombat(deltaSeconds) {
-    // A IA e os ataques do inimigo são executados pela simulação do Postgres.
-    return;
-    const enemy=window.KTKEnemySkeleton.entity;
-    if(enemy.defeated) return;
-    enemy.attackCooldown=Math.max(0,enemy.attackCooldown-deltaSeconds);
-    if(!enemy.attacking) enemy.stamina=Math.min(enemy.maxStamina,enemy.stamina+deltaSeconds*4);
-    if(enemy.attacking) {
-      enemy.attackElapsed+=deltaSeconds;
-      if(!enemy.attackHitApplied&&enemy.attackElapsed>=PUNCH_IMPACT_SECONDS) {
-        enemy.attackHitApplied=true;
-        applyCombatHit(enemy,player,enemy.direction);
-      }
-      if(enemy.attackElapsed>=PUNCH_ANIMATION_SECONDS) enemy.attacking=false;
-      return;
-    }
-    const playerPosition=getEntityWorldPosition(player);
-    const dx=playerPosition.x-enemy.x;
-    const dy=playerPosition.y-enemy.y;
-    const attackRange=PUNCH_RANGE*TILE+COLLISION_RADIUS;
-    if(Math.hypot(dx,dy)>attackRange||enemy.attackCooldown>0||enemy.stamina<PUNCH_STAMINA_COST) return;
-    enemy.direction=directionToward(dx,dy);
-    enemy.stamina-=PUNCH_STAMINA_COST;
-    enemy.attackCooldown=PUNCH_COOLDOWN_SECONDS;
-    enemy.attacking=true;
-    enemy.attackElapsed=0;
-    enemy.attackHitApplied=false;
-    window.KTKOnline?.broadcastCombat({
-      kind:'skeleton_attack',direction:enemy.direction,
-      duration:PUNCH_ANIMATION_SECONDS,frame_count:6
-    });
+  function updateEnemyCombat() {
+    // A IA, o deslocamento e os ataques do esqueleto pertencem ao servidor.
   }
 
   function getEquipmentAttributeDetails(item) {
@@ -3224,21 +3194,7 @@
       }
       return true;
     },
-    applyRemoteDamage:event=>{
-      if(!event||playerDead) return false;
-      const damage=Math.max(0,Number(event.damage)||0);
-      if(!damage) return false;
-      const health=window.KTKPlayerStats.stats.health;
-      wearEquippedArmor();
-      health.value=Math.max(health.min,health.value-damage);
-      window.KTKPlayerStats.render();
-      startKnockback(player,{
-        x:Number(event.knockback_x)||0,
-        y:Number(event.knockback_y)||0
-      });
-      if(health.value<=health.min) handlePlayerDeath();
-      return true;
-    },
+    applyRemoteDamage:()=>false,
     applyWorldEntity,applyWorldState,
     serverDeath:()=>handlePlayerDeath(true),
     setLocalState:(x,y,direction)=>{
@@ -3540,6 +3496,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-world-revisions1"></script>
+<script type="module" src="./js/online.js?v=20261117-final-authority-audit1"></script>
 </body>
 </html>
