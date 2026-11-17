@@ -70,6 +70,14 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117173000_ktk_v2_server_simulation.sql
+      - name: Apply V2 projectile migration to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117174000_ktk_v2_projectiles.sql
       - name: Test server lifecycle, movement and crown
         env:
           PGHOST: localhost
