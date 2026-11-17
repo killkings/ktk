@@ -98,6 +98,7 @@ const context = vm.createContext({
   updateKingStatus() {},
   camera: {x:0,y:0},
   walkTime: 0,
+  idleTime: 0,
   player: {knockback:null, knockbackHeight:0}
 });
 
