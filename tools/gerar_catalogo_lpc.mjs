@@ -14,9 +14,15 @@ import { fileURLToPath } from "node:url";
 const GAME_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CONFIG_FILE = path.join(GAME_ROOT, "js", "lpc-config.js");
 const configSource = await fs.readFile(CONFIG_FILE, "utf8");
-const configMatch = configSource.match(/const LPC_SOURCE_CONFIG = (\{[\s\S]*?\});/);
-if (!configMatch) throw new Error("Não foi possível ler a configuração LPC em js/lpc-config.js.");
-const LPC_SOURCE_CONFIG = JSON.parse(configMatch[1]);
+const configMarker = "const LPC_SOURCE_CONFIG =";
+const configStart = configSource.indexOf(configMarker);
+const configEnd = configSource.indexOf(";", configStart);
+if (configStart < 0 || configEnd < 0) {
+  throw new Error("Não foi possível ler a configuração LPC em js/lpc-config.js.");
+}
+const LPC_SOURCE_CONFIG = JSON.parse(
+  configSource.slice(configStart + configMarker.length, configEnd).trim(),
+);
 
 function runGit(cwd, args) {
   try {
