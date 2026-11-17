@@ -1,6 +1,6 @@
 # Mapa do mundo
 
-`mapa.js` gera e desenha o terreno localmente. O HTML principal o carrega como um arquivo separado. Os chãos, árvores e flores vêm das folhas sazonais em `LPC-main/Terrain/`; os arquivos são lidos da cópia local.
+`mapa.js` gera e desenha o terreno proceduralmente. O HTML principal o carrega como um arquivo separado. Os tiles sazonais de `LPC-main/Terrain/` são opcionais; quando não estão presentes, o jogo usa o desenho procedural de chão, árvores e flores. Os sprites de personagens, cabelos, esqueletos, armas e equipamentos vêm do repositório oficial Universal LPC por URL fixa, sem cópia dos PNGs no KTK.
 
 ## Organização
 
