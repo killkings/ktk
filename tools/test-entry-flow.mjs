@@ -39,6 +39,16 @@ function element(id) {
 }
 
 const windowListeners = new Map();
+const screenNames = ["welcome", "death", "creator", "game"];
+const screenState = Object.fromEntries(screenNames.map(name => [name, false]));
+const screens = Object.fromEntries(screenNames.map(name => [name, {
+  classList: {
+    toggle(_className, active) { screenState[name] = Boolean(active); },
+    contains() { return screenState[name]; }
+  }
+}]));
+let throwInitialStateError = false;
+const runtimeErrors = [];
 const window = {
   KTKOnline: null,
   addEventListener(type, callback) {
@@ -64,7 +74,7 @@ const document = {
 const context = vm.createContext({
   window,
   document,
-  console: { error() {}, warn() {} },
+  console: { error(...args) { runtimeErrors.push(args.map(value => String(value)).join(" ")); }, warn() {} },
   setTimeout(callback) {
     return { callback };
   },
@@ -72,7 +82,24 @@ const context = vm.createContext({
   character: {},
   newCharacterRequired: false,
   gameStarted: false,
-  toastTimer: 0
+  playerDead: false,
+  toastTimer: 0,
+  screens,
+  showScreen(which) {
+    for (const name of screenNames) screens[name].classList.toggle("active", name === which);
+  },
+  applyServerState() {
+    assert.equal(screens.game.classList.contains("active"), true,
+      "A tela do jogo deve abrir antes da hidratação visual do estado.");
+    if (throwInitialStateError) throw new Error("Falha visual simulada.");
+  },
+  renderInventory() {},
+  rebuildCharacterLayers() { return Promise.resolve(); },
+  updateKingStatus() {},
+  camera: {x:0,y:0},
+  walkTime: 0,
+  idleTime: 0,
+  player: {knockback:null, knockbackHeight:0}
 });
 
 vm.runInContext(lifecycle, context, { filename: "game/game-lifecycle.js" });
@@ -113,11 +140,34 @@ assert.equal(button.disabled, false, "O botão deve ser reativado após uma resp
 assert.equal(button.textContent, "Entrar no mundo →",
   "O botão deve restaurar o rótulo após falha em uma etapa intermediária.");
 assert.equal(element("toast").textContent, "Falha simulada da RPC.");
+assert.equal(screens.game.classList.contains("active"), false,
+  "Uma falha de conexão não deve abrir o mundo.");
+
+throwInitialStateError = true;
+window.KTKOnline = {
+  async enter() {
+    enterCalls++;
+    return { ok: true, player: { state: { health: 100 }, x: 84, y: 96, direction: 2 } };
+  }
+};
+await click();
+assert.equal(screens.game.classList.contains("active"), true,
+  "O mundo deve aparecer mesmo quando a hidratação visual falhar. " +
+  "Toast: " + element("toast").textContent +
+  " | erros: " + runtimeErrors.join(" || "));
+assert.equal(button.disabled, false);
+assert.equal(button.textContent, "Entrar no mundo →");
+assert.equal(context.gameStarted, true);
+assert.equal(element("toast").textContent,
+  "Você entrou no mundo, mas parte da interface não foi carregada.");
 
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
 assert.match(html, /id="enter-world"/);
 assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
-assert.match(html, /game-lifecycle\.js\?v=20261117-entry-timeouts-001/);
-assert.match(html, /online\.js\?v=20261117-entry-timeouts-001/);
+assert.match(html, /game-lifecycle\.js\?v=20261117-entry-screen-recovery-001/);
+assert.match(html, /online\.js\?v=20261117-entry-screen-recovery-001/);
+assert.doesNotMatch(lifecycle, /onProgress\s*:/);
+assert.ok(lifecycle.indexOf("showScreen('game')") < lifecycle.indexOf("applyServerState(onlinePlayer.state)"),
+  "A tela do mundo deve ser ativada antes de atualizar os dados visuais.");
 
 console.log("World entry button, name validation, online-module readiness and error feedback passed.");

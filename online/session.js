@@ -21,10 +21,9 @@ export function setStatus(message, connected = false) {
   el.style.borderColor = connected ? "rgba(155,215,135,.55)" : "rgba(238,190,120,.45)";
 }
 
-function reportEntryProgress(options, message) {
-  try { options.onProgress?.(message); }
-  catch (error) { console.warn("KTK entry progress callback:", error); }
-  setStatus("● " + message, false);
+function reportEntryProgress(_options, message) {
+  // Progresso técnico apenas no console: não polui o criador nem a HUD.
+  console.debug("KTK entry:", message);
 }
 
 export async function enter(options = {}) {

@@ -119,7 +119,9 @@ var  leavingGame = false;
       nameInput?.focus();
       return;
     }
+
     startingGame=true;
+    let gameScreenOpened=false;
     if(button) {
       button.disabled=true;
       button.dataset.previousText=button.textContent;
@@ -127,15 +129,13 @@ var  leavingGame = false;
       button.style.opacity='.7';
       button.style.cursor='wait';
     }
+
     try {
       const online=await waitForOnlineModule();
       const onlineResult=await online.enter({
         displayName,
         character:{...character},
-        newCharacter:newCharacterRequired,
-        onProgress:message=>{
-          if(button) button.textContent=message;
-        }
+        newCharacter:newCharacterRequired
       });
       if(!onlineResult.ok) {
         toast(onlineResult.error||'Não foi possível entrar no mundo online.');
@@ -148,18 +148,10 @@ var  leavingGame = false;
       }
 
       const onlinePlayer=onlineResult.player;
-      if(onlinePlayer?.state) applyServerState(onlinePlayer.state);
-      const serverSpawnX=Number(onlinePlayer?.x);
-      const serverSpawnY=Number(onlinePlayer?.y);
-      const serverSpawnDirection=Number(onlinePlayer?.direction);
-      if(Number.isFinite(serverSpawnX)&&Number.isFinite(serverSpawnY)) {
-        window.KTKWorldEntities?.setLocalState?.(
-          serverSpawnX,serverSpawnY,
-          Number.isFinite(serverSpawnDirection)?serverSpawnDirection:2
-        );
-      }
-      if(newCharacterRequired) {
-        // Os equipamentos e atributos iniciais já foram confirmados pelo servidor.
+      const isNewCharacter=Boolean(newCharacterRequired);
+      const wasAlreadyPlaying=Boolean(gameStarted);
+
+      if(isNewCharacter) {
         player.knockback=null; player.knockbackHeight=0;
         camera.x=0; camera.y=0; walkTime=0; idleTime=0;
         keys.clear();
@@ -176,24 +168,70 @@ var  leavingGame = false;
         }
         playerInputX=0; playerInputY=0;
         playerMoving=false; playerRunning=false;
-        playerDead=false;
-        newCharacterRequired=false;
-        gameStarted=true;
+      } else if(!wasAlreadyPlaying) {
+        camera.x=0; camera.y=0; walkTime=0; idleTime=0;
+      }
+
+      // A conexão e a posição já foram confirmadas pelo servidor. Mostra o
+      // mundo antes de hidratar inventário e sprites, que são etapas visuais.
+      playerDead=false;
+      newCharacterRequired=false;
+      gameStarted=true;
+      if(button) button.textContent='Entrar no mundo →';
+      showScreen('game');
+      gameScreenOpened=screens.game.classList.contains('active');
+      if(!gameScreenOpened) throw new Error('Não foi possível abrir a tela do mundo.');
+
+      let visualPreparationFailed=false;
+      try {
+        const serverSpawnX=Number(onlinePlayer?.x);
+        const serverSpawnY=Number(onlinePlayer?.y);
+        const serverSpawnDirection=Number(onlinePlayer?.direction);
+        if(Number.isFinite(serverSpawnX)&&Number.isFinite(serverSpawnY)) {
+          window.KTKWorldEntities?.setLocalState?.(
+            serverSpawnX,serverSpawnY,
+            Number.isFinite(serverSpawnDirection)?serverSpawnDirection:2
+          );
+        }
+      } catch(error) {
+        visualPreparationFailed=true;
+        console.error('KTK initial spawn rendering:',error);
+      }
+
+      try {
+        if(onlinePlayer?.state) applyServerState(onlinePlayer.state);
+      } catch(error) {
+        visualPreparationFailed=true;
+        console.error('KTK initial state rendering:',error);
+      }
+
+      try {
         renderInventory();
-        rebuildCharacterLayers();
+      } catch(error) {
+        visualPreparationFailed=true;
+        console.error('KTK initial inventory rendering:',error);
+      }
+
+      void rebuildCharacterLayers().catch(error=>{
+        console.error('KTK initial character appearance:',error);
+      });
+
+      try {
+        updateKingStatus();
+      } catch(error) {
+        visualPreparationFailed=true;
+        console.error('KTK initial king status rendering:',error);
+      }
+
+      if(visualPreparationFailed) {
+        toast('Você entrou no mundo, mas parte da interface não foi carregada.');
+      } else if(isNewCharacter) {
         toast('Novo personagem criado. Boa exploração!');
-      } else if(!gameStarted) {
-        gameStarted=true;
-        camera.x=0; camera.y=0; walkTime=0;
+      } else if(!wasAlreadyPlaying) {
         toast('Você chegou ao mundo. Explore à vontade!');
       } else {
         toast('Aparência atualizada. Boa exploração!');
       }
-
-      if(button) button.textContent='Entrar no mundo →';
-      showScreen('game');
-
-      updateKingStatus();
     } catch(error) {
       console.error('KTK startGame:',error);
       const message=String(error?.message||'Não foi possível preparar o jogo. Tente entrar novamente.');
@@ -204,7 +242,9 @@ var  leavingGame = false;
         button.disabled=false;
         button.style.opacity='';
         button.style.cursor='';
-        if(!gameStarted) button.textContent=button.dataset.previousText||'Entrar no mundo →';
+        button.textContent=gameScreenOpened
+          ? 'Entrar no mundo →'
+          : (button.dataset.previousText||'Entrar no mundo →');
       }
     }
   }

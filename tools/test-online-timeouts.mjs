@@ -29,11 +29,13 @@ const lifecycle = await readFile(new URL("../game/game-lifecycle.js", import.met
 
 assert.match(session, /A sincronização do catálogo de equipamentos/);
 assert.match(session, /A entrada do personagem no servidor/);
-assert.match(session, /options\.onProgress/);
+assert.match(session, /function reportEntryProgress\(_options, message\)/);
+assert.doesNotMatch(session, /options\.onProgress|setStatus\("● " \+ message/);
 assert.match(realtimeSource, /A autorização do canal multiplayer/);
 assert.match(realtimeSource, /A consulta do estado compartilhado do mundo/);
 assert.match(playerSyncSource, /request = request\.abortSignal\(signal\)/);
 assert.match(catalog, /request=request\.abortSignal\(signal\)/);
-assert.match(lifecycle, /onProgress:message/);
+assert.doesNotMatch(lifecycle, /onProgress\s*:/);
+assert.ok(lifecycle.indexOf("showScreen('game')") < lifecycle.indexOf("applyServerState(onlinePlayer.state)"));
 
 console.log("Online entry phase deadlines, abort signals and progress checks passed.");
