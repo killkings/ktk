@@ -27,7 +27,7 @@ const state = {
   leaving: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
   lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", lastInputSignature: "",
-  lastCheckpoint: 0, stepInFlight: false, combatSequence: 0,
+  stepInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), profileLoads: new Map(),
   profileRetryTimers: new Map(), profileRetryCounts: new Map(), seenCombatEvents: new Set(),
