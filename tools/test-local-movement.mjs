@@ -67,6 +67,38 @@ assert.equal(replicaContext.window.KTKWorldEntities.getLocalControls().guarding,
 replicaContext.shieldStaminaExhausted = true;
 assert.equal(replicaContext.window.KTKWorldEntities.getLocalControls().guarding, false);
 
+// Registra todas as mudanças de controle feitas durante uma RPC pendente,
+// inclusive retornar ao vetor inicial após uma mudança intermediária.
+clock = 1300;
+keys.delete("d");
+keys.delete("shift");
+keys.add("a");
+replicaContext.rightMouseHeld = false;
+replicaContext.shieldStaminaExhausted = false;
+const leftIntent = replicaContext.window.KTKWorldEntities.getLocalControls();
+assert.equal(leftIntent.inputX, -1);
+clock = 1350;
+keys.delete("a");
+keys.add("d");
+const returnedIntent = replicaContext.window.KTKWorldEntities.getLocalControls();
+assert.equal(returnedIntent.inputX, 1);
+const intentTimeline = replicaContext.window.KTKWorldEntities.getLocalIntentTimeline(
+  1250,
+  { inputX:1,inputY:0,running:false,guarding:false }
+);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(intentTimeline.map(segment => ({
+    inputX:segment.inputX,
+    inputY:segment.inputY,
+    durationMs:Math.round(segment.durationMs)
+  })))),
+  [
+    {inputX:1,inputY:0,durationMs:50},
+    {inputX:-1,inputY:0,durationMs:50}
+  ],
+  "O histórico precisa preservar todas as direções intermediárias e suas durações."
+);
+
 // Timing split: for a 400ms DB interval with 180ms of the new intent,
 // the previous input owns 220ms and the new input owns 180ms.
 const elapsedMs = 400;
@@ -225,8 +257,8 @@ returnedDirection.setAuthoritativePlayerPosition(
   {inputX:1,inputY:0,running:false,guarding:false,intentRevision:10},
   {inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:30,intentRevision:12}
 );
-assert.ok(Math.abs(returnedDirection.playerVisual.targetX-106.75)<0.01,
-  "Voltar ao mesmo vetor com outra geração não pode ser confundido com a intenção original.");
+assert.ok(Math.abs(returnedDirection.playerVisual.targetX-145)<0.01,
+  "Voltar ao mesmo vetor com outra geração deve manter o deslocamento do trecho anterior à última troca.");
 const sameIntent=makeIntentTimingContext(0);
 sameIntent.setAuthoritativePlayerPosition(
   100,120,0,false,400,
@@ -318,7 +350,7 @@ assert.match(resetPatch,/coalesce\(\(v_state->>'moving'\)::boolean, false\)/);
 assert.match(movement,/p_input_age_ms:\s*inputAgeAtServer/);
 assert.match(movement,/payload\.inputAgeMs/);
 assert.match(movement,/lastMovementLatencyMs/);
-assert.match(movement,/reconcileLocalPosition\?\.\(x, y, direction, latencyMs, requestInput\)/);
+assert.match(movement,/reconcileLocalPosition\?\.\(x, y, direction, latencyMs, requestInput, intentTimeline\)/);
 assert.match(movement,/stepAccepted && latestMoving/);
 assert.match(input,/function sendImmediateMovementIntent\(/);
 assert.match(input,/if\(!wasPressed\)[\s\S]*?sendImmediateMovementIntent\(\)/);
@@ -328,6 +360,12 @@ assert.match(gameState,/errorDistance\/correctionSpeed/);
 assert.match(gameState,/maxBackward/);
 assert.match(gameState,/Math\.min\(oneWayLatencyMs,intentAgeMs\)/);
 assert.match(gameState,/requestInput\.intentRevision===controls\.intentRevision/);
+assert.match(gameState,/Array\.isArray\(intentTimeline\)/);
+assert.match(gameState,/maxBackward=Math\.hypot\(actualMoveX,actualMoveY\)\*0\.25/);
+assert.match(replica,/localMovementIntentHistory/);
+assert.match(replica,/function getLocalMovementIntentTimeline\(/);
+assert.match(movement,/getLocalIntentTimeline/);
+assert.match(movement,/applyServerState\?\.\(step\.state\)/);
 assert.match(movement,/intentRevision: payload\.intentRevision/);
 assert.match(replica,/localMovementIntentRevision/);
 assert.match(gameState,/remote\?\.targetX/);
@@ -350,7 +388,9 @@ assert.match(replica,/const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
 assert.match(replica,/const extrapolationMs=Math\.min\(REMOTE_MOTION_MAX_EXTRAPOLATION_MS,elapsed\)/);
 assert.match(replica,/const previousDirection=Number\.isFinite\(remote\.renderDirection\)/);
 assert.match(playerSync,/applyOwnServerPosition\(row,Number\(state\.lastMovementLatencyMs\)\|\|0\)/);
-assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-remote-snapshot-007"/);
+assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-movement-reconcile-001"/);
+assert.match(session,/movement\.js\?v=20261117-movement-reconcile-001/);
+assert.match(online,/movement\.js\?v=20261117-movement-reconcile-001/);
 assert.match(session,/state\.lastLocalKnockbackAt=String\(player\.state\?\.last_knockback_at/);
 assert.doesNotMatch(session,/spawnTimestamp/);
 assert.match(rootHtml,/20261117-remote-snapshot-007/);
@@ -371,14 +411,15 @@ for(const [name,source] of Object.entries(onlineModules)) {
   assert.doesNotMatch(source,/20261117-(online-separation-001|movement-authority-002|realtime-entry-fix-001|entry-timeouts-001)/,
     "Módulo ESM ainda usa uma chave antiga: "+name);
   for(const match of source.matchAll(/from\s+["']([^"']+\.js\?v=[^"']+)["']/g)) {
-    assert.ok(match[1].endsWith("?v=20261117-remote-snapshot-007"),
-      "Dependência ESM sem a chave única em "+name+": "+match[1]);
+    const allowedMovementVersion=match[1].endsWith("movement.js?v=20261117-movement-reconcile-001");
+    assert.ok(allowedMovementVersion||match[1].endsWith("?v=20261117-remote-snapshot-007"),
+      "Dependência ESM sem a chave esperada em "+name+": "+match[1]);
   }
 }
 for(const [path,version] of [
   ["render/world-renderer.js","20261117-remote-snapshot-007"],
-  ["multiplayer/player-replica.js","20261117-remote-snapshot-007"],
-  ["js/game-state.js","20261117-remote-snapshot-007"],
+  ["js/game-state.js","20261117-movement-reconcile-001"],
+  ["multiplayer/player-replica.js","20261117-movement-reconcile-001"],
   ["input/input-controller.js","20261117-remote-snapshot-007"],
   ["js/online.js","20261117-remote-snapshot-007"]
 ]) {

@@ -45,7 +45,7 @@ function compareServerTimestamps(a, b) {
   return leftText === rightText ? 0 : (leftText < rightText ? -1 : 1);
 }
 
-export function applyOwnServerPosition(position, latencyMs = 0, requestInput = null) {
+export function applyOwnServerPosition(position, latencyMs = 0, requestInput = null, intentTimeline = null) {
   const x = Number(position?.x);
   const y = Number(position?.y);
   const positionUpdatedAt = String(position?.position_updated_at || position?.positionUpdatedAt || "");
@@ -69,7 +69,7 @@ export function applyOwnServerPosition(position, latencyMs = 0, requestInput = n
     positionUpdatedAt,
     receivedAt: Date.now()
   };
-  window.KTKWorldEntities?.reconcileLocalPosition?.(x, y, direction, latencyMs, requestInput);
+  window.KTKWorldEntities?.reconcileLocalPosition?.(x, y, direction, latencyMs, requestInput, intentTimeline);
   return true;
 }
 
@@ -109,6 +109,7 @@ export async function sendPosition(force = false) {
   let stepAccepted = false;
   try {
     const requestStartedAt = Date.now();
+    const requestStartedPerformanceAt = performance.now();
     const { data: step, error } = await supabase.rpc("ktk_step_player", {
       p_input_x: inputX,
       p_input_y: inputY,
@@ -133,17 +134,44 @@ export async function sendPosition(force = false) {
     state.lastInputSignature = inputSignature;
     stepAccepted = Boolean(step && step.accepted !== false);
     if (step && Number.isFinite(Number(step.x)) && Number.isFinite(Number(step.y))) {
+      // O próprio RPC já devolve o estado usado pelo servidor neste passo.
+      // Aplicá-lo antes da previsão evita calcular corrida com stamina antiga.
+      if (step.state && typeof step.state === "object") {
+        try {
+          window.KTKWorldEntities?.applyServerState?.(step.state);
+        } catch (stateError) {
+          console.warn("KTK movement state update:", stateError?.message || stateError);
+        }
+      }
+
       const serverX = Number(step.x);
       const serverY = Number(step.y);
       const direction = Number.isFinite(Number(step.direction))
         ? Math.max(0, Math.min(3, Number(step.direction)))
         : payload.direction;
+      const acceptedRequestInput = step.state && typeof step.state === "object"
+        ? {
+            ...requestInput,
+            inputX: Number.isFinite(Number(step.state.movement_input_x))
+              ? Number(step.state.movement_input_x) : requestInput.inputX,
+            inputY: Number.isFinite(Number(step.state.movement_input_y))
+              ? Number(step.state.movement_input_y) : requestInput.inputY,
+            running: step.state.movement_running !== undefined
+              ? Boolean(step.state.movement_running) : requestInput.running,
+            guarding: step.state.movement_guarding !== undefined
+              ? Boolean(step.state.movement_guarding) : requestInput.guarding
+          }
+        : requestInput;
+      const estimatedServerSnapshotAt = requestStartedPerformanceAt + requestLatencyMs / 2;
+      const intentTimeline = window.KTKWorldEntities?.getLocalIntentTimeline?.(
+        estimatedServerSnapshotAt, acceptedRequestInput
+      );
       applyOwnServerPosition({
         x: serverX,
         y: serverY,
         direction,
         position_updated_at: step.position_updated_at
-      }, requestLatencyMs, requestInput);
+      }, requestLatencyMs, acceptedRequestInput, intentTimeline);
     }
   } catch (error) {
     if (stepId === state.stepSequence) {
