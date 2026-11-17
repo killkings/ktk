@@ -4,7 +4,7 @@ import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
 } from "./supabase-client.js?v=20261117-online-separation-001";
 import { sendPosition } from "./movement.js?v=20261117-online-separation-001";
-import { subscribeWorld, trackPresence } from "./realtime.js?v=20261117-entry-timeouts-001";
+import { subscribeWorld } from "./realtime.js?v=20261117-realtime-entry-fix-001";
 import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-entry-timeouts-001";
 import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-entry-timeouts-001";
 import { withTimeout } from "./request-timeout.js?v=20261117-entry-timeouts-001";
@@ -99,15 +99,8 @@ export async function enter(options = {}) {
       if (error) throw error;
       player = data?.player;
     }
-    if (player?.is_alive) {
-      reportEntryProgress(options, "Lendo o estado inicial do personagem...");
-      try {
-        player.state = (await withTimeout("A leitura do estado inicial do personagem", 8000,
-          signal => getPlayerState(signal))).state;
-      } catch (stateError) {
-        console.warn("KTK initial player state:", stateError);
-      }
-    }
+    // ktk_join_world já devolve posição, aparência e player.state na mesma resposta.
+    // Evita uma segunda RPC antes da abertura do mundo.
     if (!player?.is_alive) {
       return { ok: false, dead: true, player, error: "Este personagem morreu. Crie outro para voltar ao mundo." };
     }
@@ -115,7 +108,6 @@ export async function enter(options = {}) {
     await subscribeWorld(message => reportEntryProgress(options, message));
     setStatus("● Online · mundo principal", true);
     state.joined = true;
-    void trackPresence();
     state.lastInputSignature = "";
     state.lastCheckpoint = 0;
     state.stepInFlight = false;

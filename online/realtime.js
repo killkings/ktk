@@ -1,8 +1,8 @@
-/* Canal Realtime, Presence e fotografias oficiais do mundo. */
+/* Canal Broadcast privado e fotografias oficiais do mundo. */
 import { state } from "./state.js?v=20261117-online-separation-001";
-import { supabase, WORLD_ID, TOPIC } from "./supabase-client.js?v=20261117-online-separation-001";
+import { supabase, TOPIC } from "./supabase-client.js?v=20261117-online-separation-001";
 import {
-  acceptDatabaseChange, acceptWorldEntityChange, rebuildPresence, loadExistingPlayers
+  acceptDatabaseChange, acceptWorldEntityChange, loadExistingPlayers
 } from "./player-sync.js?v=20261117-entry-timeouts-001";
 import { withTimeout } from "./request-timeout.js?v=20261117-entry-timeouts-001";
 
@@ -21,14 +21,34 @@ export async function loadWorldState(signal) {
   return data;
 }
 
+function makeChannelError(status, err) {
+  const detail = err && typeof err === "object"
+    ? [err.message, err.cause?.message, err.code, err.hint].filter(Boolean).join(" · ")
+    : String(err || "");
+  const failure = new Error(
+    "Não foi possível entrar no canal multiplayer (" + status + ")" +
+    (detail ? ": " + detail : ".")
+  );
+  if(err && typeof err === "object") {
+    if(err.code) failure.code = err.code;
+    if(err.hint) failure.hint = err.hint;
+    if(err.details) failure.details = err.details;
+    failure.cause = err;
+  }
+  return failure;
+}
+
 export async function subscribeWorld(onProgress = () => {}) {
   onProgress("Validando a autorização do Realtime...");
   await withTimeout("A autorização do canal multiplayer", 8000, () => supabase.realtime.setAuth());
+
+  // O mundo usa Broadcasts disparados por gatilhos SQL. Presence é opcional e
+  // foi removido deste canal crítico: um limite de Presence pode fechar o
+  // canal inteiro, interrompendo também os Broadcasts de movimento e entidades.
   state.channel = supabase.channel(TOPIC, {
     config: {
       private: true,
-      broadcast: { self: false, ack: false },
-      presence: { key: state.user.id }
+      broadcast: { self: false, ack: false }
     }
   });
   state.channel
@@ -36,51 +56,70 @@ export async function subscribeWorld(onProgress = () => {}) {
     .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => acceptWorldEntityChange(payload))
     .on("broadcast", { event: "ENTITY_UPDATE" }, ({ payload }) => acceptWorldEntityChange(payload))
-    .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) => acceptWorldEntityChange(payload,true))
-    .on("presence", { event: "sync" }, rebuildPresence)
-    .on("presence", { event: "join" }, rebuildPresence)
-    .on("presence", { event: "leave" }, ({key}) => {
-      rebuildPresence();
-      const id=String(key||"");
-      setTimeout(()=>{
-        if(!id || state.channel?.presenceState()?.[id]?.length) return;
-        state.remote.delete(id);
-        updateRemotes();
-      },15000);
-    });
+    .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) => acceptWorldEntityChange(payload,true));
 
+  let settled = false;
+  let latestStatus = "";
   await new Promise((resolve, reject) => {
-    let settled = false;
     const timeout = setTimeout(() => {
       if (settled) return;
       settled = true;
       reject(new Error("Tempo esgotado ao conectar ao mundo online."));
     }, 12000);
-    state.channel.subscribe(status => {
-      if (status === "SUBSCRIBED" && !settled) {
-        settled = true; clearTimeout(timeout); resolve();
-      } else if ((status === "CHANNEL_ERROR" || status === "TIMED_OUT") && !settled) {
-        settled = true; clearTimeout(timeout);
-        reject(new Error("Não foi possível entrar no canal multiplayer (" + status + ")."));
+
+    state.channel.subscribe((status, err) => {
+      latestStatus = status;
+
+      if(status === "SUBSCRIBED") {
+        if(!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          resolve();
+        } else if(!state.leaving) {
+          // O supabase-js pode restabelecer o canal após uma queda transitória.
+          state.online = true;
+        }
+        return;
+      }
+
+      if(status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        console.error("KTK Realtime channel:", status, err || null);
+        if(!settled) {
+          settled = true;
+          clearTimeout(timeout);
+          reject(makeChannelError(status, err));
+        } else if(!state.leaving) {
+          state.online = false;
+        }
       }
     });
   });
-  state.online = true;
-  onProgress("Buscando os jogadores que já estão no mundo...");
-  await withTimeout("A consulta dos jogadores presentes", 10000,
-    signal => loadExistingPlayers(signal));
-  onProgress("Carregando o estado compartilhado do mundo...");
-  await withTimeout("A consulta do estado compartilhado do mundo", 12000,
-    signal => loadWorldState(signal));
-  setStatus("● Online · mundo principal", true);
-}
 
-export async function trackPresence() {
-  if (state.leaving || !state.channel || !state.online || !state.joined || !state.user) return;
-  const { error } = await state.channel.track({
-    user_id: state.user.id,
-    session_id: state.sessionId
+  if(latestStatus !== "SUBSCRIBED") {
+    throw new Error("O canal multiplayer foi fechado antes de ativar a sessão.");
+  }
+  state.online = true;
+
+  // As fotografias iniciais complementam os Broadcasts, mas não podem bloquear
+  // a entrada no mundo. Ambas começam juntas e atualizam o estado ao terminar.
+  onProgress("Conexão ativa; sincronizando os dados iniciais em paralelo...");
+  const snapshotTasks = [
+    {
+      label: "jogadores presentes",
+      promise: withTimeout("A consulta dos jogadores presentes", 10000,
+        signal => loadExistingPlayers(signal))
+    },
+    {
+      label: "estado compartilhado do mundo",
+      promise: withTimeout("A consulta do estado compartilhado do mundo", 12000,
+        signal => loadWorldState(signal))
+    }
+  ];
+  void Promise.allSettled(snapshotTasks.map(task => task.promise)).then(results => {
+    results.forEach((result, index) => {
+      if(result.status === "rejected") {
+        console.warn("KTK initial snapshot (" + snapshotTasks[index].label + "):", result.reason);
+      }
+    });
   });
-  if (error) console.warn("KTK presence:", error.message);
-  state.lastTrack = Date.now();
 }

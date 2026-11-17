@@ -10,6 +10,7 @@ on:
       - "equipment/catalog-sync.js"
       - "tools/test-entry-flow.mjs"
       - "tools/test-online-timeouts.mjs"
+      - "tools/test-realtime-entry.mjs"
       - "mapa/fallback/**"
       - "mapa/player/stats*.js"
       - "render/world-renderer.js"
@@ -24,6 +25,7 @@ on:
       - "equipment/catalog-sync.js"
       - "tools/test-entry-flow.mjs"
       - "tools/test-online-timeouts.mjs"
+      - "tools/test-realtime-entry.mjs"
       - "mapa/fallback/**"
       - "mapa/player/stats*.js"
       - "render/world-renderer.js"
@@ -54,6 +56,8 @@ jobs:
         run: node tools/test-entry-flow.mjs
       - name: Check online entry deadlines
         run: node tools/test-online-timeouts.mjs
+      - name: Check Realtime entry and snapshot independence
+        run: node tools/test-realtime-entry.mjs
       - name: Check module boundaries and script order
         run: |
           node <<'NODE'
