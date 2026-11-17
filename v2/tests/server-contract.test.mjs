@@ -4,15 +4,17 @@ import { readFile } from "node:fs/promises";
 
 const migrationUrl = new URL("../../supabase/migrations/20261117170000_ktk_v2_foundation.sql", import.meta.url);
 const gameplayMigrationUrl = new URL("../../supabase/migrations/20261117172000_ktk_v2_gameplay_actions.sql", import.meta.url);
+const simulationMigrationUrl = new URL("../../supabase/migrations/20261117173000_ktk_v2_server_simulation.sql", import.meta.url);
 const clientUrl = new URL("../js/main.js", import.meta.url);
 const htmlUrl = new URL("../index.html", import.meta.url);
 const rendererUrl = new URL("../js/world-renderer.js", import.meta.url);
 const lpcUrl = new URL("../js/lpc-renderer.js", import.meta.url);
 const rulesUrl = new URL("../js/client-rules.js", import.meta.url);
 const catalogUrl = new URL("../../personagem.js", import.meta.url);
-const [sql, gameplaySql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
+const [sql, gameplaySql, simulationSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
   readFile(migrationUrl, "utf8"),
   readFile(gameplayMigrationUrl, "utf8"),
+  readFile(simulationMigrationUrl, "utf8"),
   readFile(clientUrl, "utf8"),
   readFile(htmlUrl, "utf8"),
   readFile(rendererUrl, "utf8"),
@@ -160,6 +162,31 @@ test("all V2 gameplay RPCs are authenticated-only", () => {
   }
   assert.equal((gameplaySql.match(/\bcommit;/gi) || []).length, 1);
   assert.equal(gameplaySql.trimEnd().toLowerCase().endsWith("commit;"), true);
+});
+
+test("V2 imports the original V1 catalog and protects item definitions", () => {
+  assert.ok(gameplaySql.includes("ktk_private.item_catalog"));
+  assert.ok(gameplaySql.includes("insert into public.ktk_v2_item_catalog"));
+  assert.ok(gameplaySql.includes("from ktk_private.item_catalog"));
+  assert.ok(gameplaySql.includes("metadata=public.ktk_v2_item_catalog.metadata || excluded.metadata"));
+});
+
+test("V2 simulation owns survival, loot expiry, resource respawn and enemy AI", () => {
+  for (const required of [
+    "create or replace function ktk_v2_private.simulation_tick",
+    "create or replace function ktk_v2_private.apply_player_hit",
+    "ktk-v2:main:movement",
+    "last_simulation_at",
+    "expires_at",
+    "respawn_at",
+    "attack_ready_at",
+    "cron.schedule(''ktk-v2-world-simulation'',''1 second''"
+  ]) {
+    assert.ok(simulationSql.includes(required), `Missing simulation contract: ${required}`);
+  }
+  assert.ok(simulationSql.includes("from public,anon,authenticated"));
+  assert.equal((simulationSql.match(/\\bcommit;/gi) || []).length, 1);
+  assert.equal(simulationSql.trimEnd().toLowerCase().endsWith("commit;"), true);
 });
 
 test("the V2 migration has one clean commit boundary", () => {
