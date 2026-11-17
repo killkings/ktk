@@ -112,63 +112,66 @@ assert.equal(context.playerVisual.x,100,
   "The visual prediction must not walk through another player's collision radius.");
 context.remotePlayers.clear();
 
-// Réplica remota: continua avançando entre snapshots oficiais e para quando
-// o servidor confirma a interrupção do movimento.
-const remoteMotionStart=replica.indexOf("function updateRemotePlayerMotion(dt)");
+// Réplica remota: a renderização usa snapshots atrasados e não recua
+// quando chega um pacote oficial posterior ao movimento já desenhado.
+const remoteMotionStart=replica.indexOf("function getRemoteMotionSample(remote, now)");
 const remoteMotionEnd=replica.indexOf("\n  function normalizeRemoteWearables",remoteMotionStart);
 assert.ok(remoteMotionStart>=0&&remoteMotionEnd>remoteMotionStart);
-let remoteClock=1000;
+let remoteClock=1190;
+const remoteEntity={
+  x:0,y:0,targetX:0,targetY:0,velocityX:225,velocityY:0,
+  serverMoving:true,walkTime:0,direction:3,
+  motionSnapshots:[{timestamp:"t0",receivedAt:1000,x:0,y:0,moving:true,direction:3}]
+};
 const remoteMotionContext={
-  remotePlayers:new Map([["other",{
-    x:0,y:0,targetX:0,targetY:0,velocityX:225,velocityY:0,
-    positionReceivedAt:1000,serverMoving:true,walkTime:0
-  }]]),
+  remotePlayers:new Map([["other",remoteEntity]]),
   window:{},performance:{now:()=>remoteClock},SPEED:225,
   KNOCKBACK_SECONDS:0.28,KNOCKBACK_HEIGHT:12,PUNCH_ANIMATION_SECONDS:0.42
 };
 vm.createContext(remoteMotionContext);
-vm.runInContext(
-  replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",
-  remoteMotionContext
-);
-const remoteEntity=remoteMotionContext.remotePlayers.get("other");
-remoteClock=1100;
-remoteMotionContext.stepRemoteMotion(0.1);
-const remoteXAfterFirstStep=remoteEntity.x;
+vm.runInContext(replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",remoteMotionContext);
+remoteMotionContext.stepRemoteMotion(0.016);
+const beforeDelayedPacket=remoteEntity.x;
+assert.ok(beforeDelayedPacket>0);
 remoteClock=1200;
-remoteMotionContext.stepRemoteMotion(0.1);
-assert.ok(remoteEntity.x>remoteXAfterFirstStep+10,
-  "O jogador remoto deve continuar avançando entre pacotes do servidor.");
-assert.equal(remoteEntity.moving,true);
-remoteEntity.targetX=45;
-remoteEntity.velocityX=0;
-remoteEntity.velocityY=0;
-remoteEntity.serverMoving=false;
-remoteEntity.positionReceivedAt=remoteClock;
-for(let i=0;i<20;i++) {
-  remoteClock+=50;
-  remoteMotionContext.stepRemoteMotion(0.05);
-}
-assert.ok(Math.abs(remoteEntity.x-45)<0.75,
-  "A réplica deve convergir para a posição oficial quando o servidor confirma que parou.");
+remoteEntity.motionSnapshots.push({timestamp:"t1",receivedAt:1200,x:45,y:0,moving:true,direction:3});
+remoteMotionContext.stepRemoteMotion(0.016);
+assert.ok(remoteEntity.x>=beforeDelayedPacket-0.1,
+  "A chegada de uma posição oficial atrasada nunca pode puxar a réplica para trás.");
+const afterSecondSample=remoteEntity.x;
+remoteClock=1300;
+remoteMotionContext.stepRemoteMotion(0.016);
+assert.ok(remoteEntity.x>afterSecondSample+10,
+  "A réplica deve avançar continuamente entre snapshots.");
+remoteClock=1400;
+remoteMotionContext.stepRemoteMotion(0.016);
+const beforeThirdPacket=remoteEntity.x;
+remoteEntity.motionSnapshots.push({timestamp:"t2",receivedAt:1400,x:90,y:0,moving:true,direction:3});
+remoteMotionContext.stepRemoteMotion(0.016);
+assert.ok(remoteEntity.x>=beforeThirdPacket-0.1,
+  "A troca do segmento de interpolação não pode inverter o movimento.");
+remoteEntity.motionSnapshots.push({timestamp:"t3",receivedAt:1600,x:90,y:0,moving:false,direction:3});
+remoteEntity.velocityX=0;remoteEntity.velocityY=0;
+remoteClock=1780;
+remoteMotionContext.stepRemoteMotion(0.016);
+assert.ok(Math.abs(remoteEntity.x-90)<0.1);
 assert.equal(remoteEntity.moving,false,
-  "A animação remota deve parar depois da confirmação de parada do servidor.");
+  "A animação e o deslocamento devem parar na posição oficial confirmada.");
+
 const staleMotionContext={
-  remotePlayers:new Map([["stale",{
-    x:0,y:0,targetX:0,targetY:0,velocityX:225,velocityY:0,
-    positionReceivedAt:0,serverMoving:true,walkTime:0
-  }]]),
-  window:{},performance:{now:()=>1000},SPEED:225,
+  remotePlayers:new Map([["stale",{x:0,y:0,targetX:0,targetY:0,velocityX:225,velocityY:0,
+    serverMoving:true,direction:3,
+    motionSnapshots:[{timestamp:"old",receivedAt:1000,x:0,y:0,moving:true,direction:3}]}]]),
+  window:{},performance:{now:()=>2000},SPEED:225,
   KNOCKBACK_SECONDS:0.28,KNOCKBACK_HEIGHT:12,PUNCH_ANIMATION_SECONDS:0.42
 };
 vm.createContext(staleMotionContext);
-vm.runInContext(
-  replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",
-  staleMotionContext
-);
+vm.runInContext(replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",staleMotionContext);
 staleMotionContext.stepRemoteMotion(0.5);
-assert.ok(staleMotionContext.remotePlayers.get("stale").x<=102,
-  "A extrapolação remota deve ser limitada para não deslizar indefinidamente.");
+assert.ok(staleMotionContext.remotePlayers.get("stale").x<=41,
+  "A extrapolação deve parar no limite configurado, mesmo sem novos pacotes.");
+assert.equal(staleMotionContext.remotePlayers.get("stale").moving,false,
+  "Sem snapshots novos, a animação remota não pode continuar indefinidamente.");
 
 // A mudança de direção não pode somar a idade da tecla à meia-RTT.
 // O trecho após o snapshot é limitado ao menor desses dois intervalos.
@@ -321,15 +324,20 @@ assert.match(playerSync,/movementInputY:serverState\.movement_input_y/);
 assert.match(playerSync,/movementInputX:row\.state\?\.movement_input_x/);
 assert.match(playerSync,/movementInputY:row\.state\?\.movement_input_y/);
 assert.match(playerSync,/velocityX,velocityY,positionReceivedAt,serverMoving/);
+assert.match(playerSync,/positionUpdatedAt: isDatabasePosition/);
+assert.match(replica,/REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
+assert.match(replica,/entity\.motionSnapshots\.push/);
+assert.match(replica,/remote\.positionUpdatedAt/);
+assert.doesNotMatch(replica,/Math\.min\(450,packetAgeMs\)/);
 assert.match(playerSync,/moving:serverState\.moving/);
 assert.match(playerSync,/moving:row\.state\?\.moving/);
 assert.match(replica,/const extrapolationMs=Math\.min\(450,packetAgeMs\)/);
 assert.match(replica,/const hasFreshServerMotion/);
 assert.match(playerSync,/applyOwnServerPosition\(row,Number\(state\.lastMovementLatencyMs\)\|\|0\)/);
-assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-remote-motion-006"/);
+assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-remote-snapshot-007"/);
 assert.match(session,/state\.lastLocalKnockbackAt=String\(player\.state\?\.last_knockback_at/);
 assert.doesNotMatch(session,/spawnTimestamp/);
-assert.match(rootHtml,/20261117-remote-motion-006/);
+assert.match(rootHtml,/20261117-remote-snapshot-007/);
 assert.doesNotMatch(playerSync,/compareServerTimestamps is not defined/);
 const timestampHelper = playerSync.slice(
   playerSync.indexOf("function compareServerTimestamps"),
@@ -347,16 +355,16 @@ for(const [name,source] of Object.entries(onlineModules)) {
   assert.doesNotMatch(source,/20261117-(online-separation-001|movement-authority-002|realtime-entry-fix-001|entry-timeouts-001)/,
     "Módulo ESM ainda usa uma chave antiga: "+name);
   for(const match of source.matchAll(/from\s+["']([^"']+\.js\?v=[^"']+)["']/g)) {
-    assert.ok(match[1].endsWith("?v=20261117-remote-motion-006"),
+    assert.ok(match[1].endsWith("?v=20261117-remote-snapshot-007"),
       "Dependência ESM sem a chave única em "+name+": "+match[1]);
   }
 }
 for(const [path,version] of [
-  ["render/world-renderer.js","20261117-remote-motion-006"],
-  ["multiplayer/player-replica.js","20261117-remote-motion-006"],
-  ["js/game-state.js","20261117-remote-motion-006"],
-  ["input/input-controller.js","20261117-remote-motion-006"],
-  ["js/online.js","20261117-remote-motion-006"]
+  ["render/world-renderer.js","20261117-remote-snapshot-007"],
+  ["multiplayer/player-replica.js","20261117-remote-snapshot-007"],
+  ["js/game-state.js","20261117-remote-snapshot-007"],
+  ["input/input-controller.js","20261117-remote-snapshot-007"],
+  ["js/online.js","20261117-remote-snapshot-007"]
 ]) {
   assert.ok(html.includes("./"+path+"?v="+version),
     "Cache bust ausente: "+path);
