@@ -406,8 +406,17 @@ async function enter(options = {}) {
         }
         state.channel = null;
       }
-      const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
-      if (signOutError) throw signOutError;
+      const { data: previousSession, error: previousSessionError } = await supabase.auth.getSession();
+      if (previousSessionError) throw previousSessionError;
+      if (previousSession?.session) {
+        const { error: signOutError } = await supabase.auth.signOut({ scope: "local" });
+        const { data: afterSignOut, error: afterSignOutError } = await supabase.auth.getSession();
+        if (afterSignOutError) throw afterSignOutError;
+        if (afterSignOut?.session) {
+          throw signOutError || new Error("Não foi possível encerrar a conta anterior para criar outra.");
+        }
+        if (signOutError) console.warn("KTK old anonymous session was cleared locally:",signOutError.message);
+      }
       const result = await supabase.auth.signInAnonymously();
       if (result.error) throw new Error("Não foi possível criar outra conta de jogador. Confira se o login anônimo está ativado no Supabase: " + result.error.message);
       sessionData = { session: result.data.session };
