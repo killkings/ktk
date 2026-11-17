@@ -25,60 +25,15 @@
     updateCreator();
   };
 
-  function hash2(x,y) {
-    let n = Math.imul(x ^ 0x9e3779b9,0x85ebca6b) ^ Math.imul(y ^ 0xc2b2ae35,0x27d4eb2f);
-    n = Math.imul(n ^ (n >>> 16),0x7feb352d);
-    n = Math.imul(n ^ (n >>> 15),0x846ca68b);
-    return ((n ^ (n >>> 16)) >>> 0) / 4294967295;
-  }
-
-var  grassTileCache = new Map();
-  function makeGrassTile(tx,ty) {
-    const key = `${tx},${ty}`;
-    if (grassTileCache.has(key)) return grassTileCache.get(key);
-    const tile = document.createElement('canvas');
-    tile.width=TILE; tile.height=TILE;
-    const t=tile.getContext('2d');
-    const seed=hash2(tx,ty);
-    t.fillStyle='#67964f'; t.fillRect(0,0,TILE,TILE);
-    const shade=Math.floor(seed*11);
-    t.fillStyle=`rgba(${24+shade},${76+shade},${31+Math.floor(shade*.45)},${0.025+seed*.035})`;
-    t.fillRect(0,0,TILE,TILE);
-    const count=11+Math.floor(seed*10);
-    for(let i=0;i<count;i++) {
-      const r1=hash2(tx*31+i*7,ty*19-i*13);
-      const r2=hash2(tx*17-i*11,ty*29+i*5);
-      const x=5+r1*(TILE-10);
-      const y=5+r2*(TILE-10);
-      const len=3.5+hash2(tx+i,ty-i)*5.5;
-      const lean=(hash2(tx-i*3,ty+i*2)-.5)*5;
-      t.lineWidth=1+r1*.45;
-      t.lineCap='round';
-      t.strokeStyle=r2>.52?'rgba(31,91,42,.31)':'rgba(202,224,135,.25)';
-      t.beginPath(); t.moveTo(x,y+len*.35); t.quadraticCurveTo(x+lean*.25,y-len*.2,x+lean,y-len); t.stroke();
-      if(i%4===0) {
-        t.strokeStyle='rgba(219,231,160,.19)'; t.lineWidth=.8;
-        t.beginPath(); t.moveTo(x-2,y+1); t.lineTo(x-2.8,y-len*.48); t.stroke();
-      }
+  // O controlador delega o terreno alternativo; o desenho fica em módulo próprio.
+  function drawGrassFallback(g,left,top,width,height) {
+    const fallback = window.KTKGrassFallback;
+    if (fallback && typeof fallback.draw === 'function') {
+      fallback.draw(g,left,top,width,height);
+      return;
     }
-    if(seed>.72) {
-      t.fillStyle='rgba(190,214,125,.035)';
-      t.beginPath(); t.ellipse(TILE*.5,TILE*.5,18+seed*10,12+seed*8,seed*2,0,Math.PI*2); t.fill();
-    }
-    grassTileCache.set(key,tile);
-    if(grassTileCache.size>1200) grassTileCache.delete(grassTileCache.keys().next().value);
-    return tile;
-  }
-
-  function drawGrass(g,left,top,width,height) {
-    g.fillStyle='#67964f'; g.fillRect(0,0,width,height);
-    const minX=Math.floor(left/TILE)-1;
-    const maxX=Math.floor((left+width)/TILE)+1;
-    const minY=Math.floor(top/TILE)-1;
-    const maxY=Math.floor((top+height)/TILE)+1;
-    for(let ty=minY;ty<=maxY;ty++) {
-      for(let tx=minX;tx<=maxX;tx++) g.drawImage(makeGrassTile(tx,ty),tx*TILE-left,ty*TILE-top);
-    }
+    g.fillStyle='#67964f';
+    g.fillRect(0,0,width,height);
   }
 
   function resize() {
@@ -112,7 +67,7 @@ var  grassTileCache = new Map();
       if(window.KTKWorldMap && typeof window.KTKWorldMap.draw==='function') {
         window.KTKWorldMap.draw(ctx,camX,camY,w,h,window.KTKWorldMap.tileSize);
       } else {
-        drawGrass(ctx,camX,camY,w,h);
+        drawGrassFallback(ctx,camX,camY,w,h);
       }
 
       const attackFrameCount=Math.max(1,Number(punch.weaponItem?.attackFrameCount)||6);
@@ -215,8 +170,13 @@ var  grassTileCache = new Map();
       console.error('Erro ao desenhar o mapa do Kill the King:',error);
       // Fallback visível para que um erro no mapa nunca deixe a tela totalmente vazia.
       ctx.save();
-      ctx.fillStyle='#67964f';
-      ctx.fillRect(0,0,w,h);
+      try {
+        drawGrassFallback(ctx,camera.x*w-w/2,camera.y*h-h/2,w,h);
+      } catch(fallbackError) {
+        ctx.fillStyle='#67964f';
+        ctx.fillRect(0,0,w,h);
+        console.error('Falha no fallback do terreno:',fallbackError);
+      }
       ctx.fillStyle='rgba(15,34,24,.82)';
       ctx.fillRect(18,72,Math.min(w-36,540),58);
       ctx.fillStyle='#ffffff';
