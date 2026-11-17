@@ -47,7 +47,7 @@ begin
   end if;
 
   perform pg_sleep(0.22);
-  v_step := public.ktk_v2_step_player(-1,0,false,false);
+  v_step := public.ktk_v2_step_player(-1::smallint,0::smallint,false,false);
   if (v_step->>'x')::double precision >= v_start_x then
     raise exception 'V2_SERVER_MOVEMENT_DID_NOT_CHANGE_X';
   end if;
@@ -58,7 +58,7 @@ begin
   -- Move close enough to the world crown through server-approved RPC steps.
   for i in 1..3 loop
     perform pg_sleep(0.22);
-    v_step := public.ktk_v2_step_player(-1,0,false,false);
+    v_step := public.ktk_v2_step_player(-1::smallint,0::smallint,false,false);
   end loop;
 
   select * into v_player
