@@ -11,7 +11,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 
 const state = {
   user: null, channel: null, joined: false, online: false,
-  displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0,
+  displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
   lastPosition: null, lastAppearanceSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(), connecting: false
@@ -368,6 +368,12 @@ async function sendPosition(force = false) {
 
   if (appearanceChanged) void trackPresence();
   if (now - state.lastTrack >= 10000) void trackPresence();
+  if (now - state.lastDbHeartbeat >= 10000) {
+    state.lastDbHeartbeat = now;
+    void supabase.rpc("ktk_touch_player").then(({error})=>{
+      if(error) console.warn("KTK world heartbeat:",error.message);
+    });
+  }
   if ((moved || force) && now - state.lastCheckpoint >= 90 && !state.positionInFlight) {
     state.lastCheckpoint = now;
     state.positionInFlight = true;
