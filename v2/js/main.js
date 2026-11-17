@@ -70,6 +70,8 @@ const state = {
   claimBusy: false,
   actionBusy: false,
   rightMouseHeld: false,
+  visibilitySequence: 0,
+  connectionSuspended: false,
   userId: "",
   accessToken: "",
   channel: null,
@@ -256,6 +258,28 @@ function applyWorldRow(row) {
   state.kingUserId = row.king_user_id || null;
   state.worldSeed = Number(row.world_seed) || 20261117;
   updateHud();
+}
+
+async function setConnectionSuspended(suspended) {
+  if (!state.joined || state.leaving) return;
+  const generation = state.sessionGeneration;
+  const userId = state.userId;
+  const sequence = ++state.visibilitySequence;
+  try {
+    const { data, error } = await supabase.rpc("ktk_v2_set_suspended", {
+      p_suspended: Boolean(suspended),
+      p_sequence: sequence
+    });
+    if (error) throw error;
+    if (!isCurrentSession(generation) || state.userId !== userId) return;
+    if (data?.user_id) upsertPlayer(data);
+    state.connectionSuspended = Boolean(suspended);
+    if (!suspended) void pumpMovement();
+  } catch (error) {
+    if (isCurrentSession(generation) && state.userId === userId) {
+      console.warn("KTK V2 visibility state:", error?.message || error);
+    }
+  }
 }
 
 async function claimCrown() {
@@ -455,6 +479,8 @@ async function enterWorld(displayName, appearance) {
 
   state.joined = true;
   state.leaving = false;
+  state.visibilitySequence = 0;
+  state.connectionSuspended = false;
   upsertPlayer(player);
   const channel = state.channel;
   const { error: presenceError } = await channel.track({
@@ -463,6 +489,8 @@ async function enterWorld(displayName, appearance) {
   });
   if (generation !== state.sessionGeneration || !state.joined || state.leaving) return;
   if (presenceError) console.warn("KTK V2 presence:", presenceError.message);
+  await setConnectionSuspended(document.visibilityState !== "visible");
+  if (!isCurrentSession(generation)) return;
   await loadWorldSnapshot(generation);
   if (!isCurrentSession(generation)) return;
   state.lastInputSignature = "";
@@ -575,6 +603,8 @@ async function cleanupLocalSession() {
   state.keys.clear();
   state.localInput = normalizeControls();
   state.rightMouseHeld = false;
+  state.visibilitySequence = 0;
+  state.connectionSuspended = false;
   state.lastInputSignature = "";
   state.lastAttemptSignature = "";
   state.nextMovementRetryAt = 0;
@@ -734,9 +764,25 @@ window.addEventListener("pointerup", event => {
   if (event.button === 2) state.rightMouseHeld = false;
 });
 ui.canvas.addEventListener("contextmenu", event => event.preventDefault());
+document.addEventListener("visibilitychange", () => {
+  if (!state.joined || state.leaving) return;
+  const suspended = document.visibilityState !== "visible";
+  if (suspended) {
+    state.keys.clear();
+    state.rightMouseHeld = false;
+  }
+  void setConnectionSuspended(suspended);
+});
 window.addEventListener("pagehide", event => {
-  // A back-forward-cache suspension is not an explicit exit from the world.
-  if (!event.persisted) void leaveWorld(true);
+  // Back-forward cache and background suspension pause the server character.
+  // A real page exit explicitly ends the life and leaves its gear as loot.
+  if (event.persisted) void setConnectionSuspended(true);
+  else void leaveWorld(true);
+});
+window.addEventListener("pageshow", event => {
+  if (event.persisted && document.visibilityState === "visible") {
+    void setConnectionSuspended(false);
+  }
 });
 window.addEventListener("resize", () => {
   if (state.joined) renderWorld(
