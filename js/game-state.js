@@ -147,13 +147,16 @@ var  keys = new Set();
 var  rightMouseHeld = false;
 var  shieldStaminaExhausted = false;
 var  player = {x:0,y:0,direction:2,knockback:null,knockbackHeight:0};
-  // player.x/y guardam somente a última posição confirmada pelo servidor.
-  // playerVisual é exclusivamente uma interpolação de desenho entre respostas.
-var  playerVisual = {x:0,y:0,targetX:0,targetY:0,initialized:false};
+  // player.x/y continuam sendo exclusivamente a posição confirmada pelo servidor.
+  // playerVisual é previsão de desenho e é reconciliada pelas respostas oficiais.
+var  playerVisual = {
+  x:0,y:0,targetX:0,targetY:0,initialized:false,direction:2,
+  correctionX:0,correctionY:0,correctionRemaining:0
+};
   // Posição fixa no mundo: não acompanha o deslocamento do jogador.
 var  camera = {x:0,y:0};
 
-  function setAuthoritativePlayerPosition(x,y,direction,snap=false) {
+  function setAuthoritativePlayerPosition(x,y,direction,snap=false,latencyMs=0) {
     const serverX=Number(x),serverY=Number(y);
     if(!Number.isFinite(serverX)||!Number.isFinite(serverY)) return false;
     camera.x=0; camera.y=0;
@@ -164,10 +167,47 @@ var  camera = {x:0,y:0};
     if(snap||!playerVisual.initialized) {
       playerVisual.x=serverX; playerVisual.y=serverY;
       playerVisual.targetX=serverX; playerVisual.targetY=serverY;
+      playerVisual.direction=player.direction;
+      playerVisual.correctionX=0;
+      playerVisual.correctionY=0;
+      playerVisual.correctionRemaining=0;
       playerVisual.initialized=true;
     } else {
       playerVisual.targetX=serverX;
       playerVisual.targetY=serverY;
+      if(playerMoving&&(playerInputX!==0||playerInputY!==0)) {
+        const speedLevel=Number(playerStats?.stats?.speed?.value);
+        const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
+        // Tolera a latência normal sem puxar o sprite para trás a cada RPC.
+        const latencyTolerance=COLLISION_RADIUS
+          +movementSpeed*Math.max(0,Math.min(500,Number(latencyMs)||0))/2000;
+        const errorX=serverX-playerVisual.x;
+        const errorY=serverY-playerVisual.y;
+        const errorDistance=Math.hypot(errorX,errorY);
+        if(errorDistance>latencyTolerance) {
+          if(errorDistance>Math.max(96,movementSpeed*.55)) {
+            // Divergência grande (por exemplo, colisão): a posição oficial vence.
+            playerVisual.x=serverX;
+            playerVisual.y=serverY;
+            playerVisual.correctionX=0;
+            playerVisual.correctionY=0;
+            playerVisual.correctionRemaining=0;
+          } else {
+            playerVisual.correctionX=errorX;
+            playerVisual.correctionY=errorY;
+            playerVisual.correctionRemaining=Math.max(.12,errorDistance/Math.max(1,movementSpeed*1.5));
+          }
+        } else {
+          playerVisual.correctionX=0;
+          playerVisual.correctionY=0;
+          playerVisual.correctionRemaining=0;
+        }
+      } else {
+        playerVisual.correctionX=0;
+        playerVisual.correctionY=0;
+        playerVisual.correctionRemaining=0;
+        playerVisual.direction=player.direction;
+      }
     }
     return true;
   }
@@ -178,6 +218,36 @@ var  camera = {x:0,y:0};
       return;
     }
     const dt=Math.max(0,Math.min(.05,Number(deltaSeconds)||0));
+    const inputLength=Math.hypot(playerInputX,playerInputY);
+    if(playerMoving&&inputLength>0&&window.KTKOnline?.connected!==false) {
+      const speedLevel=Number(playerStats?.stats?.speed?.value);
+      const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
+      const travel=movementSpeed*dt;
+      playerVisual.x+=(playerInputX/inputLength)*travel;
+      playerVisual.y+=(playerInputY/inputLength)*travel;
+      playerVisual.direction=Math.abs(playerInputX)>Math.abs(playerInputY)
+        ? (playerInputX>0?3:1)
+        : (playerInputY>0?2:0);
+      if(playerVisual.correctionRemaining>0) {
+        const fraction=Math.min(1,dt/playerVisual.correctionRemaining);
+        const correctionX=playerVisual.correctionX*fraction;
+        const correctionY=playerVisual.correctionY*fraction;
+        playerVisual.x+=correctionX;
+        playerVisual.y+=correctionY;
+        playerVisual.correctionX-=correctionX;
+        playerVisual.correctionY-=correctionY;
+        playerVisual.correctionRemaining=Math.max(0,playerVisual.correctionRemaining-dt);
+        if(playerVisual.correctionRemaining===0) {
+          playerVisual.correctionX=0;
+          playerVisual.correctionY=0;
+        }
+      }
+      return;
+    }
+    playerVisual.correctionX=0;
+    playerVisual.correctionY=0;
+    playerVisual.correctionRemaining=0;
+    playerVisual.direction=player.direction;
     const blend=1-Math.exp(-dt*24);
     const maxStep=520*dt;
     const dx=playerVisual.targetX-playerVisual.x;

@@ -110,7 +110,7 @@
           const bodyFrameSize=bodyFrameLayer?.frameSize||FRAME_SIZE;
           const bodyImageWidth=bodyFrameLayer?.image?.naturalWidth||bodyFrameLayer?.image?.width||bodyFrameSize;
           const bodyFrameColumns=Math.max(1,Math.floor(bodyImageWidth/bodyFrameSize));
-          const direction=punch.active?punch.direction:player.direction;
+          const direction=punch.active?punch.direction:(playerMoving?playerVisual.direction:player.direction);
           let weaponMode=punch.active?(punch.weaponAttack?'attack':'none'):'held';
           if(boomerangProjectile.active&&inventory[selectedInventorySlot]===boomerangProjectile.item) weaponMode='none';
           drawLayeredCharacter(ctx,screenX,screenY-(player.knockbackHeight||0),getPlayerLayers(baseLayers,weaponMode),WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);

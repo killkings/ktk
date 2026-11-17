@@ -1,12 +1,13 @@
 /* Ponto de composição do multiplayer V1: expõe somente a API pública do jogo. */
 import {
   enter, markDead, leaveWorld, getPlayerState, startHeartbeat
-} from "../online/session.js?v=20261117-realtime-entry-fix-001";
+} from "../online/session.js?v=20261117-client-movement-001";
 import { gameAction, claimKingCrown, dropKingCrown } from "../online/actions.js?v=20261117-realtime-entry-fix-001";
 import { state } from "../online/state.js?v=20261117-online-separation-001";
+import { sendPosition } from "../online/movement.js?v=20261117-client-movement-001";
 
 window.KTKOnline = {
-  enter, markDead, leaveWorld, claimKingCrown, dropKingCrown, getPlayerState, gameAction,
+  enter, markDead, leaveWorld, claimKingCrown, dropKingCrown, getPlayerState, gameAction, sendPosition,
   get userId() { return state.user?.id || null; },
   get connected() { return state.online; }
 };
