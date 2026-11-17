@@ -54,6 +54,14 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117170000_ktk_v2_foundation.sql
+      - name: Apply V2 gameplay migration to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117172000_ktk_v2_gameplay_actions.sql
       - name: Test server lifecycle, movement and crown
         env:
           PGHOST: localhost
