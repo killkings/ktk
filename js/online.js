@@ -47,6 +47,20 @@ function updateRemotes() {
   }
 }
 
+function acceptDatabaseChange(payload) {
+  const row = payload?.new || payload?.record || payload;
+  if (!row?.user_id || row.user_id === state.user?.id) return;
+  if (row.is_alive === false) {
+    state.remote.delete(String(row.user_id));
+    updateRemotes();
+    return;
+  }
+  acceptRemote({
+    user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
+    display_name: row.display_name, character: row.character
+  });
+}
+
 function acceptRemote(payload) {
   if (!payload || !payload.user_id || payload.user_id === state.user?.id) return;
   const x = Number(payload.x), y = Number(payload.y);
@@ -113,13 +127,8 @@ async function subscribeWorld() {
     }
   });
   state.channel
-    .on("broadcast", { event: "position" }, ({ payload }) => acceptRemote(payload))
-    .on("broadcast", { event: "leave" }, ({ payload }) => {
-      if (payload?.user_id) {
-        state.remote.delete(String(payload.user_id));
-        updateRemotes();
-      }
-    })
+    .on("broadcast", { event: "INSERT" }, ({ payload }) => acceptDatabaseChange(payload))
+    .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("presence", { event: "sync" }, rebuildPresence)
     .on("presence", { event: "join" }, rebuildPresence)
     .on("presence", { event: "leave" }, rebuildPresence);
@@ -163,19 +172,19 @@ async function sendPosition(force = false) {
   const previous = state.lastPosition;
   const moved = !previous || Math.hypot(payload.x - previous.x, payload.y - previous.y) > 1.5 ||
     payload.direction !== previous.direction;
-  if (!force && !moved && now - state.lastSent < 1200) return;
-  if (!force && now - state.lastSent < 90) return;
+  if (!force && !moved && now - state.lastSent < 2500) return;
+  if (!force && now - state.lastSent < 190) return;
   state.lastSent = now;
   state.lastPosition = { x: payload.x, y: payload.y, direction: payload.direction };
-  const { error } = await state.channel.send({ type: "broadcast", event: "position", payload });
-  if (error) console.warn("KTK position broadcast:", error.message);
   if (now - state.lastTrack > 2500) await trackPresence();
-  if (now - state.lastCheckpoint > 3000) {
+  if (now - state.lastCheckpoint >= 240) {
     state.lastCheckpoint = now;
     const { error: checkpointError } = await supabase.rpc("ktk_checkpoint_player", {
       p_x: payload.x, p_y: payload.y, p_direction: payload.direction
     });
-    if (checkpointError) console.warn("KTK checkpoint:", checkpointError.message);
+    if (checkpointError && !String(checkpointError.message || "").includes("MOVEMENT_TOO_FAST")) {
+      console.warn("KTK checkpoint:", checkpointError.message);
+    }
   }
 }
 
@@ -216,7 +225,6 @@ async function enter(options = {}) {
     }
     await subscribeWorld();
     state.joined = true;
-    await sendPosition(true);
     return { ok: true, player };
   } catch (error) {
     console.error("KTK online:", error);
