@@ -59,6 +59,19 @@ function acceptDatabaseChange(payload) {
     user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
     display_name: row.display_name, character: row.character
   });
+  if (!state.profileCache.has(String(row.user_id))) {
+    state.profileCache.set(String(row.user_id), true);
+    void supabase.from("ktk_profiles").select("display_name,character")
+      .eq("id", row.user_id).maybeSingle().then(({ data }) => {
+        if (!data) return;
+        const remote = state.remote.get(String(row.user_id));
+        if (!remote) return;
+        remote.displayName = data.display_name || "Aventureiro";
+        remote.display_name = remote.displayName;
+        remote.character = data.character || {};
+        updateRemotes();
+      });
+  }
 }
 
 function acceptRemote(payload) {
@@ -111,6 +124,7 @@ async function loadExistingPlayers() {
   const byId = new Map((profiles || []).map(profile => [profile.id, profile]));
   rows.forEach(row => {
     const profile = byId.get(row.user_id) || {};
+    state.profileCache.set(String(row.user_id), true);
     acceptRemote({
       user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
       display_name: profile.display_name, character: profile.character
