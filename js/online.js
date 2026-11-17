@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 const state = {
   user: null, channel: null, joined: false, online: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0,
-  lastPosition: null, lastAppearanceSignature: "", positionSequence: 0,
+  lastPosition: null, lastAppearanceSignature: "", positionSequence: 0, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), connecting: false
 };
@@ -131,6 +131,61 @@ function acceptRemote(payload, source = "broadcast") {
   updateRemotes();
 }
 
+function acceptCombat(payload) {
+  if (!payload?.user_id || payload.user_id === state.user?.id) return;
+  const id = String(payload.user_id);
+  const remote = state.remote.get(id);
+  if (!remote) return;
+  const kind = String(payload.kind || "");
+  if (!["attack_start","projectile_start","skeleton_hit","player_damaged","skeleton_attack"].includes(kind)) return;
+  const eventId = String(payload.event_id || "");
+  if (!eventId) return;
+  const events = remote.combatEvents || [];
+  if (events.some(event => event.event_id === eventId)) return;
+  events.push({
+    event_id: eventId,
+    kind,
+    direction: Number.isFinite(Number(payload.direction)) ? Math.max(0, Math.min(3, Number(payload.direction))) : 2,
+    attack_type: String(payload.attack_type || "punch"),
+    weapon_id: payload.weapon_id ? String(payload.weapon_id) : null,
+    duration: Math.max(0.1, Math.min(2, Number(payload.duration) || 0.42)),
+    frame_count: Math.max(1, Math.min(20, Math.floor(Number(payload.frame_count) || 6))),
+    projectile_type: String(payload.projectile_type || ""),
+    x: Number(payload.x), y: Number(payload.y),
+    vector_x: Number(payload.vector_x) || 0,
+    vector_y: Number(payload.vector_y) || 0,
+    speed: Math.max(1, Number(payload.speed) || 500),
+    max_distance: Math.max(1, Number(payload.max_distance) || 160),
+    damage: Math.max(0, Number(payload.damage) || 0),
+    knockback_x: Number(payload.knockback_x) || 0,
+    knockback_y: Number(payload.knockback_y) || 0
+  });
+  remote.combatEvents = events.slice(-16);
+  updateRemotes();
+}
+
+function broadcastCombat(action = {}) {
+  if (!state.online || !state.joined || !state.channel || !state.user) return false;
+  const local = readLocal();
+  if (!local || !action || typeof action !== "object") return false;
+  const packet = {
+    ...action,
+    user_id: state.user.id,
+    display_name: state.displayName,
+    x: local.x, y: local.y,
+    direction: local.direction,
+    session_id: state.sessionId,
+    event_id: state.sessionId + ":combat:" + (++state.combatSequence),
+    sent_at: Date.now()
+  };
+  void state.channel.send({ type: "broadcast", event: "combat", payload: packet })
+    .then(result => {
+      if (result?.status && result.status !== "ok") console.warn("KTK combat broadcast:", result.status);
+    })
+    .catch(error => console.warn("KTK combat broadcast:", error));
+  return true;
+}
+
 function rebuildPresence() {
   if (!state.channel) return;
   const presence = state.channel.presenceState();
@@ -187,6 +242,7 @@ async function subscribeWorld() {
     .on("broadcast", { event: "INSERT" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "position" }, ({ payload }) => acceptRemote(payload))
+    .on("broadcast", { event: "combat" }, ({ payload }) => acceptCombat(payload))
     .on("presence", { event: "sync" }, rebuildPresence)
     .on("presence", { event: "join" }, rebuildPresence)
     .on("presence", { event: "leave" }, rebuildPresence);
@@ -362,7 +418,7 @@ function startHeartbeat() {
 }
 
 window.KTKOnline = {
-  enter, markDead,
+  enter, markDead, broadcastCombat,
   get userId() { return state.user?.id || null; },
   get connected() { return state.online; }
 };
