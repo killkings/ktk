@@ -468,6 +468,7 @@ async function sendPosition(force = false) {
 async function enter(options = {}) {
   if (state.connecting) return { ok: false, error: "A conexão já está sendo iniciada." };
   state.connecting = true;
+  state.sessionId = window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2));
   try {
     const displayName = String(options.displayName || "").trim().slice(0, 24);
     if (displayName.length < 2) throw new Error("Escolha um nome com pelo menos 2 caracteres.");
