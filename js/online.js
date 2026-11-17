@@ -4,19 +4,36 @@ const SUPABASE_URL = "https://mtddtvqtljtgzggpdogl.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U5CdIRdPg0Brfn7x2Bj2hQ_VCXjwRQH";
 const WORLD_ID = "main";
 const TOPIC = "world:main";
+const ephemeralAuthStorage = (() => {
+  const values = new Map();
+  return {
+    getItem: key => values.has(key) ? values.get(key) : null,
+    setItem: (key,value) => { values.set(key,value); },
+    removeItem: key => { values.delete(key); }
+  };
+})();
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  auth: {
+    persistSession: true,
+    storage: ephemeralAuthStorage,
+    autoRefreshToken: true,
+    detectSessionInUrl: false
+  },
   realtime: { params: { eventsPerSecond: 20 } }
 });
 
 const state = {
-  user: null, channel: null, joined: false, online: false,
+  user: null, accessToken: "", channel: null, joined: false, online: false,
+  leaving: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
   lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(),
   lastLocalKnockbackAt: "", intentInFlight: false, worldStateRequestId: 0, connecting: false
 };
+supabase.auth.onAuthStateChange((_event,session)=>{
+  state.accessToken=session?.access_token||"";
+});
 
 function setStatus(message, connected = false) {
   let el = document.getElementById("ktk-online-status");
@@ -96,6 +113,7 @@ function acceptDatabaseChange(payload) {
     user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
     position_updated_at: row.position_updated_at,
     display_name: row.display_name, character: row.character,
+    wearables: serverState.wearables || {},
     combat_stats: {
       health:serverState.health,maxHealth:serverState.max_health,
       stamina:serverState.stamina,maxStamina:serverState.max_stamina,
@@ -147,10 +165,23 @@ function acceptRemote(payload, source = "broadcast") {
   const id = String(payload.user_id);
   const previous = state.remote.get(id);
 
-  // Presence e banco servem para descobrir quem já está no mundo, mas seus
-  // retratos podem ter até vários segundos. Nunca deixam um jogador já
-  // sincronizado voltar para uma coordenada antiga.
-  if (previous && source === "presence") return;
+  // Presence atualiza aparência imediatamente, mas não substitui posição
+  // recebida do banco (que é a coordenada oficial do mundo).
+  if (previous && source === "presence") {
+    const next={
+      ...previous,
+      display_name:String(payload.display_name||payload.displayName||previous.display_name||"Aventureiro").slice(0,24),
+      displayName:String(payload.display_name||payload.displayName||previous.displayName||"Aventureiro").slice(0,24),
+      character:payload.character&&Object.keys(payload.character).length
+        ? payload.character : (previous.character||{}),
+      wearables:payload.wearables&&Object.keys(payload.wearables).length
+        ? payload.wearables : (previous.wearables||{}),
+      combatStats:payload.combat_stats||previous.combatStats||{}
+    };
+    state.remote.set(id,next);
+    updateRemotes();
+    return;
+  }
 
   const sessionId = String(payload.session_id || "");
   const rawSequence = Number(payload.sequence);
@@ -252,7 +283,7 @@ async function loadExistingPlayers() {
   const cutoff = new Date(Date.now() - 30000).toISOString();
   const { data, error } = await supabase
     .from("ktk_world_players")
-    .select("user_id,x,y,direction,is_alive,last_seen_at,position_updated_at")
+    .select("user_id,x,y,direction,is_alive,last_seen_at,position_updated_at,state")
     .eq("world_id", WORLD_ID)
     .eq("is_alive", true)
     .gte("last_seen_at", cutoff);
@@ -273,7 +304,14 @@ async function loadExistingPlayers() {
     acceptRemote({
       user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
       position_updated_at: row.position_updated_at,
-      display_name: profile.display_name, character: profile.character
+      display_name: profile.display_name, character: profile.character,
+      wearables: row.state?.wearables || {},
+      combat_stats: {
+        health:row.state?.health,maxHealth:row.state?.max_health,
+        stamina:row.state?.stamina,maxStamina:row.state?.max_stamina,
+        satiety:row.state?.satiety,maxSatiety:99,
+        hydration:row.state?.hydration,maxHydration:99
+      }
     }, "database-snapshot");
   });
 }
@@ -429,7 +467,6 @@ async function enter(options = {}) {
     const displayName = String(options.displayName || "").trim().slice(0, 24);
     if (displayName.length < 2) throw new Error("Escolha um nome com pelo menos 2 caracteres.");
     state.displayName = displayName;
-    localStorage.setItem("ktk-display-name", displayName);
 
     let sessionData;
     if (options.newCharacter) {
@@ -466,6 +503,8 @@ async function enter(options = {}) {
       }
     }
     state.user = sessionData.session.user;
+    state.accessToken = sessionData.session.access_token || state.accessToken;
+    state.leaving = false;
 
     let player;
     if (options.newCharacter) {
@@ -570,9 +609,30 @@ function startHeartbeat() {
     if (!state.online || !state.joined) return;
     void sendPosition(false).catch(error=>console.warn("KTK position heartbeat:",error));
   }, 100);
-  window.addEventListener("beforeunload", () => {
-    if (state.channel) supabase.removeChannel(state.channel);
-  });
+  window.addEventListener("pagehide", () => {
+    if (!state.online || !state.joined || state.leaving || !state.accessToken) return;
+    state.leaving = true;
+    const token = state.accessToken;
+    const endpoint = SUPABASE_URL + "/rest/v1/rpc/ktk_leave_world";
+    // keepalive permite que a requisição continue mesmo quando a página fecha.
+    void fetch(endpoint, {
+      method: "POST",
+      mode: "cors",
+      credentials: "omit",
+      keepalive: true,
+      headers: {
+        "apikey": SUPABASE_PUBLISHABLE_KEY,
+        "Authorization": "Bearer " + token,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: "{}"
+    }).catch(error=>console.warn("KTK exit death:",error));
+    state.joined = false;
+    state.online = false;
+    if (state.channel) void supabase.removeChannel(state.channel);
+    state.channel = null;
+  }, {capture:true});
 }
 
 async function claimKingCrown() {
@@ -599,7 +659,13 @@ window.KTKOnline = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Apaga chaves gravadas por versões antigas do jogo. A identidade e o
+  // personagem desta execução existem somente na memória desta página.
+  try {
+    localStorage.removeItem("ktk-display-name");
+    localStorage.removeItem("sb-mtddtvqtljtgzggpdogl-auth-token");
+  } catch (_) {}
   const input = document.getElementById("ktk-display-name");
-  if (input) input.value = localStorage.getItem("ktk-display-name") || "";
+  if (input) input.value = "";
   startHeartbeat();
 });
