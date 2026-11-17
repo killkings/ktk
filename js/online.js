@@ -107,6 +107,18 @@ function acceptDatabaseChange(payload) {
       progress:0
     };
   }
+  const attackAt=String(serverState.last_attack_at||"");
+  if(changedRemote&&attackAt&&attackAt!==changedRemote.lastServerAttackAt) {
+    changedRemote.lastServerAttackAt=attackAt;
+    changedRemote.attackAnimation={
+      startedAt:performance.now(),
+      duration:0.42,
+      frameCount:6,
+      type:String(serverState.last_attack_type||"punch"),
+      direction:Number.isFinite(Number(serverState.last_attack_direction))
+        ? Math.max(0,Math.min(3,Number(serverState.last_attack_direction))) : 2
+    };
+  }
   if (!state.profileCache.has(String(row.user_id))) {
     state.profileCache.set(String(row.user_id), true);
     void supabase.from("ktk_profiles").select("display_name,character")
@@ -174,69 +186,8 @@ function acceptRemote(payload, source = "broadcast") {
   updateRemotes();
 }
 
-function acceptCombat(payload) {
-  if (!payload?.user_id || payload.user_id === state.user?.id) return;
-  const kind = String(payload.kind || "");
-  if (!["attack_start","projectile_start","skeleton_hit","player_damaged","skeleton_attack","pvp_hit","crown_claimed","crown_dropped"].includes(kind)) return;
-  const eventId = String(payload.event_id || "");
-  if (!eventId || state.seenCombatEvents.has(eventId)) return;
-  state.seenCombatEvents.add(eventId);
-  if (state.seenCombatEvents.size > 256) {
-    state.seenCombatEvents = new Set([...state.seenCombatEvents].slice(-128));
-  }
-  const id = String(payload.user_id);
-  let remote = state.remote.get(id);
-  if (!remote && Number.isFinite(Number(payload.x)) && Number.isFinite(Number(payload.y))) {
-    acceptRemote({
-      user_id: payload.user_id,
-      display_name: payload.display_name,
-      x: payload.x, y: payload.y, direction: payload.direction,
-      character: payload.character || {},
-      wearables: payload.wearables || {},
-      combat_stats: payload.combat_stats || {},
-      session_id: payload.session_id,
-      sent_at: payload.sent_at
-    }, "broadcast");
-    remote = state.remote.get(id);
-  }
-  if (!remote) return;
-  if (payload.wearables && typeof payload.wearables === "object") {
-    remote.wearables = payload.wearables;
-    remote.isKing = Boolean(payload.wearables.head?.isKingCrown);
-    remote.hasKingCrown = remote.isKing;
-  }
-  const events = remote.combatEvents || [];
-  if (events.some(event => event.event_id === eventId)) return;
-  events.push({
-    event_id: eventId,
-    kind,
-    direction: Number.isFinite(Number(payload.direction)) ? Math.max(0, Math.min(3, Number(payload.direction))) : 2,
-    attack_type: String(payload.attack_type || "punch"),
-    weapon_id: payload.weapon_id ? String(payload.weapon_id) : null,
-    duration: Math.max(0.1, Math.min(2, Number(payload.duration) || 0.42)),
-    frame_count: Math.max(1, Math.min(20, Math.floor(Number(payload.frame_count) || 6))),
-    projectile_type: String(payload.projectile_type || ""),
-    projectile_x: Number(payload.projectile_x),
-    projectile_y: Number(payload.projectile_y),
-    target_x: Number(payload.target_x),
-    target_y: Number(payload.target_y),
-    x: Number(payload.x), y: Number(payload.y),
-    vector_x: Number(payload.vector_x) || 0,
-    vector_y: Number(payload.vector_y) || 0,
-    speed: Math.max(1, Number(payload.speed) || 500),
-    max_distance: Math.max(1, Number(payload.max_distance) || 160),
-    damage: Math.max(0, Number(payload.damage) || 0),
-    target_user_id: payload.target_user_id ? String(payload.target_user_id) : null,
-    target_health: payload.target_health !== null && payload.target_health !== undefined &&
-      Number.isFinite(Number(payload.target_health)) ? Number(payload.target_health) : null,
-    combat_stats: payload.combat_stats || {},
-    knockback_x: Number(payload.knockback_x) || 0,
-    knockback_y: Number(payload.knockback_y) || 0,
-    crown_x: Number.isFinite(Number(payload.crown_x)) ? Number(payload.crown_x) : null,
-    crown_y: Number.isFinite(Number(payload.crown_y)) ? Number(payload.crown_y) : null
-  });
-  remote.combatEvents = events.slice(-16);
-  updateRemotes();
+function acceptCombat() {
+  // Combat, dano e projéteis só são aceitos quando chegam como estado do banco.
 }
 
 function broadcastCombat(action = {}) {
@@ -321,7 +272,6 @@ async function subscribeWorld() {
   state.channel
     .on("broadcast", { event: "INSERT" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
-    .on("broadcast", { event: "combat" }, ({ payload }) => acceptCombat(payload))
     .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => acceptWorldEntityChange(payload))
     .on("broadcast", { event: "ENTITY_UPDATE" }, ({ payload }) => acceptWorldEntityChange(payload))
     .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) => acceptWorldEntityChange(payload,true))
