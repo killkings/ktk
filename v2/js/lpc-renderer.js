@@ -381,12 +381,12 @@ export class LPCRenderer {
     const running=Boolean(player.running||player.state?.running)&&moving;
     const motion=running?"run":(moving?"walk":"idle");
     const layers=entry.layers[motion]||entry.layers.walk;
-    const first=layers.find(layer=>layer.definition.name==="corpo")||layers[0];
-    const columns=first?.image?Math.max(1,Math.floor(first.image.width/FRAME_SIZE)):(motion==="idle"?IDLE_COLUMNS:BODY_COLUMNS);
-    const frameCount=motion==="idle"?Math.max(1,Math.min(IDLE_COLUMNS,columns)):Math.max(1,columns);
+    const syncFrameColumns=motion==="idle"?IDLE_COLUMNS:BODY_COLUMNS;
     entry.elapsed=(entry.elapsed||0)+Math.max(0,Number(deltaSeconds)||0);
-    const frame=motion==="idle"?Math.floor(entry.elapsed*2)%frameCount:Math.floor(entry.elapsed*(running?12:9))%frameCount;
-    drawLayers(ctx,x,y,layers,player.direction,frame,columns);
+    const frame=motion==="idle"
+      ? Math.floor(entry.elapsed*2)%syncFrameColumns
+      : Math.floor(entry.elapsed*(running?12:9))%syncFrameColumns;
+    drawLayers(ctx,x,y,layers,player.direction,frame,syncFrameColumns);
   }
 
   remove(id) {
@@ -401,7 +401,7 @@ export class LPCRenderer {
   }
 }
 
-function drawLayers(ctx,x,y,layers,direction,frame,bodyColumns) {
+function drawLayers(ctx,x,y,layers,direction,frame,syncFrameColumns) {
   if(!layers?.length) return;
   ctx.save();
   ctx.imageSmoothingEnabled=false;
@@ -410,7 +410,11 @@ function drawLayers(ctx,x,y,layers,direction,frame,bodyColumns) {
     if(!image || !(image.width||image.naturalWidth)) continue;
     const columns=Math.max(1,Math.floor(image.width/FRAME_SIZE));
     const rows=Math.max(1,Math.floor(image.height/FRAME_SIZE));
-    const sourceFrame=layer.definition.staticFrame??Math.floor(frame/bodyColumns*columns);
+    const sourceFrame=Number.isInteger(layer.definition.staticFrame)
+      ? layer.definition.staticFrame
+      : layer.fallbackMotion && syncFrameColumns<=IDLE_COLUMNS && columns>syncFrameColumns
+        ? Math.floor(columns/2)
+        : Math.round((frame%syncFrameColumns)/syncFrameColumns*columns);
     const row=Math.max(0,Math.min(rows-1,Number(direction)||0));
     const layerFrame=Math.max(0,Math.min(columns-1,sourceFrame));
     const scale=1.28,displaySize=FRAME_SIZE;
