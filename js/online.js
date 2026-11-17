@@ -364,7 +364,7 @@ async function sendPosition(force = false) {
     state.lastDbHeartbeat = now;
     void supabase.rpc("ktk_touch_player").then(({error})=>{
       if(error) console.warn("KTK world heartbeat:",error.message);
-    });
+    }).catch(error=>console.warn("KTK world heartbeat:",error));
   }
   // Garante que o servidor registre caminhada/corrida antes de validar
   // a próxima posição. Uma intenção ainda pendente nunca pode ser ultrapassada
@@ -374,17 +374,24 @@ async function sendPosition(force = false) {
   if (intentSignature !== state.lastIntentSignature) {
     state.lastIntentSignature = intentSignature;
     state.intentInFlight = true;
-    const { error: intentError } = await supabase.rpc("ktk_game_action", {
-      p_action: "intent",
-      p_payload: {
-        moving: Boolean(payload.moving),
-        running: Boolean(payload.running),
-        guarding: Boolean(payload.guarding)
-      }
-    });
-    state.intentInFlight = false;
+    let intentError = null;
+    try {
+      const result = await supabase.rpc("ktk_game_action", {
+        p_action: "intent",
+        p_payload: {
+          moving: Boolean(payload.moving),
+          running: Boolean(payload.running),
+          guarding: Boolean(payload.guarding)
+        }
+      });
+      intentError = result.error || null;
+    } catch (error) {
+      intentError = error;
+    } finally {
+      state.intentInFlight = false;
+    }
     if (intentError) {
-      console.warn("KTK authoritative intent:", intentError.message);
+      console.warn("KTK authoritative intent:", intentError.message || intentError);
       state.lastIntentSignature = "";
       return;
     }
@@ -530,7 +537,13 @@ async function gameAction(action, payload = {}) {
   });
   if (error) throw error;
   if (data?.state) window.KTKWorldEntities?.applyServerState?.(data.state);
-  await loadWorldState();
+  try {
+    await loadWorldState();
+  } catch (snapshotError) {
+    // Ação confirmada pelo RPC não deve parecer rejeitada só porque a
+    // fotografia complementar do mundo falhou na rede.
+    console.warn("KTK world snapshot after action:",snapshotError);
+  }
   return data;
 }
 
@@ -555,7 +568,7 @@ async function markDead() {
 function startHeartbeat() {
   setInterval(() => {
     if (!state.online || !state.joined) return;
-    sendPosition(false);
+    void sendPosition(false).catch(error=>console.warn("KTK position heartbeat:",error));
   }, 100);
   window.addEventListener("beforeunload", () => {
     if (state.channel) supabase.removeChannel(state.channel);
@@ -565,14 +578,16 @@ function startHeartbeat() {
 async function claimKingCrown() {
   const {data,error}=await supabase.rpc("ktk_claim_king_crown");
   if(error) return {ok:false,error:error.message||"Não foi possível reivindicar a coroa."};
-  await loadWorldState();
+  try { await loadWorldState(); }
+  catch(snapshotError) { console.warn("KTK crown snapshot:",snapshotError); }
   return {ok:true,data};
 }
 
 async function dropKingCrown(x,y) {
   const {data,error}=await supabase.rpc("ktk_drop_king_crown",{p_x:Number(x),p_y:Number(y)});
   if(error) return {ok:false,error:error.message||"Não foi possível soltar a coroa."};
-  await loadWorldState();
+  try { await loadWorldState(); }
+  catch(snapshotError) { console.warn("KTK crown snapshot:",snapshotError); }
   return {ok:true,data};
 }
 
