@@ -78,14 +78,21 @@ function acceptRemote(payload) {
   if (!payload || !payload.user_id || payload.user_id === state.user?.id) return;
   const x = Number(payload.x), y = Number(payload.y);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-  state.remote.set(String(payload.user_id), {
-    id: String(payload.user_id),
-    display_name: String(payload.display_name || payload.displayName || "Aventureiro").slice(0, 24),
-    displayName: String(payload.display_name || payload.displayName || "Aventureiro").slice(0, 24),
-    x, y,
+  const id = String(payload.user_id);
+  const previous = state.remote.get(id);
+  const hasCharacter = payload.character && Object.keys(payload.character).length > 0;
+  state.remote.set(id, {
+    id,
+    display_name: String(payload.display_name || payload.displayName || previous?.display_name || "Aventureiro").slice(0, 24),
+    displayName: String(payload.display_name || payload.displayName || previous?.displayName || "Aventureiro").slice(0, 24),
+    x: previous?.x ?? x,
+    y: previous?.y ?? y,
+    targetX: x,
+    targetY: y,
     direction: Math.max(0, Math.min(3, Number(payload.direction) || 2)),
-    character: payload.character || {},
-    type: "player"
+    character: hasCharacter ? payload.character : (previous?.character || {}),
+    type: "player",
+    lastUpdate: Date.now()
   });
   updateRemotes();
 }
@@ -144,6 +151,7 @@ async function subscribeWorld() {
   state.channel
     .on("broadcast", { event: "INSERT" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
+    .on("broadcast", { event: "position" }, ({ payload }) => acceptRemote(payload))
     .on("presence", { event: "sync" }, rebuildPresence)
     .on("presence", { event: "join" }, rebuildPresence)
     .on("presence", { event: "leave" }, rebuildPresence);
@@ -185,14 +193,29 @@ async function sendPosition(force = false) {
   if (!payload) return;
   const now = Date.now();
   const previous = state.lastPosition;
-  const moved = !previous || Math.hypot(payload.x - previous.x, payload.y - previous.y) > 1.5 ||
+  const moved = !previous || Math.hypot(payload.x - previous.x, payload.y - previous.y) > 0.35 ||
     payload.direction !== previous.direction;
-  if (!force && !moved && now - state.lastSent < 2500) return;
-  if (!force && now - state.lastSent < 190) return;
-  state.lastSent = now;
-  state.lastPosition = { x: payload.x, y: payload.y, direction: payload.direction };
-  if (now - state.lastTrack > 2500) await trackPresence();
-  if (now - state.lastCheckpoint >= 240) {
+
+  if (moved && (force || now - state.lastSent >= 60)) {
+    state.lastSent = now;
+    state.lastPosition = { x: payload.x, y: payload.y, direction: payload.direction };
+    const packet = {
+      user_id: state.user.id,
+      display_name: state.displayName,
+      x: payload.x, y: payload.y,
+      direction: payload.direction,
+      character: payload.character
+    };
+    // Broadcast de baixa latência: não espera a gravação periódica no banco.
+    void state.channel.send({ type: "broadcast", event: "position", payload: packet })
+      .then(result => {
+        if (result?.status && result.status !== "ok") console.warn("KTK position broadcast:", result.status);
+      })
+      .catch(error => console.warn("KTK position broadcast:", error));
+  }
+
+  if (now - state.lastTrack >= 10000) void trackPresence();
+  if (now - state.lastCheckpoint >= 1000) {
     state.lastCheckpoint = now;
     const { error: checkpointError } = await supabase.rpc("ktk_checkpoint_player", {
       p_x: payload.x, p_y: payload.y, p_direction: payload.direction
