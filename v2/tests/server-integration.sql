@@ -517,4 +517,174 @@ begin
 end
 $$;
 
+-- Boomerangs return to their owner and magic weapons spend server mana.
+do $$
+declare
+  v_boomerang_uid uuid := '10000000-0000-4000-8000-000000000006';
+  v_magic_uid uuid := '10000000-0000-4000-8000-000000000007';
+  v_player public.ktk_v2_players;
+  v_projectile public.ktk_v2_entities;
+  v_action jsonb;
+  v_attack jsonb;
+  v_projectile_id text;
+  v_mana numeric;
+  v_start_x double precision;
+begin
+  insert into auth.users(id) values (v_boomerang_uid),(v_magic_uid);
+  update public.ktk_v2_players
+  set last_seen_at=clock_timestamp()-interval '1 hour'
+  where world_id='main' and is_alive;
+
+  perform set_config('request.jwt.claim.sub',v_boomerang_uid::text,true);
+  perform public.ktk_v2_enter_world('Teste Bumerangue','{}'::jsonb);
+  update public.ktk_v2_players
+  set x=800,y=1300,direction=3,revision=revision+1,last_seen_at=clock_timestamp()
+  where user_id=v_boomerang_uid and world_id='main';
+  insert into public.ktk_v2_entities(
+    world_id,entity_id,entity_type,x,y,collision_radius,state,revision
+  ) values (
+    'main','test-boomerang-ground','item',810,1300,4,
+    '{"status":"ground","item_id":"equipment-boomerang","quantity":1,"durability":160,"max_durability":160}'::jsonb,1
+  );
+  v_action:=public.ktk_v2_item_action('pickup','{"entity_id":"test-boomerang-ground"}'::jsonb);
+  if v_action->>'ok'<>'true' then raise exception 'V2_BOOMERANG_PICKUP_FAILED'; end if;
+  perform public.ktk_v2_item_action('select_slot','{"slot":0}'::jsonb);
+
+  v_attack:=public.ktk_v2_attack();
+  if v_attack->>'projectile_type'<>'boomerang' then
+    raise exception 'V2_BOOMERANG_DID_NOT_USE_PROJECTILE_PATH';
+  end if;
+  v_projectile_id:=v_attack->>'projectile_id';
+  update public.ktk_v2_entities
+  set state=jsonb_set(
+      jsonb_set(state,'{max_distance}','12'::jsonb,true),
+      '{last_tick_at}',to_jsonb(clock_timestamp()-interval '1 second'),true
+    )
+  where world_id='main' and entity_id=v_projectile_id;
+  perform ktk_v2_private.projectile_tick();
+
+  select * into v_projectile from public.ktk_v2_entities
+  where world_id='main' and entity_id=v_projectile_id;
+  if not found or v_projectile.state->>'phase'<>'return' then
+    raise exception 'V2_BOOMERANG_DID_NOT_TURN_BACK';
+  end if;
+
+  update public.ktk_v2_players
+  set x=v_projectile.x+10,y=v_projectile.y,last_seen_at=clock_timestamp(),revision=revision+1
+  where user_id=v_boomerang_uid and world_id='main';
+  update public.ktk_v2_entities
+  set state=jsonb_set(state,'{last_tick_at}',
+      to_jsonb(clock_timestamp()-interval '1 second'),true)
+  where world_id='main' and entity_id=v_projectile_id;
+  perform ktk_v2_private.projectile_tick();
+  if exists(select 1 from public.ktk_v2_entities where world_id='main' and entity_id=v_projectile_id) then
+    raise exception 'V2_BOOMERANG_DID_NOT_RETURN_TO_OWNER';
+  end if;
+
+  perform set_config('request.jwt.claim.sub',v_magic_uid::text,true);
+  perform public.ktk_v2_enter_world('Teste Magia','{}'::jsonb);
+  update public.ktk_v2_players
+  set x=800,y=1500,direction=3,
+      state=jsonb_set(state,'{mana}','10'::jsonb,true),
+      revision=revision+1,last_seen_at=clock_timestamp()
+  where user_id=v_magic_uid and world_id='main';
+  insert into public.ktk_v2_entities(
+    world_id,entity_id,entity_type,x,y,collision_radius,state,revision
+  ) values (
+    'main','test-wand-ground','item',810,1500,4,
+    '{"status":"ground","item_id":"equipment-wand","quantity":1,"durability":120,"max_durability":120}'::jsonb,1
+  );
+  v_action:=public.ktk_v2_item_action('pickup','{"entity_id":"test-wand-ground"}'::jsonb);
+  if v_action->>'ok'<>'true' then raise exception 'V2_MAGIC_WAND_PICKUP_FAILED'; end if;
+  perform public.ktk_v2_item_action('select_slot','{"slot":0}'::jsonb);
+
+  v_attack:=public.ktk_v2_attack();
+  if v_attack->>'projectile_type'<>'magic' then
+    raise exception 'V2_MAGIC_WEAPON_DID_NOT_CREATE_MAGIC_PROJECTILE';
+  end if;
+  v_projectile_id:=v_attack->>'projectile_id';
+  select * into v_player from public.ktk_v2_players where user_id=v_magic_uid;
+  v_mana:=(v_player.state->>'mana')::numeric;
+  if v_mana<>5 then raise exception 'V2_MAGIC_WEAPON_DID_NOT_CONSUME_MANA value=%',v_mana; end if;
+
+  select * into v_projectile from public.ktk_v2_entities
+  where world_id='main' and entity_id=v_projectile_id;
+  v_start_x:=v_projectile.x;
+  update public.ktk_v2_entities
+  set state=jsonb_set(state,'{last_tick_at}',
+      to_jsonb(clock_timestamp()-interval '0.1 seconds'),true)
+  where world_id='main' and entity_id=v_projectile_id;
+  perform ktk_v2_private.projectile_tick();
+  select * into v_projectile from public.ktk_v2_entities
+  where world_id='main' and entity_id=v_projectile_id;
+  if not found or v_projectile.x<=v_start_x then
+    raise exception 'V2_MAGIC_PROJECTILE_DID_NOT_ADVANCE_ON_SERVER';
+  end if;
+end
+$$;
+
+-- A same-clan projectile is not allowed to damage its own King.
+do $$
+declare
+  v_king_uid uuid := '10000000-0000-4000-8000-000000000008';
+  v_owner_uid uuid := '10000000-0000-4000-8000-000000000009';
+  v_king public.ktk_v2_players;
+  v_projectile public.ktk_v2_entities;
+  v_start_x double precision:=818;
+begin
+  insert into auth.users(id) values (v_king_uid),(v_owner_uid);
+  update public.ktk_v2_players
+  set last_seen_at=clock_timestamp()-interval '1 hour'
+  where world_id='main' and is_alive;
+
+  perform set_config('request.jwt.claim.sub',v_king_uid::text,true);
+  perform public.ktk_v2_enter_world('Rei do Teste','{}'::jsonb);
+  perform public.ktk_v2_choose_clan('#d94343');
+  update public.ktk_v2_players
+  set x=875,y=1700,direction=1,
+      state=jsonb_set(state,'{health}','100'::jsonb,true),
+      revision=revision+1,last_seen_at=clock_timestamp()
+  where user_id=v_king_uid and world_id='main';
+
+  perform set_config('request.jwt.claim.sub',v_owner_uid::text,true);
+  perform public.ktk_v2_enter_world('Arqueiro Aliado','{}'::jsonb);
+  perform public.ktk_v2_choose_clan('#d94343');
+  update public.ktk_v2_players
+  set x=800,y=1700,direction=3,revision=revision+1,last_seen_at=clock_timestamp()
+  where user_id=v_owner_uid and world_id='main';
+
+  update public.ktk_v2_worlds
+  set king_user_id=v_king_uid,crown_version=crown_version+1,revision=revision+1
+  where id='main';
+  update public.ktk_v2_entities
+  set state=jsonb_build_object('status','held','owner_id',v_king_uid::text),
+      revision=revision+1,updated_at=clock_timestamp()
+  where world_id='main' and entity_id='crown-main';
+
+  insert into public.ktk_v2_entities(
+    world_id,entity_id,entity_type,x,y,collision_radius,state,revision
+  ) values (
+    'main','test-same-clan-projectile','projectile',v_start_x,1700,6,
+    jsonb_build_object(
+      'owner_id',v_owner_uid::text,'weapon_id','equipment-bow-normal',
+      'projectile_type','arrow','vector_x',1,'vector_y',0,
+      'speed',720,'max_distance',500,'distance',0,'damage',80,
+      'direction',3,'phase','outbound','created_at',clock_timestamp(),
+      'last_tick_at',clock_timestamp()-interval '0.1 seconds','ttl',15
+    ),1
+  );
+
+  perform ktk_v2_private.projectile_tick();
+  select * into v_king from public.ktk_v2_players where user_id=v_king_uid;
+  select * into v_projectile from public.ktk_v2_entities
+  where world_id='main' and entity_id='test-same-clan-projectile';
+  if (v_king.state->>'health')::numeric<>100 then
+    raise exception 'V2_SAME_CLAN_PROJECTILE_DAMAGED_THE_KING';
+  end if;
+  if not found or v_projectile.x<=v_start_x then
+    raise exception 'V2_SAME_CLAN_PROJECTILE_DID_NOT_PASS_KING';
+  end if;
+end
+$$;
+
 rollback;
