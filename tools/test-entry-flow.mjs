@@ -48,6 +48,7 @@ const screens = Object.fromEntries(screenNames.map(name => [name, {
   }
 }]));
 let throwInitialStateError = false;
+const runtimeErrors = [];
 const window = {
   KTKOnline: null,
   addEventListener(type, callback) {
@@ -73,7 +74,7 @@ const document = {
 const context = vm.createContext({
   window,
   document,
-  console: { error() {}, warn() {} },
+  console: { error(...args) { runtimeErrors.push(args.map(value => String(value)).join(" ")); }, warn() {} },
   setTimeout(callback) {
     return { callback };
   },
@@ -150,7 +151,9 @@ window.KTKOnline = {
 };
 await click();
 assert.equal(screens.game.classList.contains("active"), true,
-  "O mundo deve aparecer mesmo quando a hidratação visual falhar.");
+  "O mundo deve aparecer mesmo quando a hidratação visual falhar. " +
+  "Toast: " + element("toast").textContent +
+  " | erros: " + runtimeErrors.join(" || "));
 assert.equal(button.disabled, false);
 assert.equal(button.textContent, "Entrar no mundo →");
 assert.equal(context.gameStarted, true);
