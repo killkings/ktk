@@ -2928,11 +2928,15 @@
   function clearClientWorldReplica() {
     // Descarta somente cópias de renderização/estado recebidas do servidor.
     // Nenhuma dessas estruturas é usada para persistir ou decidir o mundo.
+    playerDead=true;
+    newCharacterRequired=true;
+    gameStarted=false;
     keys.clear();
     playerInputX=0; playerInputY=0; playerMoving=false; playerRunning=false;
     rightMouseHeld=false;
     shieldStaminaExhausted=false;
     remotePlayers.clear();
+    remoteLayerCache.clear();
     serverWorldEntities.clear();
     serverEntityRevisions.clear();
     worldItems.clear();
