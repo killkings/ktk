@@ -42,6 +42,7 @@ const state = {
   joined: false,
   leaving: false,
   busy: false,
+  claimBusy: false,
   userId: "",
   accessToken: "",
   channel: null,
@@ -117,6 +118,12 @@ function updateHud() {
   }
   const count = state.players.size;
   ui.players.textContent = count + (count === 1 ? " jogador" : " jogadores");
+  if (state.kingUserId) {
+    const king = state.players.get(state.kingUserId);
+    ui.connection.textContent = "♛ Rei: " + (king?.displayName || "ativo");
+  } else if (state.joined) {
+    ui.connection.textContent = "● Mundo sincronizado";
+  }
 }
 
 function extractRow(payload) {
@@ -148,18 +155,23 @@ function applyWorldRow(row) {
   state.worldRevision = nextRevision;
   state.kingUserId = row.king_user_id || null;
   state.worldSeed = Number(row.world_seed) || 20261117;
+  updateHud();
 }
 
 async function claimCrown() {
-  if (!state.joined || state.leaving) return;
+  if (!state.joined || state.leaving || state.claimBusy) return;
+  state.claimBusy = true;
   try {
     const { data, error } = await supabase.rpc("ktk_v2_claim_crown");
     if (error) throw error;
     if (data?.world) applyWorldRow(data.world);
+    if (data?.crown) upsertEntity(data.crown);
     await loadWorldSnapshot();
     showError("A coroa foi reivindicada. O mundo já reconhece você como rei.");
   } catch (error) {
     showError(error?.message || "Não foi possível reivindicar a coroa.");
+  } finally {
+    state.claimBusy = false;
   }
 }
 
