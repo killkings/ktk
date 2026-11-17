@@ -1,6 +1,6 @@
 /* Movimento: o cliente envia intenções e só aplica coordenadas oficiais do servidor. */
-import { state } from "./state.js?v=20261117-remote-motion-006";
-import { supabase } from "./supabase-client.js?v=20261117-remote-motion-006";
+import { state } from "./state.js?v=20261117-remote-snapshot-007";
+import { supabase } from "./supabase-client.js?v=20261117-remote-snapshot-007";
 
 state.lastMovementLatencyMs = Math.max(
   0, Math.min(750, Number(state.lastMovementLatencyMs) || 150)
