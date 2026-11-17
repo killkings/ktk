@@ -98,11 +98,16 @@ function acceptRemote(payload, source = "broadcast") {
   const sentAt = Number(payload.sent_at) || 0;
 
   // Bloqueia pacotes de posição fora de ordem e pacotes atrasados de uma
-  // sessão anterior do mesmo jogador.
+  // sessão anterior do mesmo jogador. Para a mesma sessão, a sequência é a
+  // referência principal; o relógio só desempata quando a sequência não existe.
   if (previous && source === "broadcast") {
-    if (sentAt > 0 && previous.lastPositionAt > 0 && sentAt <= previous.lastPositionAt) return;
-    if (sessionId && sessionId === previous.sessionId &&
-        hasSequence && rawSequence <= previous.lastSequence) return;
+    const sameSession = Boolean(sessionId && sessionId === previous.sessionId);
+    if (sameSession && hasSequence && rawSequence <= previous.lastSequence) return;
+    if ((!sameSession || !hasSequence) && sentAt > 0 &&
+        previous.lastPositionAt > 0 && sentAt <= previous.lastPositionAt) return;
+    // Não deixa uma aba antiga, sem identificador/ordem, sobrescrever uma
+    // conexão nova que já está enviando pacotes versionados.
+    if (previous.sessionId && !sessionId && !hasSequence && !sentAt) return;
   }
 
   const hasCharacter = payload.character && Object.keys(payload.character).length > 0;
@@ -119,8 +124,9 @@ function acceptRemote(payload, source = "broadcast") {
     type: "player",
     lastUpdate: Date.now(),
     sessionId: sessionId || previous?.sessionId || "",
-    lastSequence: hasSequence ? rawSequence : (previous?.lastSequence ?? -1),
-    lastPositionAt: source === "broadcast" ? (sentAt || Date.now()) : (previous?.lastPositionAt || 0)
+    lastSequence: hasSequence ? rawSequence :
+      (sessionId && sessionId !== previous?.sessionId ? -1 : (previous?.lastSequence ?? -1)),
+    lastPositionAt: source === "broadcast" ? sentAt : (previous?.lastPositionAt || 0)
   });
   updateRemotes();
 }
