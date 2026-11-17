@@ -134,7 +134,19 @@ function acceptRemote(payload, source = "broadcast") {
 function acceptCombat(payload) {
   if (!payload?.user_id || payload.user_id === state.user?.id) return;
   const id = String(payload.user_id);
-  const remote = state.remote.get(id);
+  let remote = state.remote.get(id);
+  if (!remote && Number.isFinite(Number(payload.x)) && Number.isFinite(Number(payload.y))) {
+    acceptRemote({
+      user_id: payload.user_id,
+      display_name: payload.display_name,
+      x: payload.x, y: payload.y, direction: payload.direction,
+      character: payload.character || {},
+      wearables: payload.wearables || {},
+      session_id: payload.session_id,
+      sent_at: payload.sent_at
+    }, "broadcast");
+    remote = state.remote.get(id);
+  }
   if (!remote) return;
   const kind = String(payload.kind || "");
   if (!["attack_start","projectile_start","skeleton_hit","player_damaged","skeleton_attack"].includes(kind)) return;
@@ -151,6 +163,10 @@ function acceptCombat(payload) {
     duration: Math.max(0.1, Math.min(2, Number(payload.duration) || 0.42)),
     frame_count: Math.max(1, Math.min(20, Math.floor(Number(payload.frame_count) || 6))),
     projectile_type: String(payload.projectile_type || ""),
+    projectile_x: Number(payload.projectile_x),
+    projectile_y: Number(payload.projectile_y),
+    target_x: Number(payload.target_x),
+    target_y: Number(payload.target_y),
     x: Number(payload.x), y: Number(payload.y),
     vector_x: Number(payload.vector_x) || 0,
     vector_y: Number(payload.vector_y) || 0,
@@ -174,6 +190,8 @@ function broadcastCombat(action = {}) {
     display_name: state.displayName,
     x: local.x, y: local.y,
     direction: local.direction,
+    character: local.character,
+    wearables: local.wearables,
     session_id: state.sessionId,
     event_id: state.sessionId + ":combat:" + (++state.combatSequence),
     sent_at: Date.now()
