@@ -1797,6 +1797,10 @@
         worldItems.delete(crown);
         kingCrownClaimedBy=worldState.owner_id||null;
       }
+      remotePlayers.forEach((remote,id)=>{
+        remote.isKing=Boolean(kingCrownClaimedBy&&String(id)===String(kingCrownClaimedBy));
+        remote.hasKingCrown=remote.isKing;
+      });
       updateKingStatus();
       return true;
     }
@@ -1814,7 +1818,11 @@
   function applyWorldState(snapshot) {
     if(!snapshot||typeof snapshot!=='object') return false;
     (Array.isArray(snapshot.entities)?snapshot.entities:[]).forEach(applyWorldEntity);
-    if(snapshot.world?.king_user_id) kingCrownClaimedBy=String(snapshot.world.king_user_id);
+    kingCrownClaimedBy=snapshot.world?.king_user_id?String(snapshot.world.king_user_id):null;
+    remotePlayers.forEach((remote,id)=>{
+      remote.isKing=Boolean(kingCrownClaimedBy&&String(id)===String(kingCrownClaimedBy));
+      remote.hasKingCrown=remote.isKing;
+    });
     updateKingStatus();
     return true;
   }
@@ -2519,7 +2527,7 @@
     }
     const remoteKing=[...remotePlayers.values()].find(remote=>remote.isKing||remote.hasKingCrown||remote.wearables?.head?.isKingCrown);
     if(remoteKing) {
-      status.textContent=`${remoteKing.name||'Outro jogador'} é o rei`;
+      status.textContent=`${remoteKing.displayName||remoteKing.name||'Outro jogador'} é o rei`;
       return;
     }
     const crownOnGround=[...worldItems].some(item=>item.isKingCrown&&!item.collected);
@@ -2881,15 +2889,8 @@
       entity.character=remote.character||entity.character||{};
       entity.wearables=remote.wearables||entity.wearables||{};
       entity.combatStats=remote.combatStats||entity.combatStats||{};
-      const remoteHasKingCrown=Boolean(remote.isKing||remote.hasKingCrown||entity.wearables?.head?.isKingCrown);
-      entity.isKing=remoteHasKingCrown;
-      entity.hasKingCrown=remoteHasKingCrown;
-      if(remoteHasKingCrown) {
-        kingCrownClaimedBy=id;
-        syncKingCrownWorldItem('carried');
-      } else if(kingCrownClaimedBy===id) {
-        kingCrownClaimedBy=null;
-      }
+      entity.isKing=Boolean(kingCrownClaimedBy&&String(id)===String(kingCrownClaimedBy));
+      entity.hasKingCrown=entity.isKing;
       entity.type='player';
       entity.radius=COLLISION_RADIUS;
       remotePlayers.set(id,entity);
@@ -2929,16 +2930,6 @@
               target.knockback={x:event.knockback_x,y:event.knockback_y,progress:0};
               target.knockbackHeight=0;
             }
-          } else if(event.kind==='crown_claimed') {
-            entity.isKing=true;
-            entity.hasKingCrown=true;
-            kingCrownClaimedBy=id;
-            syncKingCrownWorldItem('carried');
-          } else if(event.kind==='crown_dropped') {
-            entity.isKing=false;
-            entity.hasKingCrown=false;
-            if(kingCrownClaimedBy===id) kingCrownClaimedBy=null;
-            syncKingCrownWorldItem('ground',event.crown_x,event.crown_y);
           } else if(event.kind==='skeleton_hit') {
             const skeleton=window.KTKEnemySkeleton.entity;
             if(!skeleton.defeated&&event.damage>0) {
