@@ -5,7 +5,8 @@ import {
   isNewerRevision,
   createPlayerView,
   reconcilePlayerView,
-  advancePlayerView
+  advancePlayerView,
+  shouldSendMovement
 } from "../js/client-rules.js";
 
 test("normalizes controls and prevents running without movement", () => {
@@ -66,4 +67,13 @@ test("render interpolation moves only the visual replica", () => {
   assert.equal(rendered.x,200);
   assert.ok(rendered.visualX > 100 && rendered.visualX < 200);
   assert.equal(updated.visualX,100);
+});
+
+test("movement sends server steps at 10 Hz while walking or running", () => {
+  assert.equal(shouldSendMovement({moving:true,elapsedMs:99}),false);
+  assert.equal(shouldSendMovement({moving:true,elapsedMs:100}),true);
+  assert.equal(shouldSendMovement({moving:true,elapsedMs:250}),true);
+  assert.equal(shouldSendMovement({moving:false,elapsedMs:2499}),false);
+  assert.equal(shouldSendMovement({moving:false,elapsedMs:2500}),true);
+  assert.equal(shouldSendMovement({changed:true,moving:false,elapsedMs:0}),true);
 });
