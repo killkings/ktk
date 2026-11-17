@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 const state = {
   user: null, channel: null, joined: false, online: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0,
-  lastPosition: null, lastAppearanceSignature: "", positionSequence: 0, combatSequence: 0,
+  lastPosition: null, lastAppearanceSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(), connecting: false
 };
@@ -363,28 +363,32 @@ async function sendPosition(force = false) {
   if ((moved || appearanceChanged) && (force || appearanceChanged || now - state.lastSent >= 90)) {
     state.lastSent = now;
     state.lastAppearanceSignature = appearanceSignature;
-    state.lastPosition = { x: payload.x, y: payload.y, direction: payload.direction };
-    state.lastPosition = { x: payload.x, y: payload.y, direction: payload.direction };
+    // A posição só é considerada confirmada depois da resposta do banco.
   }
 
   if (appearanceChanged) void trackPresence();
   if (now - state.lastTrack >= 10000) void trackPresence();
-  if ((moved || force) && now - state.lastCheckpoint >= 90) {
+  if ((moved || force) && now - state.lastCheckpoint >= 90 && !state.positionInFlight) {
     state.lastCheckpoint = now;
-    const { data: checkpoint, error: checkpointError } = await supabase.rpc("ktk_checkpoint_player", {
-      p_x: payload.x, p_y: payload.y, p_direction: payload.direction
-    });
-    if (checkpointError) {
-      console.warn("KTK authoritative movement:", checkpointError.message);
-      return;
-    }
-    if (checkpoint && Number.isFinite(Number(checkpoint.x)) && Number.isFinite(Number(checkpoint.y))) {
-      const dx=Number(checkpoint.x)-payload.x;
-      const dy=Number(checkpoint.y)-payload.y;
-      if(checkpoint.accepted===false || Math.hypot(dx,dy)>1.5) {
-        window.KTKWorldEntities?.setLocalState?.(checkpoint.x,checkpoint.y,checkpoint.direction);
-        state.lastPosition={x:Number(checkpoint.x),y:Number(checkpoint.y),direction:Number(checkpoint.direction)};
+    state.positionInFlight = true;
+    try {
+      const { data: checkpoint, error: checkpointError } = await supabase.rpc("ktk_checkpoint_player", {
+        p_x: payload.x, p_y: payload.y, p_direction: payload.direction
+      });
+      if (checkpointError) {
+        console.warn("KTK authoritative movement:", checkpointError.message);
+        return;
       }
+      if (checkpoint && Number.isFinite(Number(checkpoint.x)) && Number.isFinite(Number(checkpoint.y))) {
+        const serverX=Number(checkpoint.x), serverY=Number(checkpoint.y);
+        const dx=serverX-payload.x, dy=serverY-payload.y;
+        if(checkpoint.accepted===false || Math.hypot(dx,dy)>1.5) {
+          window.KTKWorldEntities?.setLocalState?.(serverX,serverY,checkpoint.direction);
+        }
+        state.lastPosition={x:serverX,y:serverY,direction:Number(checkpoint.direction)};
+      }
+    } finally {
+      state.positionInFlight = false;
     }
   }
 }
