@@ -2484,8 +2484,12 @@
   }
 
   async function startGame() {
+    if(!window.KTKOnline) {
+      toast('O módulo online não carregou. Atualize a página e tente novamente.');
+      return;
+    }
     let onlinePlayer=null;
-    if(window.KTKOnline) {
+    {
       const onlineResult=await window.KTKOnline.enter({
         displayName:document.getElementById('ktk-display-name')?.value||'',
         character:{...character},
