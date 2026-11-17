@@ -6,17 +6,19 @@ const migrationUrl = new URL("../../supabase/migrations/20261117170000_ktk_v2_fo
 const gameplayMigrationUrl = new URL("../../supabase/migrations/20261117172000_ktk_v2_gameplay_actions.sql", import.meta.url);
 const simulationMigrationUrl = new URL("../../supabase/migrations/20261117173000_ktk_v2_server_simulation.sql", import.meta.url);
 const projectileMigrationUrl = new URL("../../supabase/migrations/20261117174000_ktk_v2_projectiles.sql", import.meta.url);
+const movementMigrationUrl = new URL("../../supabase/migrations/20261117175000_ktk_v2_guard_and_world_collisions.sql", import.meta.url);
 const clientUrl = new URL("../js/main.js", import.meta.url);
 const htmlUrl = new URL("../index.html", import.meta.url);
 const rendererUrl = new URL("../js/world-renderer.js", import.meta.url);
 const lpcUrl = new URL("../js/lpc-renderer.js", import.meta.url);
 const rulesUrl = new URL("../js/client-rules.js", import.meta.url);
 const catalogUrl = new URL("../../personagem.js", import.meta.url);
-const [sql, gameplaySql, simulationSql, projectileSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
+const [sql, gameplaySql, simulationSql, projectileSql, movementSql, client, html, renderer, lpc, rules, catalog] = await Promise.all([
   readFile(migrationUrl, "utf8"),
   readFile(gameplayMigrationUrl, "utf8"),
   readFile(simulationMigrationUrl, "utf8"),
   readFile(projectileMigrationUrl, "utf8"),
+  readFile(movementMigrationUrl, "utf8"),
   readFile(clientUrl, "utf8"),
   readFile(htmlUrl, "utf8"),
   readFile(rendererUrl, "utf8"),
@@ -211,8 +213,12 @@ test("V2 projectile combat is calculated and persisted on the server", () => {
 });
 
 test("movement supports server-validated shield blocking while walking", () => {
-  assert.ok(gameplaySql.includes("ktk_v2_step_player"));
-  assert.ok(gameplaySql.includes("SHIELD_REQUIRED") || gameplaySql.includes("TWO_HANDED_WEAPON_CANNOT_BLOCK"));
+  assert.ok(movementSql.includes("create or replace function public.ktk_v2_step_player"));
+  assert.ok(movementSql.includes("SHIELD_REQUIRED"));
+  assert.ok(movementSql.includes("TWO_HANDED_WEAPON_CANNOT_BLOCK"));
+  assert.ok(movementSql.includes("entity_type='resource'"));
+  assert.ok(movementSql.includes("entity_type='enemy'"));
+  assert.ok(rules.includes("guarding: Boolean(input.guarding)"));
 });
 test("the V2 migration has one clean commit boundary", () => {
   assert.equal((sql.match(/\bcommit;/gi) || []).length, 1);
