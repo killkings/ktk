@@ -303,9 +303,10 @@ export class LPCRenderer {
     const signature=JSON.stringify({appearance,wearables:player.state?.wearables||{},layers:player.state?.appearance_layers||{}});
     let entry=this.players.get(id);
     if(!entry) {
-      entry={signature:"",layers:null,loading:false,retryCount:0,retryTimer:0,elapsed:0,failed:[]};
+      entry={signature:"",layers:null,loading:false,retryCount:0,retryTimer:0,elapsed:0,failed:[],latestPlayer:player};
       this.players.set(id,entry);
     }
+    entry.latestPlayer=player;
     if(entry.signature!==signature) {
       if(entry.retryTimer) clearTimeout(entry.retryTimer);
       entry.retryTimer=0;
@@ -346,6 +347,9 @@ export class LPCRenderer {
       if(entry.signature===signature) this.scheduleRetry(id,player,entry,signature);
     } finally {
       entry.loading=false;
+      if(entry.signature!==signature && this.players.get(id)===entry) {
+        void this.loadPlayer(id,entry.latestPlayer,entry,entry.signature);
+      }
     }
   }
 
