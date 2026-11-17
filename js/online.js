@@ -10,6 +10,7 @@ window.KTKOnline = {
   get userId() { return state.user?.id || null; },
   get connected() { return state.online; }
 };
+window.dispatchEvent(new Event("ktk-online-ready"));
 
 document.addEventListener("DOMContentLoaded", () => {
   // Apaga chaves gravadas por versões antigas. A sessão atual existe só em memória.

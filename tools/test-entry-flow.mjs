@@ -1,0 +1,118 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import vm from "node:vm";
+
+const root = process.cwd();
+const lifecycle = await readFile(new URL("../game/game-lifecycle.js", import.meta.url), "utf8");
+const onlineModule = await readFile(new URL("../js/online.js", import.meta.url), "utf8");
+const html = await readFile(new URL("../campo_livre_atualizado.html", import.meta.url), "utf8");
+
+const elements = new Map();
+function element(id) {
+  if (!elements.has(id)) {
+    const listeners = new Map();
+    elements.set(id, {
+      id,
+      value: "",
+      textContent: "",
+      disabled: false,
+      dataset: {},
+      style: {},
+      focused: false,
+      listeners,
+      classList: {
+        add() {},
+        remove() {},
+        toggle() {}
+      },
+      addEventListener(type, callback) {
+        const callbacks = listeners.get(type) || [];
+        callbacks.push(callback);
+        listeners.set(type, callbacks);
+      },
+      focus() {
+        this.focused = true;
+      }
+    });
+  }
+  return elements.get(id);
+}
+
+const windowListeners = new Map();
+const window = {
+  KTKOnline: null,
+  addEventListener(type, callback) {
+    const callbacks = windowListeners.get(type) || [];
+    callbacks.push(callback);
+    windowListeners.set(type, callbacks);
+  },
+  removeEventListener(type, callback) {
+    const callbacks = windowListeners.get(type) || [];
+    windowListeners.set(type, callbacks.filter(item => item !== callback));
+  },
+  dispatchEvent(event) {
+    for (const callback of [...(windowListeners.get(event.type) || [])]) callback(event);
+  }
+};
+const document = {
+  getElementById: element,
+  querySelectorAll() {
+    return [];
+  }
+};
+
+const context = vm.createContext({
+  window,
+  document,
+  console: { error() {}, warn() {} },
+  setTimeout(callback) {
+    return { callback };
+  },
+  clearTimeout() {},
+  character: {},
+  newCharacterRequired: false,
+  toastTimer: 0
+});
+
+vm.runInContext(lifecycle, context, { filename: "game/game-lifecycle.js" });
+
+const button = element("enter-world");
+const nameInput = element("ktk-display-name");
+const click = button.listeners.get("click")?.[0];
+assert.equal(typeof click, "function", "O botão Entrar no mundo precisa ter um listener.");
+
+let enterCalls = 0;
+await click();
+assert.equal(enterCalls, 0, "Nome inválido não deve iniciar autenticação nem entrada.");
+assert.equal(nameInput.focused, true, "O campo do nome deve receber foco quando inválido.");
+assert.match(element("toast").textContent, /pelo menos 2 caracteres/i);
+
+nameInput.value = "Uriel";
+let receivedOptions = null;
+const pendingEntry = click();
+assert.equal(button.disabled, true, "O botão deve indicar que a conexão está em andamento.");
+assert.ok((windowListeners.get("ktk-online-ready") || []).length > 0,
+  "O fluxo deve aguardar a inicialização do módulo online.");
+
+window.KTKOnline = {
+  async enter(options) {
+    enterCalls++;
+    receivedOptions = options;
+    return { ok: false, error: "Falha simulada da RPC." };
+  }
+};
+window.dispatchEvent({ type: "ktk-online-ready" });
+await pendingEntry;
+
+assert.equal(enterCalls, 1, "O módulo online deve ser chamado depois de ficar pronto.");
+assert.equal(receivedOptions.displayName, "Uriel");
+assert.equal(button.disabled, false, "O botão deve ser reativado após uma resposta.");
+assert.equal(element("toast").textContent, "Falha simulada da RPC.");
+
+assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
+assert.match(html, /id="enter-world"/);
+assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
+assert.match(html, /game-lifecycle\.js\?v=20261117-entry-recovery-001/);
+assert.match(html, /online\.js\?v=20261117-entry-recovery-001/);
+
+console.log("World entry button, name validation, online-module readiness and error feedback passed.");

@@ -83,9 +83,42 @@
 var  startingGame = false;
 var  leavingGame = false;
 
+  // O script de entrada é clássico e pode executar antes de o grafo ESM do
+  // multiplayer terminar de carregar. Aguarda o sinal do módulo em vez de
+  // rejeitar o primeiro clique por uma corrida de carregamento.
+  function waitForOnlineModule(timeoutMs=15000) {
+    if(typeof window.KTKOnline?.enter==='function') return Promise.resolve(window.KTKOnline);
+    return new Promise((resolve,reject)=>{
+      let timeoutId=null;
+      const cleanup=()=>{
+        window.removeEventListener('ktk-online-ready',onReady);
+        if(timeoutId!==null) clearTimeout(timeoutId);
+      };
+      const onReady=()=>{
+        const online=window.KTKOnline;
+        if(typeof online?.enter!=='function') return;
+        cleanup();
+        resolve(online);
+      };
+      window.addEventListener('ktk-online-ready',onReady);
+      timeoutId=setTimeout(()=>{
+        cleanup();
+        reject(new Error('O módulo online não carregou. Verifique a conexão e recarregue a página.'));
+      },timeoutMs);
+      onReady();
+    });
+  }
+
   async function startGame() {
     const button=document.getElementById('enter-world');
+    const nameInput=document.getElementById('ktk-display-name');
+    const displayName=String(nameInput?.value||'').trim().slice(0,24);
     if(startingGame) return;
+    if(displayName.length<2) {
+      toast('Digite um nome com pelo menos 2 caracteres para entrar no mundo.');
+      nameInput?.focus();
+      return;
+    }
     startingGame=true;
     if(button) {
       button.disabled=true;
@@ -95,12 +128,9 @@ var  leavingGame = false;
       button.style.cursor='wait';
     }
     try {
-      if(!window.KTKOnline) {
-        toast('O módulo online não carregou. Atualize a página e tente novamente.');
-        return;
-      }
-      const onlineResult=await window.KTKOnline.enter({
-        displayName:document.getElementById('ktk-display-name')?.value||'',
+      const online=await waitForOnlineModule();
+      const onlineResult=await online.enter({
+        displayName,
         character:{...character},
         newCharacter:newCharacterRequired
       });
@@ -163,7 +193,8 @@ var  leavingGame = false;
       updateKingStatus();
     } catch(error) {
       console.error('KTK startGame:',error);
-      toast('O personagem conectou, mas houve um erro ao preparar o jogo. Tente entrar novamente.');
+      const message=String(error?.message||'Não foi possível preparar o jogo. Tente entrar novamente.');
+      toast(message.length>180?message.slice(0,177)+'…':message);
     } finally {
       startingGame=false;
       if(button) {
