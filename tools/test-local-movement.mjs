@@ -79,10 +79,41 @@ context.playerMoving = true;
 context.playerInputX = 1;
 context.updateLocalPlayerVisual(1 / 60);
 assert.ok(Math.abs(context.playerVisual.x - 103.75) < 0.01);
+assert.ok(Math.abs(context.playerVisual.targetX - 103.75) < 0.01,
+  "The reconciliation target must advance with local movement.");
 assert.equal(context.player.x, 100);
 assert.equal(context.playerVisual.direction, 3);
 
 const requestInput = { inputX:1,inputY:0,running:false,guarding:false };
+
+// Regression: completing a network correction while walking must never snap
+// the sprite back to the target captured before those extra movement frames.
+const rollbackContext = {
+  playerMoving: false, playerRunning: false, playerInputX: 0, playerInputY: 0,
+  playerStats: { stats: { speed: { value: 2 } } },
+  window: { KTKOnline: { connected: true } }, SPEED: 225, COLLISION_RADIUS: 18
+};
+vm.createContext(rollbackContext);
+vm.runInContext(gameState.slice(blockStart, blockEnd), rollbackContext);
+rollbackContext.setAuthoritativePlayerPosition(100, 120, 2, true);
+rollbackContext.playerMoving = true;
+rollbackContext.playerInputX = 1;
+rollbackContext.setAuthoritativePlayerPosition(
+  103,120,3,false,750,requestInput,
+  { inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0 }
+);
+let previousVisualX = rollbackContext.playerVisual.x;
+let correctionFrames = 0;
+while(rollbackContext.playerVisual.correctionRemaining > 0 && correctionFrames < 20) {
+  rollbackContext.updateLocalPlayerVisual(0.05);
+  assert.ok(rollbackContext.playerVisual.x >= previousVisualX - 0.01,
+    "Finishing a correction must not move a continuously walking player backwards.");
+  previousVisualX = rollbackContext.playerVisual.x;
+  correctionFrames++;
+}
+assert.ok(correctionFrames > 0);
+assert.ok(Math.abs(rollbackContext.playerVisual.x - rollbackContext.playerVisual.targetX) < 0.01,
+  "The visual position must converge to the moving target without a rollback.");
 context.setAuthoritativePlayerPosition(
   103,120,3,false,150,requestInput,
   { inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0 }
@@ -141,11 +172,14 @@ assert.match(renderer,/playerMoving\?playerVisual.direction:player.direction/);
 assert.match(gameState,/errorDistance\/correctionSpeed/);
 assert.doesNotMatch(gameState,/latencyTolerance/);
 assert.match(online,/sendPosition/);
-for(const path of [
-  "render/world-renderer.js","multiplayer/player-replica.js",
-  "js/game-state.js","input/input-controller.js","js/online.js"
+for(const [path,version] of [
+  ["render/world-renderer.js","20261117-movement-authority-002"],
+  ["multiplayer/player-replica.js","20261117-movement-authority-002"],
+  ["js/game-state.js","20261117-movement-visual-003"],
+  ["input/input-controller.js","20261117-movement-authority-002"],
+  ["js/online.js","20261117-movement-authority-002"]
 ]) {
-  assert.ok(html.includes("./"+path+"?v=20261117-movement-authority-002"),
+  assert.ok(html.includes("./"+path+"?v="+version),
     "Cache bust ausente: "+path);
 }
 console.log("Timestamped server movement, RTT extrapolation, gear speed and continuous correction passed.");
