@@ -87,6 +87,19 @@ assert.equal(context.player.x, 100);
 assert.equal(context.playerVisual.direction, 3);
 
 const requestInput = { inputX:1,inputY:0,running:false,guarding:false };
+// Local collision prediction must stop at the same 36px player separation.
+context.playerVisual.x=100;
+context.playerVisual.y=120;
+context.playerVisual.targetX=100;
+context.playerVisual.targetY=120;
+context.remotePlayers.set("other",{x:130,y:120});
+context.playerMoving=true;
+context.playerInputX=1;
+context.playerInputY=0;
+context.updateLocalPlayerVisual(0.05);
+assert.equal(context.playerVisual.x,100,
+  "The visual prediction must not walk through another player's collision radius.");
+context.remotePlayers.clear();
 
 // Regression: completing a network correction while walking must never snap
 // the sprite back to the target captured before those extra movement frames.
