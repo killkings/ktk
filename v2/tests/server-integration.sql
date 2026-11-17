@@ -60,6 +60,16 @@ begin
   end;
   if not v_failed then raise exception 'V2_CLAN_COLOR_WAS_CHANGED'; end if;
 
+  if not exists (
+    select 1 from public.ktk_v2_item_catalog
+    where item_id='test-v1-catalog-import'
+      and display_name='Item legado de teste'
+      and attack_bonus=7
+      and (metadata->>'imported_from_v1')::boolean=true
+  ) then
+    raise exception 'V2_DID_NOT_IMPORT_V1_ITEM_CATALOG';
+  end if;
+
   -- The snapshot may now contain the crown, starter loot, resources and NPC.
   v_snapshot := public.ktk_v2_world_state();
   if jsonb_array_length(v_snapshot->'players') <> 1 then
