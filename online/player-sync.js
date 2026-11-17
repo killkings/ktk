@@ -1,7 +1,7 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
 import { state } from "./state.js?v=20261117-remote-snapshot-007";
 import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-remote-snapshot-007";
-import { applyOwnServerPosition } from "./movement.js?v=20261117-remote-snapshot-007";
+import { applyOwnServerPosition } from "./movement.js?v=20261117-movement-reconcile-001";
 
 // Ordena timestamps timestamptz incluindo os microssegundos do PostgreSQL.
 function compareServerTimestamps(a, b) {
