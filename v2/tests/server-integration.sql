@@ -429,4 +429,92 @@ begin
 end
 $$;
 
+-- Ranged weapons consume ammunition on the server and projectile collision
+-- damages the server-owned enemy, not a client-side prediction.
+do $$
+declare
+  v_uid uuid := '10000000-0000-4000-8000-000000000005';
+  v_player public.ktk_v2_players;
+  v_projectile public.ktk_v2_entities;
+  v_target public.ktk_v2_entities;
+  v_attack jsonb;
+  v_action jsonb;
+  v_projectile_id text;
+  v_ammo_quantity integer;
+  v_health numeric;
+  v_start_x double precision;
+begin
+  insert into auth.users(id) values (v_uid);
+  update public.ktk_v2_players
+  set last_seen_at=clock_timestamp()-interval '1 hour'
+  where world_id='main' and is_alive;
+
+  perform set_config('request.jwt.claim.sub',v_uid::text,true);
+  perform public.ktk_v2_enter_world('Teste Projétil','{}'::jsonb);
+
+  update public.ktk_v2_players
+  set x=800,y=1000,direction=3,revision=revision+1,
+      last_seen_at=clock_timestamp(),movement_updated_at=clock_timestamp()
+  where user_id=v_uid and world_id='main';
+
+  insert into public.ktk_v2_entities(
+    world_id,entity_id,entity_type,x,y,collision_radius,state,revision
+  ) values
+    ('main','test-bow-ground','item',810,1000,4,
+      '{"status":"ground","item_id":"equipment-bow-normal","quantity":1,"durability":120,"max_durability":120}'::jsonb,1),
+    ('main','test-arrows-ground','item',811,1002,4,
+      '{"status":"ground","item_id":"equipment-arrow","quantity":3,"durability":0,"max_durability":0}'::jsonb,1),
+    ('main','test-projectile-target','enemy',875,1000,12,
+      '{"health":50,"max_health":50,"defense":0,"attack":1,"defeated":false}'::jsonb,1);
+
+  v_action:=public.ktk_v2_item_action('pickup','{"entity_id":"test-bow-ground"}'::jsonb);
+  if v_action->>'ok'<>'true' then raise exception 'V2_PROJECTILE_BOW_PICKUP_FAILED'; end if;
+  v_action:=public.ktk_v2_item_action('pickup','{"entity_id":"test-arrows-ground"}'::jsonb);
+  if v_action->>'ok'<>'true' then raise exception 'V2_PROJECTILE_AMMO_PICKUP_FAILED'; end if;
+  perform public.ktk_v2_item_action('select_slot','{"slot":0}'::jsonb);
+
+  v_attack:=public.ktk_v2_attack();
+  if v_attack->>'ok'<>'true' or v_attack->>'projectile_id' is null then
+    raise exception 'V2_RANGED_ATTACK_DID_NOT_CREATE_PROJECTILE';
+  end if;
+  v_projectile_id:=v_attack->>'projectile_id';
+
+  select * into v_player from public.ktk_v2_players where user_id=v_uid;
+  select greatest(0,coalesce((item->>'quantity')::integer,0))
+  into v_ammo_quantity
+  from jsonb_array_elements(v_player.state->'inventory') item
+  where item->>'item_id'='equipment-arrow';
+  if v_ammo_quantity<>2 then
+    raise exception 'V2_RANGED_ATTACK_DID_NOT_CONSUME_ONE_ARROW quantity=%',v_ammo_quantity;
+  end if;
+
+  select * into v_projectile from public.ktk_v2_entities
+  where world_id='main' and entity_id=v_projectile_id and entity_type='projectile';
+  if not found then raise exception 'V2_PROJECTILE_NOT_STORED_IN_WORLD'; end if;
+  if v_projectile.state->>'owner_id'<>v_uid::text then
+    raise exception 'V2_PROJECTILE_OWNER_NOT_STORED';
+  end if;
+  if v_projectile.state->>'weapon_id'<>'equipment-bow-normal' then
+    raise exception 'V2_PROJECTILE_WEAPON_NOT_STORED';
+  end if;
+
+  update public.ktk_v2_entities
+  set state=jsonb_set(state,'{last_tick_at}',
+      to_jsonb(clock_timestamp()-interval '0.1 seconds'),true),
+      updated_at=clock_timestamp()
+  where world_id='main' and entity_id=v_projectile_id;
+  perform ktk_v2_private.projectile_tick();
+
+  select * into v_target from public.ktk_v2_entities
+  where world_id='main' and entity_id='test-projectile-target';
+  v_health:=(v_target.state->>'health')::numeric;
+  if v_health>=50 then
+    raise exception 'V2_PROJECTILE_DID_NOT_DAMAGE_TARGET health=%',v_health;
+  end if;
+  if exists(select 1 from public.ktk_v2_entities where world_id='main' and entity_id=v_projectile_id) then
+    raise exception 'V2_PROJECTILE_WAS_NOT_CONSUMED_ON_HIT';
+  end if;
+end
+$$;
+
 rollback;
