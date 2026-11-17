@@ -28,7 +28,8 @@ const state = {
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
   lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", positionSequence: 0, positionInFlight: false, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
-  remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(),
+  remote: new Map(), profileCache: new Map(), profileLoads: new Map(),
+  profileRetryTimers: new Map(), profileRetryCounts: new Map(), seenCombatEvents: new Set(),
   lastLocalKnockbackAt: "", intentInFlight: false, worldStateRequestId: 0, connecting: false
 };
 supabase.auth.onAuthStateChange((_event,session)=>{
@@ -70,6 +71,83 @@ function updateRemotes() {
   if (window.KTKWorldEntities?.setRemotePlayers) {
     window.KTKWorldEntities.setRemotePlayers([...state.remote.values()]);
   }
+}
+
+function applyRemoteProfile(userId, profile) {
+  const id=String(userId||"");
+  const remote=state.remote.get(id);
+  if(!remote||!profile) return false;
+  let changed=false;
+  const profileName=String(profile.display_name||"").trim();
+  if(profileName && (!remote.displayName || remote.displayName==="Aventureiro")) {
+    remote.displayName=profileName.slice(0,24);
+    remote.display_name=remote.displayName;
+    changed=true;
+  }
+  const currentCharacter=remote.character&&typeof remote.character==="object"?remote.character:{};
+  const profileCharacter=profile.character&&typeof profile.character==="object"?profile.character:{};
+  if(!Object.keys(currentCharacter).length && Object.keys(profileCharacter).length) {
+    remote.character=profileCharacter;
+    changed=true;
+  }
+  if(changed) updateRemotes();
+  return changed;
+}
+
+function scheduleRemoteProfileRetry(userId) {
+  const id=String(userId||"");
+  if(!id||state.profileRetryTimers.has(id)||!state.remote.has(id)) return;
+  const attempt=state.profileRetryCounts.get(id)||0;
+  const delays=[1000,2500,5000,10000,20000,30000];
+  const delay=delays[Math.min(attempt,delays.length-1)];
+  state.profileRetryCounts.set(id,attempt+1);
+  const timer=setTimeout(()=>{
+    state.profileRetryTimers.delete(id);
+    if(state.remote.has(id)) void loadRemoteProfile(id);
+  },delay);
+  state.profileRetryTimers.set(id,timer);
+}
+
+function loadRemoteProfile(userId) {
+  const id=String(userId||"");
+  if(!id) return Promise.resolve(null);
+  const cached=state.profileCache.get(id);
+  if(cached) {
+    applyRemoteProfile(id,cached);
+    return Promise.resolve(cached);
+  }
+  const pending=state.profileLoads.get(id);
+  if(pending) return pending;
+
+  const request=(async()=>{
+    try {
+      const {data,error}=await supabase.from("ktk_profiles")
+        .select("display_name,character")
+        .eq("id",id)
+        .maybeSingle();
+      if(error) throw error;
+      if(!data) throw new Error("Perfil do jogador não encontrado.");
+      const profile={
+        display_name:data.display_name||"",
+        character:data.character&&typeof data.character==="object"?data.character:{}
+      };
+      state.profileCache.set(id,profile);
+      state.profileRetryCounts.delete(id);
+      const retryTimer=state.profileRetryTimers.get(id);
+      if(retryTimer) clearTimeout(retryTimer);
+      state.profileRetryTimers.delete(id);
+      applyRemoteProfile(id,profile);
+      return profile;
+    } catch(error) {
+      console.warn("KTK profile load:",id,error?.message||error);
+      scheduleRemoteProfileRetry(id);
+      return null;
+    } finally {
+      if(state.profileLoads.get(id)===request) state.profileLoads.delete(id);
+    }
+  })();
+  state.profileLoads.set(id,request);
+  return request;
 }
 
 function acceptWorldEntityChange(payload, deleted = false) {
@@ -143,19 +221,7 @@ function acceptDatabaseChange(payload) {
         ? Math.max(0,Math.min(3,Number(serverState.last_attack_direction))) : 2
     };
   }
-  if (!state.profileCache.has(String(row.user_id))) {
-    state.profileCache.set(String(row.user_id), true);
-    void supabase.from("ktk_profiles").select("display_name,character")
-      .eq("id", row.user_id).maybeSingle().then(({ data }) => {
-        if (!data) return;
-        const remote = state.remote.get(String(row.user_id));
-        if (!remote) return;
-        remote.displayName = data.display_name || "Aventureiro";
-        remote.display_name = remote.displayName;
-        remote.character = data.character || {};
-        updateRemotes();
-      });
-  }
+  void loadRemoteProfile(row.user_id);
 }
 
 function acceptRemote(payload, source = "broadcast") {
@@ -180,6 +246,7 @@ function acceptRemote(payload, source = "broadcast") {
     };
     state.remote.set(id,next);
     updateRemotes();
+    void loadRemoteProfile(id);
     return;
   }
 
@@ -232,6 +299,7 @@ function acceptRemote(payload, source = "broadcast") {
       : (previous?.lastPositionAt || 0)
   });
   updateRemotes();
+  void loadRemoteProfile(id);
 }
 
 function acceptCombat() {
@@ -289,22 +357,12 @@ async function loadExistingPlayers() {
     .gte("last_seen_at", cutoff);
   if (error) throw error;
   const rows = data || [];
-  if (!rows.length) return;
-  const ids = rows.map(row => row.user_id).filter(id => id !== state.user.id);
-  if (!ids.length) return;
-  const { data: profiles, error: profileError } = await supabase
-    .from("ktk_profiles")
-    .select("id,display_name,character")
-    .in("id", ids);
-  if (profileError) throw profileError;
-  const byId = new Map((profiles || []).map(profile => [profile.id, profile]));
   rows.forEach(row => {
-    const profile = byId.get(row.user_id) || {};
-    state.profileCache.set(String(row.user_id), true);
+    if(row.user_id===state.user?.id) return;
     acceptRemote({
       user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
       position_updated_at: row.position_updated_at,
-      display_name: profile.display_name, character: profile.character,
+      display_name: "Aventureiro", character: {},
       wearables: row.state?.wearables || {},
       combat_stats: {
         health:row.state?.health,maxHealth:row.state?.max_health,
