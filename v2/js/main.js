@@ -356,6 +356,13 @@ ui.form.addEventListener("submit", async event => {
       hairColor: "#38251c"
     });
   } catch (error) {
+    if (state.joined) {
+      try {
+        await supabase.rpc("ktk_v2_leave_world");
+      } catch (leaveError) {
+        console.error("KTK V2 rollback after failed entry:", leaveError);
+      }
+    }
     await cleanupLocalSession();
     showError(error?.message || "Não foi possível entrar no mundo.", "join");
     showGame(false);
