@@ -4,7 +4,7 @@ import {
   reconcilePlayerView,
   advancePlayerView
 } from "./client-rules.js";
-import { renderWorld } from "./world-renderer.js";
+import { renderWorld } from "./world-renderer.js?v=v2-004";
 import { LPCRenderer } from "./lpc-renderer.js";
 
 const SUPABASE_URL = "https://mtddtvqtljtgzggpdogl.supabase.co";
