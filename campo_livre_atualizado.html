@@ -1798,6 +1798,24 @@
     worldItems.add(item);
     return true;
   }
+  function makeServerDropItem(itemId, serverData={}) {
+    const definitions={
+      'resource-wood':{displayName:'Madeira',itemType:'material',iconEmoji:'🪵'},
+      'resource-stone':{displayName:'Pedra',itemType:'material',iconEmoji:'🪨'},
+      'resource-berries':{displayName:'Frutas silvestres',itemType:'food',iconEmoji:'🍓'},
+      'resource-water':{displayName:'Água limpa',itemType:'drink',iconEmoji:'💧'}
+    };
+    const definition=definitions[String(itemId||'')];
+    if(!definition) return null;
+    return {
+      id:String(itemId),type:'item',itemType:definition.itemType,equipmentClass:'resource',
+      displayName:String(serverData.display_name||definition.displayName),iconEmoji:definition.iconEmoji,
+      quantity:Math.max(1,Number(serverData.quantity)||1),
+      durability:Number(serverData.durability)||0,maxDurability:Number(serverData.max_durability)||0,
+      category:'Recursos',radius:12,collected:false
+    };
+  }
+
   function applyWorldEntity(row) {
     if(!row||!row.entity_id) return false;
     const entityId=String(row.entity_id);
@@ -1860,6 +1878,7 @@
       const existing=[...worldItems].find(item=>item.entityId===entityId);
       if(worldState.status==='ground') {
         let base=itemId==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(item=>item.id===itemId);
+        if(!base) base=makeServerDropItem(itemId,worldState);
         if(!base) return false;
         const item={...base,...worldState,id:itemId,entityId,x:Number(row.x)||0,y:Number(row.y)||0,collected:false,isStartingWearable:false};
         if(existing) Object.assign(existing,item);
@@ -2870,6 +2889,15 @@
       g.stroke();
       g.restore();
     }
+    if(item.iconEmoji) {
+      g.save();
+      g.fillStyle='rgba(25,35,25,.8)';
+      g.beginPath(); g.arc(x,y,17,0,Math.PI*2); g.fill();
+      g.font='22px system-ui'; g.textAlign='center'; g.textBaseline='middle';
+      g.fillText(item.iconEmoji,x,y);
+      g.restore();
+      return;
+    }
     if(item.iconCanvas) {
       const size=item.iconSize||item.displaySize||38;
       g.save();
@@ -2915,6 +2943,15 @@
     if(await collectNearbyItem()) return;
     const selectedItem=inventory[selectedInventorySlot];
     if(!selectedItem) return;
+    if(['food','drink'].includes(selectedItem.itemType)) {
+      try {
+        await window.KTKOnline?.gameAction?.('consume',{slot:selectedInventorySlot});
+        toast(selectedItem.itemType==='food'?'Você comeu o alimento.':'Você bebeu a água.');
+      } catch(error) {
+        toast(error?.message||'O servidor não permitiu consumir este item.');
+      }
+      return;
+    }
     if(selectedItem.type!=='item'||!Number.isFinite(selectedItem.x)||!Number.isFinite(selectedItem.y)) {
       toast('Este item nao pode ser solto.');
       return;
@@ -3072,7 +3109,8 @@
       inventory.splice(0,inventory.length,...serverState.inventory.slice(0,2).map(entry=>{
         if(!entry || entry==='null') return null;
         const id=entry.item_id;
-        const item=id==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(candidate=>candidate.id===id);
+        let item=id==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(candidate=>candidate.id===id);
+        if(!item) item=makeServerDropItem(id,entry);
         return item?{...item,...entry,id,collected:true}:null;
       }));
     }
