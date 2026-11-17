@@ -78,3 +78,9 @@ export function advancePlayerView(view, deltaSeconds, maxVisualSpeed = 520) {
     visualY: move(view.visualY, view.targetY)
   };
 }
+
+export function shouldSendMovement({changed=false,moving=false,elapsedMs=0}={}) {
+  if (changed) return true;
+  const elapsed = Math.max(0,Number(elapsedMs)||0);
+  return moving ? elapsed >= 100 : elapsed >= 2500;
+}
