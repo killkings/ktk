@@ -228,6 +228,7 @@ begin
       then p_appearance->>'clothing'
       else '#e7e2c9'
     end
+  );
 
   perform 1 from public.ktk_v2_worlds where id = 'main' for update;
   if not found then raise exception 'WORLD_NOT_FOUND'; end if;
