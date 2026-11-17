@@ -36,7 +36,7 @@ function readLocal() {
     user_id: state.user?.id,
     display_name: state.displayName,
     x: Number(data.x), y: Number(data.y),
-    direction: Number(data.direction) || 2,
+    direction: Number.isFinite(Number(data.direction)) ? Math.max(0, Math.min(3, Number(data.direction))) : 2,
     character: data.character || {},
     wearables: data.wearables || {},
     is_alive: true,
@@ -116,7 +116,7 @@ function acceptRemote(payload, source = "broadcast") {
     display_name: String(payload.display_name || payload.displayName || previous?.display_name || "Aventureiro").slice(0, 24),
     displayName: String(payload.display_name || payload.displayName || previous?.displayName || "Aventureiro").slice(0, 24),
     x, y, targetX: x, targetY: y,
-    direction: Math.max(0, Math.min(3, Number(payload.direction) || 2)),
+    direction: Number.isFinite(Number(payload.direction)) ? Math.max(0, Math.min(3, Number(payload.direction))) : 2,
     character: hasCharacter ? payload.character : (previous?.character || {}),
     wearables: payload.wearables && Object.keys(payload.wearables).length
       ? payload.wearables
