@@ -5,6 +5,7 @@ import {
   advancePlayerView
 } from "./client-rules.js";
 import { renderWorld } from "./world-renderer.js";
+import { LPCRenderer } from "./lpc-renderer.js";
 
 const SUPABASE_URL = "https://mtddtvqtljtgzggpdogl.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U5CdIRdPg0Brfn7x2Bj2hQ_VCXjwRQH";
@@ -26,6 +27,9 @@ const ui = {
   form: $("#join-form"),
   name: $("#display-name"),
   skin: $("#skin-color"),
+  gender: $("#gender"),
+  hair: $("#hair-color"),
+  hairstyle: $("#hairstyle"),
   clothing: $("#clothing-color"),
   join: $("#join-button"),
   joinError: $("#join-error"),
@@ -38,8 +42,11 @@ const ui = {
   gameError: $("#game-error")
 };
 
+const lpcRenderer = new LPCRenderer();
+
 const state = {
   joined: false,
+  entryAttempted: false,
   leaving: false,
   busy: false,
   claimBusy: false,
@@ -48,6 +55,8 @@ const state = {
   channel: null,
   localInput: normalizeControls(),
   lastInputSignature: "",
+  lastAttemptSignature: "",
+  nextMovementRetryAt: 0,
   lastStepAt: 0,
   lastFrameAt: 0,
   players: new Map(),
@@ -101,7 +110,11 @@ function upsertPlayer(row) {
   const id = String(row.user_id);
   if (row.is_alive === false) {
     state.players.delete(id);
+    lpcRenderer.remove(id);
     updateHud();
+    if (id === state.userId && state.joined && !state.leaving) {
+      void handleServerDeath();
+    }
     return;
   }
   const previous = state.players.get(id) || null;
@@ -251,6 +264,7 @@ async function enterWorld(displayName, appearance) {
   // can broadcast from Postgres. This also supplies the JWT for channel RLS.
   await subscribeWorld();
 
+  state.entryAttempted = true;
   const { data: player, error: enterError } = await supabase.rpc("ktk_v2_enter_world", {
     p_display_name: displayName,
     p_appearance: appearance
@@ -285,8 +299,10 @@ async function pumpMovement() {
   const changed = signature !== state.lastInputSignature;
   const heartbeatDue = now - state.lastStepAt >= 2500;
   if (!changed && !moving && !heartbeatDue) return;
+  if (signature === state.lastAttemptSignature && now < state.nextMovementRetryAt) return;
 
   state.localInput = controls;
+  state.lastAttemptSignature = signature;
   state.busy = true;
   try {
     const { data, error } = await supabase.rpc("ktk_v2_step_player", {
@@ -299,17 +315,18 @@ async function pumpMovement() {
     if (!state.joined || state.leaving) return;
     upsertPlayer(data?.player || data);
     state.lastInputSignature = signature;
+    state.nextMovementRetryAt = 0;
     state.lastStepAt = performance.now();
     showError("");
   } catch (error) {
-    state.lastInputSignature = "";
+    state.nextMovementRetryAt = performance.now() + 500;
     const message = error?.message || "Falha ao sincronizar o movimento.";
     if (!message.includes("PLAYER_NOT_ACTIVE")) showError(message);
   } finally {
     state.busy = false;
     if (state.joined && !state.leaving) {
       const latest = controlSignature(readControls());
-      if (latest !== state.lastInputSignature) void pumpMovement();
+      if (latest !== signature) void pumpMovement();
     }
   }
 }
@@ -324,7 +341,10 @@ function frame(now) {
     state.players.set(id, advanced);
     views.push(advanced);
   }
-  renderWorld(ui.canvas, views, state.userId, dt, [...state.entities.values()], state.worldSeed, state.kingUserId);
+  renderWorld(
+    ui.canvas, views, state.userId, dt,
+    [...state.entities.values()], state.worldSeed, state.kingUserId, lpcRenderer
+  );
   const local = state.players.get(state.userId);
   if (local) ui.position.textContent = Math.round(local.x) + ", " + Math.round(local.y);
   state.animationFrame = requestAnimationFrame(frame);
@@ -343,13 +363,19 @@ async function cleanupLocalSession() {
   }
   state.userId = "";
   state.accessToken = "";
+  state.entryAttempted = false;
+  state.lastAttemptSignature = "";
+  state.nextMovementRetryAt = 0;
   state.players.clear();
+  lpcRenderer.clear();
   state.entities.clear();
   state.kingUserId = null;
   state.worldRevision = 0;
   state.keys.clear();
   state.localInput = normalizeControls();
   state.lastInputSignature = "";
+  state.lastAttemptSignature = "";
+  state.nextMovementRetryAt = 0;
   state.busy = false;
   state.joined = false;
   state.leaving = false;
@@ -415,13 +441,17 @@ ui.form.addEventListener("submit", async event => {
   ui.join.textContent = "Conectando…";
   try {
     await enterWorld(displayName, {
+      gender: ui.gender.value,
       skin: ui.skin.value,
-      clothing: ui.clothing.value,
-      hair: "none",
-      hairColor: "#38251c"
+      eyes: "brown",
+      hair: ui.hair.value,
+      hairstyle: ui.hairstyle.value,
+      beard: "none",
+      mustache: "none",
+      clothing: ui.clothing.value
     });
   } catch (error) {
-    if (state.joined) {
+    if (state.entryAttempted && state.userId) {
       try {
         await supabase.rpc("ktk_v2_leave_world");
       } catch (leaveError) {
@@ -458,13 +488,48 @@ window.addEventListener("keydown", event => {
 });
 window.addEventListener("keyup", event => state.keys.delete(event.key.toLowerCase()));
 window.addEventListener("blur", () => state.keys.clear());
-window.addEventListener("pagehide", () => void leaveWorld(true));
+window.addEventListener("pagehide", event => {
+  // A back-forward-cache suspension is not an explicit exit from the world.
+  if (!event.persisted) void leaveWorld(true);
+});
 window.addEventListener("resize", () => {
   if (state.joined) renderWorld(
     ui.canvas, [...state.players.values()], state.userId, 0,
     [...state.entities.values()], state.worldSeed, state.kingUserId
   );
 });
+
+function refreshHairstyleOptions() {
+  if (!ui.hairstyle) return;
+  const gender = ui.gender?.value || "male";
+  const current = ui.hairstyle.value;
+  const styles = (window.KTKHairStyles || [])
+    .filter(style => !Array.isArray(style.availableFor) || style.availableFor.includes(gender));
+  ui.hairstyle.replaceChildren();
+  styles.forEach(style => {
+    const option = document.createElement("option");
+    option.value = style.id;
+    option.textContent = style.name;
+    ui.hairstyle.append(option);
+  });
+  const preferred = styles.find(style => style.id === current)
+    || styles.find(style => style.id === "hair_pixie")
+    || styles[0];
+  if (preferred) ui.hairstyle.value = preferred.id;
+}
+
+async function handleServerDeath() {
+  if (state.leaving || !state.joined) return;
+  state.leaving = true;
+  await cleanupLocalSession();
+  showGame(false);
+  ui.name.value = "";
+  ui.connection.textContent = "Personagem morto";
+  showError("Seu personagem morreu. Crie outro para voltar ao mundo.", "join");
+}
+
+ui.gender.addEventListener("change", refreshHairstyleOptions);
+refreshHairstyleOptions();
 
 function keyIsCrown(event) {
   return event.key.toLowerCase() === "e";
