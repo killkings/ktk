@@ -377,7 +377,7 @@
 })();
 </script>
 <script src="./personagem.js?v=stable-20261115-13"></script>
-<script src="./mapa/player/stats.js?v=20261117-final-authority-audit2"></script>
+<script src="./mapa/player/stats.js?v=20261117-regression-cleanup1"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
 <script src="./enemy/skeleton/skeleton.js?v=stable-20261117-combat1"></script>
 <script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
@@ -2641,38 +2641,24 @@
   }
 
   async function equipWearableFromInventory(inventoryIndex,targetSlot) {
-    try {
-      await window.KTKOnline?.gameAction?.('equip',{slot_index:inventoryIndex,wear_slot:targetSlot});
-      return true;
-    } catch(error) {
-      toast(error?.message||'O servidor recusou o equipamento.');
-      return false;
-    }
     const item=inventory[inventoryIndex];
     if(!item?.wearSlot||!wearableSlotOrder.includes(targetSlot)) return false;
     if(item.wearSlot!==targetSlot) {
       toast(`Essa peca deve ir no espaco ${wearableSlotLabel(item.wearSlot)}.`);
       return false;
     }
-    const previous=equippedWearables[targetSlot];
-    equippedWearables[targetSlot]=item;
-    inventory[inventoryIndex]=null;
-    if(previous) dropItemAtPlayer(previous,(player.direction+2)%4);
-    selectedInventorySlot=inventoryIndex;
-    item.collected=true;
-    renderInventory();
-    rebuildCharacterLayers();
-    if(item.isKingCrown) {
-      kingCrownClaimedBy=window.KTKOnline?.userId||'local';
-      syncKingCrownWorldItem('carried');
-
+    const gameAction=window.KTKOnline?.gameAction;
+    if(typeof gameAction!=='function') {
+      toast('A conexão com o servidor não está disponível.');
+      return false;
     }
-    toast(item.isKingCrown
-      ? 'Você pegou a Coroa Real. Você agora é o rei!'
-      : previous
-        ? `${item.displayName} equipado; ${previous.displayName} solto no chao.`
-        : `${item.displayName} equipado em ${wearableSlotLabel(targetSlot)}.`);
-    return true;
+    try {
+      await gameAction('equip',{slot_index:inventoryIndex,wear_slot:targetSlot});
+      return true;
+    } catch(error) {
+      toast(error?.message||'O servidor recusou o equipamento.');
+      return false;
+    }
   }
 
   async function equipCollectedWearable(item) {
@@ -2696,21 +2682,19 @@
   }
 
   async function unequipWearable(slot) {
+    if(!equippedWearables[slot]) return false;
+    const gameAction=window.KTKOnline?.gameAction;
+    if(typeof gameAction!=='function') {
+      toast('A conexão com o servidor não está disponível.');
+      return false;
+    }
     try {
-      await window.KTKOnline?.gameAction?.('unequip',{wear_slot:slot});
+      await gameAction('unequip',{wear_slot:slot});
       return true;
     } catch(error) {
       toast(error?.message||'O servidor recusou a retirada.');
       return false;
     }
-    const item=equippedWearables[slot];
-    if(!item) return false;
-    equippedWearables[slot]=null;
-    dropItemAtPlayer(item,(player.direction+2)%4);
-    toast(`${item.displayName} removido e solto no chao.`);
-    renderInventory();
-    rebuildCharacterLayers();
-    return true;
   }
 
   function drawInventoryIcon(context,item) {
@@ -3507,6 +3491,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-final-authority-audit2"></script>
+<script type="module" src="./js/online.js?v=20261117-regression-cleanup1"></script>
 </body>
 </html>
