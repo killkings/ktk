@@ -1881,7 +1881,43 @@
     if(punch.elapsed>=PUNCH_ANIMATION_SECONDS) punch.active=false;
   }
 
+  function findRemotePlayerInAttackArc(direction,rangeInTiles=PUNCH_RANGE) {
+    const vector=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}][direction];
+    if(!vector) return null;
+    const origin=getEntityWorldPosition(player);
+    let nearest=null,nearestDistance=Infinity;
+    remotePlayers.forEach(remote=>{
+      const position=getEntityWorldPosition(remote);
+      const dx=position.x-origin.x,dy=position.y-origin.y;
+      const forward=dx*vector.x+dy*vector.y;
+      const sideways=Math.abs(dx*vector.y-dy*vector.x);
+      const radius=Number(remote.radius)||COLLISION_RADIUS;
+      const maxRange=rangeInTiles*TILE+radius;
+      const distance=Math.hypot(dx,dy);
+      if(forward<=0||forward>maxRange||sideways>radius+14) return;
+      if(distance<nearestDistance) { nearest=remote; nearestDistance=distance; }
+    });
+    return nearest;
+  }
+
+  function findRemotePlayerAtPosition(x,y,projectileRadius=0) {
+    let nearest=null,nearestDistance=Infinity;
+    remotePlayers.forEach(remote=>{
+      const position=getEntityWorldPosition(remote);
+      const distance=Math.hypot(position.x-x,position.y-y);
+      if(distance<=(Number(remote.radius)||COLLISION_RADIUS)+projectileRadius&&distance<nearestDistance) {
+        nearest=remote; nearestDistance=distance;
+      }
+    });
+    return nearest;
+  }
+
   function resolvePunchHit() {
+    const remoteTarget=findRemotePlayerInAttackArc(punch.direction,punch.range);
+    if(remoteTarget) {
+      applyCombatHit(player,remoteTarget,punch.direction);
+      return;
+    }
     applyCombatHit(player,window.KTKEnemySkeleton.entity,punch.direction);
   }
 
@@ -2032,6 +2068,14 @@
     projectile.x+=projectile.vectorX*travel;
     projectile.y+=projectile.vectorY*travel;
 
+    const remoteTarget=findRemotePlayerAtPosition(projectile.x,projectile.y,projectileRadius);
+    if(!projectile.hitApplied&&remoteTarget) {
+      projectile.hitApplied=true;
+      applyCombatHit(player,remoteTarget,projectile.direction,true,projectile.weaponItem);
+      projectile.phase='impact';
+      projectile.impactElapsed=0;
+      return;
+    }
     const target=window.KTKEnemySkeleton.entity;
     if(!projectile.hitApplied&&!target.defeated&&Math.hypot(target.x-projectile.x,target.y-projectile.y)<=(target.radius||COLLISION_RADIUS)+projectileRadius) {
       projectile.hitApplied=true;
@@ -2098,11 +2142,20 @@
       boomerangProjectile.x=boomerangProjectile.startX+boomerangProjectile.vectorX*boomerangProjectile.distance;
       boomerangProjectile.y=boomerangProjectile.startY+boomerangProjectile.vectorY*boomerangProjectile.distance;
 
-      const target=window.KTKEnemySkeleton.entity;
-      if(!boomerangProjectile.hitApplied&&!target.defeated&&Math.hypot(target.x-boomerangProjectile.x,target.y-boomerangProjectile.y)<=(target.radius||COLLISION_RADIUS)+BOOMERANG_PROJECTILE_RADIUS) {
+      const remoteTarget=findRemotePlayerAtPosition(
+        boomerangProjectile.x,boomerangProjectile.y,BOOMERANG_PROJECTILE_RADIUS
+      );
+      if(!boomerangProjectile.hitApplied&&remoteTarget) {
         boomerangProjectile.hitApplied=true;
-        applyCombatHit(player,target,boomerangProjectile.direction,true,boomerangProjectile.item);
+        applyCombatHit(player,remoteTarget,boomerangProjectile.direction,true,boomerangProjectile.item);
         boomerangProjectile.phase='returning';
+      } else {
+        const target=window.KTKEnemySkeleton.entity;
+        if(!boomerangProjectile.hitApplied&&!target.defeated&&Math.hypot(target.x-boomerangProjectile.x,target.y-boomerangProjectile.y)<=(target.radius||COLLISION_RADIUS)+BOOMERANG_PROJECTILE_RADIUS) {
+          boomerangProjectile.hitApplied=true;
+          applyCombatHit(player,target,boomerangProjectile.direction,true,boomerangProjectile.item);
+          boomerangProjectile.phase='returning';
+        }
       }
       if(boomerangProjectile.distance>=boomerangProjectile.maxDistance) boomerangProjectile.phase='returning';
       return;
@@ -2128,11 +2181,23 @@
         y:camera.y*canvas.clientHeight+player.y
       };
     }
+    if(entity?.type==='player'&&entity.id) {
+      return {x:Number.isFinite(entity.targetX)?entity.targetX:entity.x,
+        y:Number.isFinite(entity.targetY)?entity.targetY:entity.y};
+    }
     return {x:entity.x,y:entity.y};
   }
 
   function getEffectiveEntityStats(entity, attackBonusOverride) {
     if(entity===player) return window.KTKPlayerStats.getEffectiveCombatStats(attackBonusOverride);
+    if(entity?.type==='player'&&entity.id) {
+      const stats=entity.combatStats||{};
+      return {
+        attack:Number.isFinite(Number(stats.attack))?Number(stats.attack):10,
+        defense:Number.isFinite(Number(stats.defense))?Number(stats.defense):10,
+        multiplier:1
+      };
+    }
     const condition=(
       entity.health/entity.maxHealth+
       entity.satiety/entity.maxSatiety+
@@ -2161,8 +2226,10 @@
   }
 
   function applyCombatHit(attacker,target,direction,confirmedProjectileContact=false,weaponItemOverride=null) {
-    if(target===window.KTKEnemySkeleton.entity && target.defeated) return;
+    if(target===window.KTKEnemySkeleton.entity && target.defeated) return false;
+    if(target?.type==='player'&&target.id&&target.combatStats?.health===0) return false;
     const vector=[{x:0,y:-1},{x:-1,y:0},{x:0,y:1},{x:1,y:0}][direction];
+    if(!vector) return false;
     const attackerPosition=getEntityWorldPosition(attacker);
     const targetPosition=getEntityWorldPosition(target);
     const dx=targetPosition.x-attackerPosition.x;
@@ -2170,7 +2237,7 @@
     const forward=dx*vector.x+dy*vector.y;
     const sideways=Math.abs(dx*vector.y-dy*vector.x);
     const range=(attacker===player?punch.range:PUNCH_RANGE)*TILE+(target.radius||COLLISION_RADIUS);
-    if(!confirmedProjectileContact&&(forward<=0||forward>range||sideways>(target.radius||COLLISION_RADIUS)+14)) return;
+    if(!confirmedProjectileContact&&(forward<=0||forward>range||sideways>(target.radius||COLLISION_RADIUS)+14)) return false;
 
     const weaponItem=attacker===player?(weaponItemOverride||punch.weaponItem):null;
     const weaponAttack=attacker===player&&Boolean(weaponItemOverride||punch.weaponAttack);
@@ -2208,6 +2275,13 @@
         knockback_x:vector.x,knockback_y:vector.y
       });
       if(health.value<=health.min) handlePlayerDeath();
+    } else if(target?.type==='player'&&target.id) {
+      const previousHealth=Number(target.combatStats?.health);
+      const targetHealth=Number.isFinite(previousHealth)?Math.max(0,previousHealth-damage):null;
+      target.combatStats={
+        ...(target.combatStats||{}),
+        ...(targetHealth===null?{}:{health:targetHealth})
+      };
     } else {
       target.attacking=false;
       target.attackElapsed=0;
@@ -2219,6 +2293,17 @@
       refreshSkeletonCombatStats();
     }
     startKnockback(target,vector);
+    if(target?.type==='player'&&target.id) {
+      window.KTKOnline?.broadcastCombat({
+        kind:'pvp_hit',
+        target_user_id:String(target.id),
+        target_health:Number.isFinite(targetHealth)?targetHealth:null,
+        damage,
+        target_x:targetPosition.x,target_y:targetPosition.y,
+        knockback_x:vector.x,knockback_y:vector.y
+      });
+      return true;
+    }
     if(target===window.KTKEnemySkeleton.entity) {
       window.KTKOnline?.broadcastCombat({
         kind:'skeleton_hit',damage,
@@ -2226,6 +2311,7 @@
         knockback_x:vector.x,knockback_y:vector.y
       });
     }
+    return true;
   }
 
   function startKnockback(target,vector) {
@@ -2737,6 +2823,15 @@
           } else if(event.kind==='player_damaged') {
             entity.knockback={x:event.knockback_x,y:event.knockback_y,progress:0};
             entity.knockbackHeight=0;
+          } else if(event.kind==='pvp_hit') {
+            const target=remotePlayers.get(String(event.target_user_id||""));
+            if(target) {
+              if(Number.isFinite(event.target_health)) {
+                target.combatStats={...(target.combatStats||{}),health:event.target_health};
+              }
+              target.knockback={x:event.knockback_x,y:event.knockback_y,progress:0};
+              target.knockbackHeight=0;
+            }
           } else if(event.kind==='skeleton_hit') {
             const skeleton=window.KTKEnemySkeleton.entity;
             if(!skeleton.defeated&&event.damage>0) {
@@ -2778,6 +2873,17 @@
       y:camera.y*(canvas.clientHeight||0)+player.y,
       direction:player.direction,
       character:{...character},
+      combatStats:(()=>{
+        const stats=window.KTKPlayerStats.stats;
+        const combat=window.KTKPlayerStats.getEffectiveCombatStats();
+        return {
+          health:stats.health.value,maxHealth:stats.health.max,
+          satiety:stats.satiety.value,maxSatiety:stats.satiety.max,
+          hydration:stats.hydration.value,maxHydration:stats.hydration.max,
+          stamina:stats.stamina.value,maxStamina:stats.stamina.max,
+          attack:combat.attack,defense:combat.defense
+        };
+      })(),
       wearables:Object.fromEntries(wearableSlotOrder.map(slot=>{
         const item=equippedWearables[slot];
         if(!item) return [slot,null];
@@ -2796,6 +2902,21 @@
         }];
       }))
     }),
+    applyRemoteDamage:event=>{
+      if(!event||playerDead) return false;
+      const damage=Math.max(0,Number(event.damage)||0);
+      if(!damage) return false;
+      const health=window.KTKPlayerStats.stats.health;
+      wearEquippedArmor();
+      health.value=Math.max(health.min,health.value-damage);
+      window.KTKPlayerStats.render();
+      startKnockback(player,{
+        x:Number(event.knockback_x)||0,
+        y:Number(event.knockback_y)||0
+      });
+      if(health.value<=health.min) handlePlayerDeath();
+      return true;
+    },
     setLocalState:(x,y,direction)=>{
       if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
       camera.x=0; camera.y=0;
