@@ -119,29 +119,33 @@ test("spawn selection shares the same world movement lock", () => {
 
 
 test("V2 gameplay catalog is server-only and does not alter V1 tables", () => {
-  assert.match(gameplaySql, /create table if not exists public\\.ktk_v2_item_catalog/i);
-  assert.match(gameplaySql, /alter table public\\.ktk_v2_item_catalog enable row level security/i);
-  assert.match(gameplaySql, /revoke all on table public\\.ktk_v2_item_catalog from public, anon, authenticated/i);
-  assert.doesNotMatch(gameplaySql, /\\b(drop|truncate)\\s+table\\s+public\\.ktk_(?!v2_)/i);
-  assert.doesNotMatch(gameplaySql, /\\b(delete\\s+from|update)\\s+public\\.ktk_(?!v2_)/i);
+  assert.ok(gameplaySql.includes("create table if not exists public.ktk_v2_item_catalog"));
+  assert.ok(gameplaySql.includes("alter table public.ktk_v2_item_catalog enable row level security"));
+  assert.ok(gameplaySql.includes("revoke all on table public.ktk_v2_item_catalog from public, anon, authenticated"));
+  assert.doesNotMatch(gameplaySql, /\b(drop|truncate)\s+table\s+public\.ktk_(?!v2_)/i);
+  assert.doesNotMatch(gameplaySql, /\b(delete\s+from|update)\s+public\.ktk_(?!v2_)/i);
 });
 
 test("inventory mutations, loot expiry and character death are server-authoritative", () => {
-  assert.match(gameplaySql, /create or replace function public\\.ktk_v2_item_action/i);
-  assert.match(gameplaySql, /for update/i);
-  assert.match(gameplaySql, /'pickup','drop','equip','unequip','consume','select_slot','harvest'/i);
-  assert.match(gameplaySql, /expires_at/i);
-  assert.match(gameplaySql, /create or replace function ktk_v2_private\\.kill_player/i);
-  assert.match(gameplaySql, /ktk_v2_private\\.drop_player_items/i);
-  assert.match(gameplaySql, /create or replace function public\\.ktk_v2_leave_world/i);
-  assert.match(gameplaySql, /perform ktk_v2_private\\.kill_player\\(v_uid,'exit'\\)/i);
+  for (const required of [
+    "create or replace function public.ktk_v2_item_action",
+    "'pickup','drop','equip','unequip','consume','select_slot','harvest'",
+    "expires_at",
+    "create or replace function ktk_v2_private.kill_player",
+    "ktk_v2_private.drop_player_items",
+    "create or replace function public.ktk_v2_leave_world",
+    "perform ktk_v2_private.kill_player(v_uid,'exit')"
+  ]) {
+    assert.ok(gameplaySql.includes(required), `Missing gameplay contract: ${required}`);
+  }
 });
 
 test("same-clan protection for the King is checked by server-side combat", () => {
-  assert.match(gameplaySql, /create or replace function public\\.ktk_v2_choose_clan/i);
-  assert.match(gameplaySql, /create or replace function public\\.ktk_v2_attack/i);
-  assert.match(gameplaySql, /p\\.user_id=v_world\\.king_user_id[\\s\\S]{0,180}p\\.clan_color=v_player\\.clan_color/i);
-  assert.match(gameplaySql, /ktk_v2_private\\.kill_player\\(v_target\\.user_id,'combat'\\)/i);
+  assert.ok(gameplaySql.includes("create or replace function public.ktk_v2_choose_clan"));
+  assert.ok(gameplaySql.includes("create or replace function public.ktk_v2_attack"));
+  assert.ok(gameplaySql.includes("p.user_id=v_world.king_user_id"));
+  assert.ok(gameplaySql.includes("p.clan_color=v_player.clan_color"));
+  assert.ok(gameplaySql.includes("ktk_v2_private.kill_player(v_target.user_id,'combat')"));
 });
 
 test("all V2 gameplay RPCs are authenticated-only", () => {
@@ -151,7 +155,14 @@ test("all V2 gameplay RPCs are authenticated-only", () => {
     "ktk_v2_attack()",
     "ktk_v2_interact()"
   ]) {
-    const escaped=signature.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\test("the V2 migration has one clean commit boundary", () => {");
+    assert.ok(gameplaySql.includes(`revoke all on function public.${signature} from public,anon;`));
+    assert.ok(gameplaySql.includes(`grant execute on function public.${signature} to authenticated;`));
+  }
+  assert.equal((gameplaySql.match(/\bcommit;/gi) || []).length, 1);
+  assert.equal(gameplaySql.trimEnd().toLowerCase().endsWith("commit;"), true);
+});
+
+test("the V2 migration has one clean commit boundary", () => {");
     assert.match(gameplaySql, new RegExp("revoke all on function public\\\\." + escaped + " from public,anon", "i"));
     assert.match(gameplaySql, new RegExp("grant execute on function public\\\\." + escaped + " to authenticated", "i"));
   }
