@@ -201,7 +201,7 @@
       if(!entity.layersReady || entity.appearanceSignature!==JSON.stringify({
         characterData:entity.character||{},wearables:entity.wearables||{}
       })) {
-        void loadRemoteCharacterLayers(entity).catch(error=>console.warn('KTK remote appearance:',error));
+        void window.loadRemoteCharacterLayers(entity).catch(error=>console.warn('KTK remote appearance:',error));
       }
     });
     for(const id of remotePlayers.keys()) if(!incoming.has(id)) remotePlayers.delete(id);
