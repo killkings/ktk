@@ -377,7 +377,7 @@
 })();
 </script>
 <script src="./personagem.js?v=stable-20261115-13"></script>
-<script src="./mapa/player/stats.js?v=20261117-regression-cleanup1"></script>
+<script src="./mapa/player/stats.js?v=20261117-ephemeral-world-authority1"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
 <script src="./enemy/skeleton/skeleton.js?v=stable-20261117-combat1"></script>
 <script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
@@ -2969,6 +2969,38 @@
   }
 
   // Entrada para sincronização futura de posições vindas do servidor online.
+  function normalizeRemoteWearables(source,previous={}) {
+    const result={};
+    wearableSlotOrder.forEach(slot=>{
+      const entry=source&&Object.prototype.hasOwnProperty.call(source,slot)
+        ? source[slot] : previous?.[slot];
+      if(!entry) {
+        result[slot]=null;
+        return;
+      }
+      const itemId=entry.item_id||entry.itemId||entry.id;
+      const catalogItem=equipmentCatalog?.items?.find(candidate=>String(candidate.id)===String(itemId));
+      const suppliedLayers=Array.isArray(entry.appearanceLayers)&&entry.appearanceLayers.length
+        ? entry.appearanceLayers : null;
+      if(!catalogItem) {
+        result[slot]={...entry,appearanceLayers:suppliedLayers||entry.appearanceLayers||[]};
+        return;
+      }
+      result[slot]={
+        ...catalogItem,
+        ...entry,
+        id:itemId||catalogItem.id,
+        displayName:entry.displayName||entry.display_name||catalogItem.displayName||slot,
+        wearCategory:entry.wearCategory||entry.wear_category||catalogItem.wearCategory||'cosmetic',
+        durability:Number.isFinite(Number(entry.durability))
+          ? Number(entry.durability) : Number(catalogItem.durability)||0,
+        appearanceLayers:suppliedLayers||catalogItem.appearanceLayers||[],
+        isKingCrown:Boolean(entry.isKingCrown||entry.is_king_crown||catalogItem.isKingCrown)
+      };
+    });
+    return result;
+  }
+
   function setRemotePlayers(players) {
     const incoming=new Set();
     (players||[]).forEach(remote=>{
@@ -3004,7 +3036,7 @@
       entity.direction=remoteDirection;
       entity.displayName=remote.displayName||remote.display_name||entity.displayName||'Aventureiro';
       entity.character=remote.character||entity.character||{};
-      entity.wearables=remote.wearables||entity.wearables||{};
+      entity.wearables=normalizeRemoteWearables(remote.wearables,entity.wearables);
       entity.combatStats=remote.combatStats||entity.combatStats||{};
       entity.isKing=Boolean(kingCrownClaimedBy&&String(id)===String(kingCrownClaimedBy));
       entity.hasKingCrown=entity.isKing;
@@ -3491,6 +3523,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-regression-cleanup1"></script>
+<script type="module" src="./js/online.js?v=20261117-ephemeral-world-authority1"></script>
 </body>
 </html>
