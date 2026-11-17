@@ -876,6 +876,26 @@ begin
 
   v_failed:=false;
   begin
+    perform public.ktk_v2_choose_clan('#d94343');
+  exception when others then
+    v_failed:=sqlerrm='PLAYER_SUSPENDED';
+  end;
+  if not v_failed then raise exception 'V2_SUSPENDED_CHARACTER_COULD_CHANGE_CLAN'; end if;
+
+  update public.ktk_v2_worlds set king_user_id=null where id='main';
+  update public.ktk_v2_entities
+  set state='{"status":"ground","unique":true}'::jsonb
+  where world_id='main' and entity_id='crown-main';
+  v_failed:=false;
+  begin
+    perform public.ktk_v2_claim_crown();
+  exception when others then
+    v_failed:=sqlerrm='PLAYER_SUSPENDED';
+  end;
+  if not v_failed then raise exception 'V2_SUSPENDED_CHARACTER_COULD_CLAIM_CROWN'; end if;
+
+  v_failed:=false;
+  begin
     perform public.ktk_v2_launch_projectile();
   exception when others then
     v_failed:=sqlerrm='PLAYER_SUSPENDED';
