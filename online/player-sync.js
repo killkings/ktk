@@ -107,7 +107,7 @@ export function acceptWorldEntityChange(payload, deleted = false) {
   if(row?.entity_id) window.KTKWorldEntities?.applyWorldEntity?.({...row,deleted});
 }
 
-function acceptDatabaseChange(payload) {
+export function acceptDatabaseChange(payload) {
   if(!state.user||state.leaving) return;
   const row = payload?.new || payload?.record || payload;
   if (!row?.user_id) return;
