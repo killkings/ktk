@@ -189,7 +189,8 @@ function acceptCombat(payload) {
     max_distance: Math.max(1, Number(payload.max_distance) || 160),
     damage: Math.max(0, Number(payload.damage) || 0),
     target_user_id: payload.target_user_id ? String(payload.target_user_id) : null,
-    target_health: Number.isFinite(Number(payload.target_health)) ? Number(payload.target_health) : null,
+    target_health: payload.target_health !== null && payload.target_health !== undefined &&
+      Number.isFinite(Number(payload.target_health)) ? Number(payload.target_health) : null,
     combat_stats: payload.combat_stats || {},
     knockback_x: Number(payload.knockback_x) || 0,
     knockback_y: Number(payload.knockback_y) || 0
