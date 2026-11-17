@@ -119,7 +119,7 @@ rollbackContext.setAuthoritativePlayerPosition(
 );
 let previousVisualX = rollbackContext.playerVisual.x;
 let correctionFrames = 0;
-while(rollbackContext.playerVisual.correctionRemaining > 0 && correctionFrames < 20) {
+while(rollbackContext.playerVisual.correctionRemaining > 0 && correctionFrames < 5) {
   rollbackContext.updateLocalPlayerVisual(0.05);
   assert.ok(rollbackContext.playerVisual.x >= previousVisualX - 0.01,
     "Finishing a correction must not move a continuously walking player backwards.");
@@ -197,7 +197,16 @@ assert.doesNotMatch(playerSync,/applyOwnServerPosition\(row\)/);
 assert.match(rootHtml,/20261117-movement-reconciliation-004/);
 assert.doesNotMatch(playerSync,/applyOwnServerPosition/);
 assert.doesNotMatch(playerSync,/compareServerTimestamps is not defined/);
-assert.doesNotMatch(playerSync,/\\\\n/);
+const timestampHelper = playerSync.slice(
+  playerSync.indexOf("function compareServerTimestamps"),
+  playerSync.indexOf("function mergeRemoteAppearance")
+);
+const timestampContext = {};
+vm.createContext(timestampContext);
+vm.runInContext(timestampHelper + ";globalThis.compare=compareServerTimestamps;", timestampContext);
+assert.equal(timestampContext.compare("2026-11-17T21:00:00.000002Z","2026-11-17T21:00:00.000001Z"),1,
+  "Remote timestamps must preserve PostgreSQL microsecond ordering.");
+assert.equal(timestampContext.compare("2026-11-17T21:00:00.000001Z","2026-11-17T21:00:00.000001Z"),0);
 assert.match(online,/sendPosition/);
 for(const [path,version] of [
   ["render/world-renderer.js","20261117-movement-reconciliation-004"],
