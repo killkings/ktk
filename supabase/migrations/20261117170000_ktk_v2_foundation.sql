@@ -105,7 +105,27 @@ as $function$
 begin
   perform realtime.broadcast_changes(
     'v2:world:main',
+    'ENTITY_' || TG_OP,
     TG_OP,
+    TG_TABLE_NAME,
+    TG_TABLE_SCHEMA,
+    NEW,
+    OLD
+  );
+  return null;
+end;
+$function$;
+
+create or replace function public.ktk_v2_broadcast_world_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+begin
+  perform realtime.broadcast_changes(
+    'v2:world:main',
+    'WORLD_UPDATE',
     TG_OP,
     TG_TABLE_NAME,
     TG_TABLE_SCHEMA,
@@ -118,6 +138,7 @@ $function$;
 
 revoke all on function public.ktk_v2_broadcast_player_change() from public, anon, authenticated;
 revoke all on function public.ktk_v2_broadcast_entity_change() from public, anon, authenticated;
+revoke all on function public.ktk_v2_broadcast_world_change() from public, anon, authenticated;
 
 create trigger ktk_v2_player_broadcast
 after insert or update or delete on public.ktk_v2_players
@@ -126,6 +147,10 @@ for each row execute function public.ktk_v2_broadcast_player_change();
 create trigger ktk_v2_entity_broadcast
 after insert or update or delete on public.ktk_v2_entities
 for each row execute function public.ktk_v2_broadcast_entity_change();
+
+create trigger ktk_v2_world_broadcast
+after update on public.ktk_v2_worlds
+for each row execute function public.ktk_v2_broadcast_world_change();
 
 drop policy if exists "KTK V2 clients can receive world broadcasts" on realtime.messages;
 create policy "KTK V2 clients can receive world broadcasts"
@@ -432,10 +457,12 @@ declare
   v_uid uuid := auth.uid();
   v_player public.ktk_v2_players;
   v_state jsonb;
+  v_was_king boolean := false;
 begin
   if v_uid is null then return jsonb_build_object('ok', false, 'reason', 'AUTH_REQUIRED'); end if;
 
   perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('ktk-v2:main:movement'));
+  perform 1 from public.ktk_v2_worlds where id = 'main' for update;
 
   select * into v_player
   from public.ktk_v2_players
@@ -446,10 +473,13 @@ begin
     return jsonb_build_object('ok', true, 'already_dead', true);
   end if;
 
+  select (king_user_id = v_uid) into v_was_king
+  from public.ktk_v2_worlds where id = 'main';
+
   v_state := coalesce(v_player.state, '{}'::jsonb);
 
-  -- In the next inventory phase, this transaction will convert each carried
-  -- item and wearable into a ground entity before clearing the dead character.
+  -- Inventory actions and drops are implemented in the following V2 stage.
+  -- The base character is empty, so ending this first test character is lossless.
   v_state := jsonb_set(v_state, '{inventory}', '[null,null]'::jsonb, true);
   v_state := jsonb_set(v_state, '{wearables}',
     '{"head":null,"chest":null,"waist":null,"legs":null,"feet":null}'::jsonb, true);
@@ -466,22 +496,80 @@ begin
       position_updated_at = clock_timestamp()
   where user_id = v_uid and world_id = 'main';
 
+  if v_was_king then
+    update public.ktk_v2_worlds
+    set king_user_id = null, crown_version = crown_version + 1, revision = revision + 1,
+        updated_at = clock_timestamp()
+    where id = 'main' and king_user_id = v_uid;
+
+    update public.ktk_v2_entities
+    set x = v_player.x,
+        y = v_player.y,
+        state = '{"status":"ground","unique":true}'::jsonb,
+        revision = revision + 1,
+        updated_at = clock_timestamp()
+    where world_id = 'main' and entity_id = 'crown-main';
+  end if;
+
+  return jsonb_build_object('ok', true, 'dead', true);
+end;
+$function$;
+
+create or replace function public.ktk_v2_claim_crown()
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $function$
+declare
+  v_uid uuid := auth.uid();
+  v_player public.ktk_v2_players;
+  v_world public.ktk_v2_worlds;
+  v_crown public.ktk_v2_entities;
+  v_distance double precision;
+begin
+  if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+
+  -- A single lock order protects crown ownership against claims and exits.
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('ktk-v2:main:movement'));
+  select * into v_world
+  from public.ktk_v2_worlds where id = 'main' for update;
+  if not found then raise exception 'WORLD_NOT_FOUND'; end if;
+  if v_world.king_user_id is not null then raise exception 'CROWN_ALREADY_CLAIMED'; end if;
+
+  select * into v_player
+  from public.ktk_v2_players
+  where user_id = v_uid and world_id = 'main' and is_alive
+  for update;
+  if not found then raise exception 'PLAYER_NOT_ACTIVE'; end if;
+
+  select * into v_crown
+  from public.ktk_v2_entities
+  where world_id = 'main' and entity_id = 'crown-main' and entity_type = 'crown'
+  for update;
+  if not found or coalesce(v_crown.state->>'status','ground') <> 'ground' then
+    raise exception 'CROWN_NOT_AVAILABLE';
+  end if;
+
+  v_distance := sqrt(power(v_player.x-v_crown.x,2)+power(v_player.y-v_crown.y,2));
+  if v_distance > 64 then raise exception 'CROWN_TOO_FAR'; end if;
+
   update public.ktk_v2_worlds
-  set king_user_id = null, crown_version = crown_version + 1, revision = revision + 1,
+  set king_user_id = v_uid,
+      crown_version = crown_version + 1,
+      revision = revision + 1,
       updated_at = clock_timestamp()
-  where id = 'main' and king_user_id = v_uid;
+  where id = 'main'
+  returning * into v_world;
 
   update public.ktk_v2_entities
-  set state = '{"status":"ground","unique":true}'::jsonb,
+  set state = jsonb_build_object('status','held','unique',true,'owner_id',v_uid::text),
       revision = revision + 1,
       updated_at = clock_timestamp()
   where world_id = 'main' and entity_id = 'crown-main'
-    and exists (
-      select 1 from public.ktk_v2_worlds
-      where id = 'main' and king_user_id is null
-    );
+  returning * into v_crown;
 
-  return jsonb_build_object('ok', true, 'dead', true);
+  return jsonb_build_object('ok',true,'world',to_jsonb(v_world),'crown',to_jsonb(v_crown));
 end;
 $function$;
 
@@ -489,11 +577,13 @@ revoke all on function public.ktk_v2_enter_world(text,jsonb) from public, anon;
 revoke all on function public.ktk_v2_world_state() from public, anon;
 revoke all on function public.ktk_v2_step_player(smallint,smallint,boolean,boolean) from public, anon;
 revoke all on function public.ktk_v2_leave_world() from public, anon;
+revoke all on function public.ktk_v2_claim_crown() from public, anon;
 
 grant execute on function public.ktk_v2_enter_world(text,jsonb) to authenticated;
 grant execute on function public.ktk_v2_world_state() to authenticated;
 grant execute on function public.ktk_v2_step_player(smallint,smallint,boolean,boolean) to authenticated;
 grant execute on function public.ktk_v2_leave_world() to authenticated;
+grant execute on function public.ktk_v2_claim_crown() to authenticated;
 
 
 commit;
