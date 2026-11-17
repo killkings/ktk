@@ -13,7 +13,7 @@ const state = {
   user: null, channel: null, joined: false, online: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0,
   lastPosition: null, lastAppearanceSignature: "", positionSequence: 0,
-  sessionId: window.crypto?.randomUUID?.() || `1794916022522-a7dw10fe6ba`,
+  sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), connecting: false
 };
 
