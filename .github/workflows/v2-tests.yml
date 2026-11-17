@@ -1,0 +1,112 @@
+name: V2 regression tests
+
+on:
+  push:
+    branches:
+      - main
+      - "rebuild/**"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: ktk_v2_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ktk_v2_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Run unit and contract tests
+        run: npm test
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y postgresql-client
+      - name: Bootstrap disposable Supabase interfaces
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f v2/tests/postgres-bootstrap.sql
+      - name: Apply V2 migration to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117170000_ktk_v2_foundation.sql
+      - name: Apply V2 gameplay migration to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117172000_ktk_v2_gameplay_actions.sql
+      - name: Apply V2 server simulation migration to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117173000_ktk_v2_server_simulation.sql
+      - name: Apply V2 projectile migration to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117174000_ktk_v2_projectiles.sql
+      - name: Apply V2 guard and collision migration to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117175000_ktk_v2_guard_and_world_collisions.sql
+      - name: Apply V2 persistent world population to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117176000_ktk_v2_world_population.sql
+      - name: Apply V2 safe suspension and disconnect migration
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117177000_ktk_v2_safe_suspend_and_disconnect_expiry.sql
+      - name: Test server lifecycle, movement and crown
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f v2/tests/server-integration.sql

@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#14241b">
+  <title>Kill the King — V2</title>
+  <link rel="stylesheet" href="./style.css?v=v2-003">
+</head>
+<body>
+  <main id="app">
+    <section id="welcome" class="screen screen-active" aria-labelledby="game-title">
+      <div class="welcome-card">
+        <p class="eyebrow">Reconstrução multiplayer</p>
+        <h1 id="game-title">KILL THE KING</h1>
+        <p class="subtitle">O mundo continua existindo, mesmo quando você sai.</p>
+        <div class="preview-panel">
+          <canvas id="character-preview" width="192" height="192" aria-label="Prévia do personagem"></canvas>
+          <span>Prévia do personagem · sprites Universal LPC</span>
+        </div>
+        <form id="join-form">
+          <label for="display-name">Nome do personagem</label>
+          <input id="display-name" name="displayName" maxlength="24" minlength="2" autocomplete="off" required placeholder="Seu nome no mundo">
+          <div class="creator-grid">
+            <label>Modelo
+              <select id="gender" name="gender">
+                <option value="male">Masculino</option>
+                <option value="female">Feminino</option>
+              </select>
+            </label>
+            <label>Tom de pele
+              <select id="skin-color" name="skin">
+                <option value="light">Claro</option>
+                <option value="amber">Pêssego</option>
+                <option value="olive">Oliva</option>
+                <option value="taupe">Bege</option>
+                <option value="bronze">Bronze</option>
+                <option value="brown" selected>Castanho</option>
+                <option value="black">Escuro</option>
+              </select>
+            </label>
+            <label>Cor do cabelo
+              <select id="hair-color" name="hair">
+                <option value="black">Preto</option>
+                <option value="dark_brown" selected>Castanho escuro</option>
+                <option value="brown">Castanho</option>
+                <option value="chestnut">Auburn</option>
+                <option value="ginger">Ruivo</option>
+                <option value="blonde">Loiro</option>
+                <option value="white">Branco</option>
+              </select>
+            </label>
+            <label>Penteado LPC
+              <select id="hairstyle" name="hairstyle">
+                <option value="hair_pixie">Carregando penteados…</option>
+              </select>
+            </label>
+            <label>Cor da roupa
+              <select id="clothing-color" name="clothing">
+                <option value="#e7e2c9">Linho</option>
+                <option value="#8d3030">Vermelho</option>
+                <option value="#315d9b">Azul</option>
+                <option value="#47774b">Verde</option>
+                <option value="#d3aa37">Amarelo</option>
+                <option value="#493b67">Roxo</option>
+                <option value="#333b43">Grafite</option>
+              </select>
+            </label>
+          </div>
+          <button id="join-button" class="primary" type="submit">Entrar no mundo</button>
+          <p id="join-error" class="error" role="alert" aria-live="polite"></p>
+        </form>
+        <p class="small-note">WASD / setas para andar · Shift para correr · Esc para sair definitivamente</p>
+      </div>
+    </section>
+
+    <section id="game" class="game-screen" aria-label="Mundo do jogo">
+      <canvas id="world" aria-label="Visão do mundo"></canvas>
+      <header class="hud">
+        <div><strong id="hud-name">Aventureiro</strong><span id="connection-state">Conectando…</span></div>
+        <div class="hud-stats"><span id="hud-position">—</span><span id="hud-players">1 jogador</span></div>
+        <button id="leave-button" class="danger" type="button">Sair · morrer</button>
+      </header>
+      <section class="game-panel" aria-label="Personagem e ações">
+        <div class="panel-stats">
+          <span>Vida <strong id="hud-health">100/100</strong></span>
+          <span>Estamina <strong id="hud-stamina">100/100</strong></span>
+          <span>Fome <strong id="hud-satiety">99/99</strong></span>
+          <span>Sede <strong id="hud-hydration">99/99</strong></span>
+        </div>
+        <div class="clan-row">
+          <span>Clã</span>
+          <select id="clan-choice" aria-label="Cor do clã">
+            <option value="">Escolher clã</option>
+            <option value="#d94343">Vermelho</option>
+            <option value="#3d75d6">Azul</option>
+            <option value="#4b9f62">Verde</option>
+            <option value="#d9ae38">Amarelo</option>
+            <option value="#8b61c2">Roxo</option>
+            <option value="#e97e28">Laranja</option>
+            <option value="#45a9a2">Turquesa</option>
+            <option value="#c05a9b">Rosa</option>
+          </select>
+          <button id="clan-choose" type="button">Confirmar</button>
+          <span id="clan-status">Sem clã</span>
+        </div>
+        <div class="inventory-row">
+          <button id="inventory-slot-0" class="inventory-slot selected" type="button">1 · Vazio</button>
+          <button id="inventory-slot-1" class="inventory-slot" type="button">2 · Vazio</button>
+          <button id="item-use" type="button">Usar</button>
+          <button id="item-equip" type="button">Equipar</button>
+          <button id="item-drop" type="button">Soltar</button>
+        </div>
+        <div class="wearables-row" aria-label="Equipamentos vestidos">
+          <span>Vestidos:</span>
+          <button class="wearable-slot" data-wear-slot="head" type="button">Cabeça · Vazio</button>
+          <button class="wearable-slot" data-wear-slot="chest" type="button">Peito · Vazio</button>
+          <button class="wearable-slot" data-wear-slot="waist" type="button">Cintura · Vazio</button>
+          <button class="wearable-slot" data-wear-slot="legs" type="button">Pernas · Vazio</button>
+          <button class="wearable-slot" data-wear-slot="feet" type="button">Pés · Vazio</button>
+        </div>
+        <div class="game-actions">
+          <button id="interact-button" type="button">Interagir · E</button>
+          <button id="attack-button" type="button">Atacar · Espaço</button>
+        </div>
+      </section>
+      <div class="controls-hint">WASD / setas · Shift corre · botão direito bloqueia · E interage · Espaço ataca · Esc sai</div>
+      <div id="game-error" class="game-error" role="status" aria-live="polite"></div>
+    </section>
+  </main>
+  <script src="../personagem.js?v=lpc-catalog-20261117"></script>
+  <script type="module" src="./js/main.js?v=v2-008"></script>
+</body>
+</html>
