@@ -127,8 +127,13 @@ while(rollbackContext.playerVisual.correctionRemaining > 0 && correctionFrames <
   correctionFrames++;
 }
 assert.ok(correctionFrames > 0);
-assert.ok(Math.abs(rollbackContext.playerVisual.x - rollbackContext.playerVisual.targetX) < 0.01,
-  "The visual position must converge to the moving target without a rollback.");
+assert.ok(rollbackContext.playerVisual.correctionRemaining > 0,
+  "A backward correction must remain pending while forward movement is held.");
+rollbackContext.playerMoving = false;
+rollbackContext.playerInputX = 0;
+rollbackContext.updateLocalPlayerVisual(0.05);
+assert.ok(rollbackContext.playerVisual.x < previousVisualX + 0.01,
+  "A deferred correction may converge after movement stops.");
 context.setAuthoritativePlayerPosition(
   103,120,3,false,150,requestInput,
   { inputX:1,inputY:0,running:false,guarding:false,inputAgeMs:0 }
@@ -185,7 +190,14 @@ assert.match(input,/if\(!wasPressed\)[\s\S]*?sendImmediateMovementIntent\(\)/);
 assert.match(input,/window\.addEventListener\('keyup'[\s\S]*?sendImmediateMovementIntent\(\)/);
 assert.match(renderer,/playerMoving\?playerVisual.direction:player.direction/);
 assert.match(gameState,/errorDistance\/correctionSpeed/);
-assert.doesNotMatch(gameState,/latencyTolerance/);
+assert.match(gameState,/maxBackward/);
+assert.match(gameState,/Math.ceil\(Math.max\(Math.abs\(wantedX\),Math.abs\(wantedY\)\)\/6\)/);
+assert.match(playerSync,/function compareServerTimestamps\(/);
+assert.doesNotMatch(playerSync,/applyOwnServerPosition\(row\)/);
+assert.match(rootHtml,/20261117-movement-reconciliation-004/);
+assert.doesNotMatch(playerSync,/applyOwnServerPosition/);
+assert.doesNotMatch(playerSync,/compareServerTimestamps is not defined/);
+assert.doesNotMatch(playerSync,/\\\\n/);
 assert.match(online,/sendPosition/);
 for(const [path,version] of [
   ["render/world-renderer.js","20261117-movement-reconciliation-004"],
