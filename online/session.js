@@ -3,7 +3,7 @@ import { state } from "./state.js?v=20261117-online-separation-001";
 import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
 } from "./supabase-client.js?v=20261117-online-separation-001";
-import { sendPosition } from "./movement.js?v=20261117-client-movement-001";
+import { sendPosition } from "./movement.js?v=20261117-movement-authority-002";
 import { subscribeWorld } from "./realtime.js?v=20261117-realtime-entry-fix-001";
 import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-entry-timeouts-001";
 import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-entry-timeouts-001";

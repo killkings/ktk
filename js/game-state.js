@@ -156,7 +156,9 @@ var  playerVisual = {
   // Posição fixa no mundo: não acompanha o deslocamento do jogador.
 var  camera = {x:0,y:0};
 
-  function setAuthoritativePlayerPosition(x,y,direction,snap=false,latencyMs=0) {
+  function setAuthoritativePlayerPosition(
+    x,y,direction,snap=false,latencyMs=0,requestInput=null,currentInput=null
+  ) {
     const serverX=Number(x),serverY=Number(y);
     if(!Number.isFinite(serverX)||!Number.isFinite(serverY)) return false;
     camera.x=0; camera.y=0;
@@ -172,41 +174,63 @@ var  camera = {x:0,y:0};
       playerVisual.correctionY=0;
       playerVisual.correctionRemaining=0;
       playerVisual.initialized=true;
+      return true;
+    }
+
+    const controls=currentInput||{
+      inputX:playerInputX,inputY:playerInputY,
+      running:playerRunning,guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted),
+      inputAgeMs:0
+    };
+    const sameIntent=Boolean(requestInput
+      && Number(requestInput.inputX)===Number(controls.inputX)
+      && Number(requestInput.inputY)===Number(controls.inputY)
+      && Boolean(requestInput.running)===Boolean(controls.running)
+      && Boolean(requestInput.guarding)===Boolean(controls.guarding));
+    const oneWayLatencyMs=Math.max(0,Number(latencyMs)||0)/2;
+    const extrapolationMs=sameIntent
+      ? oneWayLatencyMs
+      : Math.max(0,Number(controls.inputAgeMs)||0)+oneWayLatencyMs;
+    const inputX=Math.max(-1,Math.min(1,Math.trunc(Number(controls.inputX)||0)));
+    const inputY=Math.max(-1,Math.min(1,Math.trunc(Number(controls.inputY)||0)));
+    const inputLength=Math.hypot(inputX,inputY);
+    let expectedX=serverX,expectedY=serverY;
+    if(inputLength>0) {
+      const speedLevel=Number(playerStats?.stats?.speed?.value);
+      const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
+      const extrapolationDistance=movementSpeed*Math.min(750,extrapolationMs)/1000;
+      expectedX+=(inputX/inputLength)*extrapolationDistance;
+      expectedY+=(inputY/inputLength)*extrapolationDistance;
+      playerVisual.direction=Math.abs(inputX)>Math.abs(inputY)
+        ? (inputX>0?3:1)
+        : (inputY>0?2:0);
     } else {
-      playerVisual.targetX=serverX;
-      playerVisual.targetY=serverY;
-      if(playerMoving&&(playerInputX!==0||playerInputY!==0)) {
-        const speedLevel=Number(playerStats?.stats?.speed?.value);
-        const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
-        // Tolera a latência normal sem puxar o sprite para trás a cada RPC.
-        const latencyTolerance=COLLISION_RADIUS
-          +movementSpeed*Math.max(0,Math.min(500,Number(latencyMs)||0))/2000;
-        const errorX=serverX-playerVisual.x;
-        const errorY=serverY-playerVisual.y;
-        const errorDistance=Math.hypot(errorX,errorY);
-        if(errorDistance>latencyTolerance) {
-          if(errorDistance>Math.max(96,movementSpeed*.55)) {
-            // Divergência grande (por exemplo, colisão): a posição oficial vence.
-            playerVisual.x=serverX;
-            playerVisual.y=serverY;
-            playerVisual.correctionX=0;
-            playerVisual.correctionY=0;
-            playerVisual.correctionRemaining=0;
-          } else {
-            playerVisual.correctionX=errorX;
-            playerVisual.correctionY=errorY;
-            playerVisual.correctionRemaining=Math.max(.12,errorDistance/Math.max(1,movementSpeed*1.5));
-          }
-        } else {
-          playerVisual.correctionX=0;
-          playerVisual.correctionY=0;
-          playerVisual.correctionRemaining=0;
-        }
-      } else {
+      playerVisual.direction=player.direction;
+    }
+    playerVisual.targetX=expectedX;
+    playerVisual.targetY=expectedY;
+
+    // Never ignore ordinary discrepancies inside an RTT tolerance dead zone.
+    const errorX=expectedX-playerVisual.x;
+    const errorY=expectedY-playerVisual.y;
+    const errorDistance=Math.hypot(errorX,errorY);
+    if(errorDistance>360) {
+      // Snap only genuine discontinuities; normal latency/collision drift is smoothed.
+      playerVisual.x=expectedX;
+      playerVisual.y=expectedY;
+      playerVisual.correctionX=0;
+      playerVisual.correctionY=0;
+      playerVisual.correctionRemaining=0;
+    } else {
+      playerVisual.correctionX=errorX;
+      playerVisual.correctionY=errorY;
+      const correctionSpeed=Math.max(180,SPEED*2.4);
+      playerVisual.correctionRemaining=errorDistance>0.15
+        ? Math.max(0.10,Math.min(0.42,errorDistance/correctionSpeed))
+        : 0;
+      if(playerVisual.correctionRemaining===0) {
         playerVisual.correctionX=0;
         playerVisual.correctionY=0;
-        playerVisual.correctionRemaining=0;
-        playerVisual.direction=player.direction;
       }
     }
     return true;
@@ -219,7 +243,8 @@ var  camera = {x:0,y:0};
     }
     const dt=Math.max(0,Math.min(.05,Number(deltaSeconds)||0));
     const inputLength=Math.hypot(playerInputX,playerInputY);
-    if(playerMoving&&inputLength>0&&window.KTKOnline?.connected!==false) {
+    const isMoving=playerMoving&&inputLength>0&&window.KTKOnline?.connected!==false;
+    if(isMoving) {
       const speedLevel=Number(playerStats?.stats?.speed?.value);
       const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
       const travel=movementSpeed*dt;
@@ -228,36 +253,40 @@ var  camera = {x:0,y:0};
       playerVisual.direction=Math.abs(playerInputX)>Math.abs(playerInputY)
         ? (playerInputX>0?3:1)
         : (playerInputY>0?2:0);
-      if(playerVisual.correctionRemaining>0) {
-        const fraction=Math.min(1,dt/playerVisual.correctionRemaining);
-        const correctionX=playerVisual.correctionX*fraction;
-        const correctionY=playerVisual.correctionY*fraction;
-        playerVisual.x+=correctionX;
-        playerVisual.y+=correctionY;
-        playerVisual.correctionX-=correctionX;
-        playerVisual.correctionY-=correctionY;
-        playerVisual.correctionRemaining=Math.max(0,playerVisual.correctionRemaining-dt);
-        if(playerVisual.correctionRemaining===0) {
-          playerVisual.correctionX=0;
-          playerVisual.correctionY=0;
-        }
+    }
+
+    // Corrections continue while moving and after releasing the key.
+    if(playerVisual.correctionRemaining>0) {
+      const fraction=Math.min(1,dt/playerVisual.correctionRemaining);
+      const correctionX=playerVisual.correctionX*fraction;
+      const correctionY=playerVisual.correctionY*fraction;
+      playerVisual.x+=correctionX;
+      playerVisual.y+=correctionY;
+      playerVisual.correctionX-=correctionX;
+      playerVisual.correctionY-=correctionY;
+      playerVisual.correctionRemaining=Math.max(0,playerVisual.correctionRemaining-dt);
+      if(playerVisual.correctionRemaining===0) {
+        playerVisual.x=playerVisual.targetX;
+        playerVisual.y=playerVisual.targetY;
+        playerVisual.correctionX=0;
+        playerVisual.correctionY=0;
       }
       return;
     }
-    playerVisual.correctionX=0;
-    playerVisual.correctionY=0;
-    playerVisual.correctionRemaining=0;
-    playerVisual.direction=player.direction;
-    const blend=1-Math.exp(-dt*24);
-    const maxStep=520*dt;
-    const dx=playerVisual.targetX-playerVisual.x;
-    const dy=playerVisual.targetY-playerVisual.y;
-    const stepX=Math.sign(dx)*Math.min(Math.abs(dx*blend),maxStep);
-    const stepY=Math.sign(dy)*Math.min(Math.abs(dy*blend),maxStep);
-    playerVisual.x+=stepX;
-    playerVisual.y+=stepY;
-    if(Math.abs(playerVisual.targetX-playerVisual.x)<.15) playerVisual.x=playerVisual.targetX;
-    if(Math.abs(playerVisual.targetY-playerVisual.y)<.15) playerVisual.y=playerVisual.targetY;
+
+    if(!isMoving) {
+      playerVisual.direction=player.direction;
+      const blend=1-Math.exp(-dt*24);
+      const maxStep=520*dt;
+      const dx=playerVisual.targetX-playerVisual.x;
+      const dy=playerVisual.targetY-playerVisual.y;
+      const stepX=Math.sign(dx)*Math.min(Math.abs(dx*blend),maxStep);
+      const stepY=Math.sign(dy)*Math.min(Math.abs(dy*blend),maxStep);
+      playerVisual.x+=stepX;
+      playerVisual.y+=stepY;
+      if(Math.abs(playerVisual.targetX-playerVisual.x)<.15) playerVisual.x=playerVisual.targetX;
+      if(Math.abs(playerVisual.targetY-playerVisual.y)<.15) playerVisual.y=playerVisual.targetY;
+    }
   }
 var  TILE = 72;
 var  SPEED = 225;

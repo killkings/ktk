@@ -1,6 +1,27 @@
 /* Interpolação, representação dos jogadores remotos e API de estado do mundo. */
 'use strict';
 
+var localMovementIntentSignature = null;
+var localMovementIntentChangedAt = 0;
+
+function getLocalMovementControls() {
+  const inputX=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
+  const inputY=Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));
+  const moving=inputX!==0||inputY!==0;
+  const running=Boolean(moving&&keys.has('shift')&&(Number(playerStats?.stats?.stamina?.value)||0)>0);
+  const guarding=Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield());
+  const signature=JSON.stringify({inputX,inputY,running,guarding});
+  const now=performance.now();
+  if(signature!==localMovementIntentSignature) {
+    localMovementIntentSignature=signature;
+    localMovementIntentChangedAt=now;
+  }
+  return {
+    inputX,inputY,running,guarding,
+    inputAgeMs:Math.max(0,Math.min(750,Math.round(now-localMovementIntentChangedAt)))
+  };
+}
+
   function updateRemotePlayerMotion(dt) {
     remotePlayers.forEach(remote=>{
       const targetX=Number.isFinite(remote.targetX)?remote.targetX:remote.x;
@@ -209,17 +230,7 @@
   }
   window.KTKWorldEntities={
     setRemotePlayers,entities:getWorldEntities,applyServerState,
-    getLocalControls:()=>{
-      // Lê as teclas diretamente para não aguardar o próximo frame de renderização.
-      const inputX=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
-      const inputY=Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));
-      const moving=inputX!==0||inputY!==0;
-      return {
-        inputX,inputY,
-        running:Boolean(moving&&keys.has('shift')&&(Number(playerStats?.stats?.stamina?.value)||0)>0),
-        guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield())
-      };
-    },
+    getLocalControls:getLocalMovementControls,
     applyServerKnockback:(event,x,y,direction)=>{
       if(playerDead) return false;
       if(Number.isFinite(Number(x))&&Number.isFinite(Number(y))) {
@@ -236,5 +247,6 @@
     applyWorldEntity,applyWorldState,
     serverDeath:()=>handlePlayerDeath(true),
     setLocalState:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,true),
-    reconcileLocalPosition:(x,y,direction,latencyMs=0)=>setAuthoritativePlayerPosition(x,y,direction,false,latencyMs)
+    reconcileLocalPosition:(x,y,direction,latencyMs=0,requestInput=null)=>
+      setAuthoritativePlayerPosition(x,y,direction,false,latencyMs,requestInput,getLocalMovementControls())
   };
