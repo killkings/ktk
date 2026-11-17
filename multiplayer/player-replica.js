@@ -67,25 +67,7 @@ function getLocalMovementControls() {
     const now=performance.now();
     remotePlayers.forEach(remote=>{
       const sample=getRemoteMotionSample(remote,now);
-      // Uma amostra atrasada pode ficar atrás do último quadro já exibido
-      // quando há perda/jitter acima do buffer. Na mesma direção, nunca volta:
-      // remove só a componente contrária; mudanças reais de direção e knockback
-      // continuam podendo deslocar o personagem normalmente.
-      const previousDirection=Number.isFinite(remote.renderDirection)
-        ? remote.renderDirection : remote.direction;
-      let nextX=sample.x,nextY=sample.y;
-      if(!remote.knockback&&sample.direction===previousDirection) {
-        const directionVector=sample.direction===0?[0,-1]
-          : sample.direction===1?[-1,0]
-          : sample.direction===2?[0,1]:[1,0];
-        const correctionX=nextX-remote.x,correctionY=nextY-remote.y;
-        const backwards=correctionX*directionVector[0]+correctionY*directionVector[1];
-        if(backwards<0) {
-          nextX-=directionVector[0]*backwards;
-          nextY-=directionVector[1]*backwards;
-        }
-      }
-      remote.x=nextX; remote.y=nextY;
+      remote.x=sample.x; remote.y=sample.y;
       remote.direction=sample.direction; remote.renderDirection=sample.direction;
       remote.moving=sample.moving;
       if(remote.moving) remote.walkTime=(remote.walkTime||0)+Math.max(0,dt);
@@ -188,6 +170,17 @@ function getLocalMovementControls() {
         id,type:'player',x:remote.x,y:remote.y,targetX:remote.x,targetY:remote.y,
         direction:remoteDirection,radius:COLLISION_RADIUS,walkTime:0
       };
+      const motionEpoch=String(remote.sessionId||"");
+      if(motionEpoch&&entity.motionServerEpoch&&motionEpoch!==entity.motionServerEpoch) {
+        // A new authoritative server process starts a new tick timeline.
+        // Never interpolate across snapshots from two different server epochs.
+        entity.motionSnapshots=[];
+        entity.lastMotionSnapshotTimestamp="";
+        entity.x=remote.x;
+        entity.y=remote.y;
+        entity.renderDirection=remoteDirection;
+      }
+      if(motionEpoch) entity.motionServerEpoch=motionEpoch;
       entity.targetX=remote.x;
       entity.targetY=remote.y;
       entity.velocityX=Number.isFinite(Number(remote.velocityX))?Number(remote.velocityX):0;

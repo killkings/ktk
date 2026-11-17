@@ -1,7 +1,7 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
-import { state } from "./state.js?v=20261117-remote-snapshot-007";
-import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-remote-snapshot-007";
-import { applyOwnServerPosition } from "./movement.js?v=20261117-remote-snapshot-007";
+import { state } from "./state.js?v=20261117-websocket-world-001";
+import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-websocket-world-001";
+import { applyOwnServerPosition } from "./movement.js?v=20261117-websocket-world-001";
 
 // Ordena timestamps timestamptz incluindo os microssegundos do PostgreSQL.
 function compareServerTimestamps(a, b) {
@@ -162,7 +162,7 @@ export function acceptDatabaseChange(payload) {
       satiety:serverState.satiety,maxSatiety:99,
       hydration:serverState.hydration,maxHydration:99
     }
-  }, "database");
+  }, state.gameSocketConnected ? "presence" : "database");
   const changedRemote=state.remote.get(String(row.user_id));
   const knockbackAt=String(serverState.last_knockback_at||"");
   if(changedRemote&&serverState.last_knockback&&knockbackAt&&knockbackAt!==changedRemote.lastServerKnockbackAt) {
@@ -255,8 +255,14 @@ function acceptRemote(payload, source = "broadcast") {
   let velocityY=Number(previous?.velocityY)||0;
   let positionReceivedAt=Number(previous?.positionReceivedAt)||0;
   let serverMoving=Boolean(previous?.serverMoving);
+  const isGameServerPosition = source === "game-server";
   const acceptedNewPosition=isDatabasePosition&&!staleDatabasePosition&&Boolean(positionTimestamp);
-  if(acceptedNewPosition) {
+  if(isGameServerPosition) {
+    positionReceivedAt=performance.now();
+    serverMoving=Boolean(payload.moving);
+    velocityX=Number.isFinite(Number(payload.velocityX))?Number(payload.velocityX):0;
+    velocityY=Number.isFinite(Number(payload.velocityY))?Number(payload.velocityY):0;
+  } else if(acceptedNewPosition) {
     positionReceivedAt=performance.now();
     serverMoving=Boolean(payload.moving);
     if(!serverMoving) {
@@ -327,15 +333,42 @@ function acceptRemote(payload, source = "broadcast") {
         ? (previous?.lastPositionTimestamp || "")
         : (positionTimestamp || previous?.lastPositionTimestamp || ""))
       : (previous?.lastPositionTimestamp || ""),
-    positionUpdatedAt: isDatabasePosition
-      ? (staleDatabasePosition
-        ? (previous?.lastPositionTimestamp || "")
-        : (positionTimestamp || previous?.lastPositionTimestamp || ""))
-      : (previous?.lastPositionTimestamp || "")
+    positionUpdatedAt: isGameServerPosition
+      ? String(payload.position_updated_at || payload.sequence || "")
+      : (isDatabasePosition
+        ? (staleDatabasePosition
+          ? (previous?.lastPositionTimestamp || "")
+          : (positionTimestamp || previous?.lastPositionTimestamp || ""))
+        : (previous?.positionUpdatedAt || previous?.lastPositionTimestamp || "")),
+    transport: isGameServerPosition ? "game-server" : (previous?.transport || "database")
   });
   updateRemotes();
   void loadRemoteProfile(id);
 }
+
+export function acceptGameServerPlayers(players, tick, serverEpoch) {
+  const currentIds = new Set();
+  const sequence = Math.max(0, Math.trunc(Number(tick) || 0));
+  const sessionId = String(serverEpoch || "game-server");
+  (Array.isArray(players) ? players : []).forEach(player => {
+    const id = String(player?.user_id || "");
+    if (!id || id === state.user?.id) return;
+    currentIds.add(id);
+    acceptRemote({
+      user_id: id, x: player.x, y: player.y, direction: player.direction,
+      display_name: player.display_name, character: player.character,
+      wearables: player.wearables, combat_stats: player.combat_stats,
+      moving: player.moving, running: player.running, guarding: player.guarding,
+      velocityX: player.velocityX, velocityY: player.velocityY,
+      sequence, session_id: sessionId,
+      position_updated_at: sessionId + ":" + sequence
+    }, "game-server");
+  });
+  for (const id of state.remote.keys()) if (!currentIds.has(id)) state.remote.delete(id);
+  updateRemotes();
+}
+
+window.KTKRemoteSync = { acceptGameServerPlayers };
 
 export function rebuildPresence() {
   if (!state.channel) return;

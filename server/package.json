@@ -1,0 +1,15 @@
+{
+  "name": "ktk-authoritative-world",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node index.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "8.23.0"
+  }
+}

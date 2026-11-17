@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch, playerSync, rootHtml, session, realtime, actions, supabaseClient] = await Promise.all([
+const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch, playerSync, rootHtml, session, realtime, actions, supabaseClient, gameTransport] = await Promise.all([
   read("../input/input-controller.js"),
   read("../multiplayer/player-replica.js"),
   read("../js/game-state.js"),
@@ -18,7 +18,8 @@ const [input, replica, gameState, renderer, movement, online, html, migration, r
   read("../online/session.js"),
   read("../online/realtime.js"),
   read("../online/actions.js"),
-  read("../online/supabase-client.js")
+  read("../online/supabase-client.js"),
+  read("../online/game-transport.js")
 ]);
 
 // Keyboard state includes the age of the exact active intent, not the last
@@ -170,8 +171,8 @@ const noRollbackAfterLongGap={
 vm.createContext(noRollbackAfterLongGap);
 vm.runInContext(replica.slice(remoteMotionStart,remoteMotionEnd)+";globalThis.stepRemoteMotion=updateRemotePlayerMotion;",noRollbackAfterLongGap);
 noRollbackAfterLongGap.stepRemoteMotion(0.016);
-assert.equal(noRollbackAfterLongGap.remotePlayers.get("late").x,150,
-  "Uma posição de parada atrasada não pode puxar para trás o personagem que já foi exibido à frente.");
+assert.equal(noRollbackAfterLongGap.remotePlayers.get("late").x,20,
+  "A linha temporal ordenada converge para a posição oficial de parada após uma lacuna de snapshots.");
 
 const staleMotionContext={
   remotePlayers:new Map([["stale",{x:0,y:0,targetX:0,targetY:0,velocityX:225,velocityY:0,
@@ -315,11 +316,11 @@ assert.match(migration,/apply_player_movement_segment/);
 assert.match(migration,/v_previous_elapsed/);
 assert.match(resetPatch,/coalesce\(\(v_state->>'moving'\)::boolean, false\)/);
 
-assert.match(movement,/p_input_age_ms:\s*inputAgeAtServer/);
-assert.match(movement,/payload\.inputAgeMs/);
-assert.match(movement,/lastMovementLatencyMs/);
-assert.match(movement,/reconcileLocalPosition\?\.\(x, y, direction, latencyMs, requestInput\)/);
-assert.match(movement,/stepAccepted && latestMoving/);
+assert.match(movement,/sendMovementInput\(payload\)/);
+assert.doesNotMatch(movement,/supabase\.rpc\(["']ktk_step_player/);
+assert.match(movement,/state\.gameSocketConnected/);
+assert.match(movement,/state\.lastMovementSentAt/);
+assert.match(movement,/applyOwnServerPosition/);
 assert.match(input,/function sendImmediateMovementIntent\(/);
 assert.match(input,/if\(!wasPressed\)[\s\S]*?sendImmediateMovementIntent\(\)/);
 assert.match(input,/window\.addEventListener\('keyup'[\s\S]*?sendImmediateMovementIntent\(\)/);
@@ -328,7 +329,7 @@ assert.match(gameState,/errorDistance\/correctionSpeed/);
 assert.match(gameState,/maxBackward/);
 assert.match(gameState,/Math\.min\(oneWayLatencyMs,intentAgeMs\)/);
 assert.match(gameState,/requestInput\.intentRevision===controls\.intentRevision/);
-assert.match(movement,/intentRevision: payload\.intentRevision/);
+assert.match(movement,/intentRevision: Number\.isFinite\(data\.intentRevision\)/);
 assert.match(replica,/localMovementIntentRevision/);
 assert.match(gameState,/remote\?\.targetX/);
 assert.match(gameState,/remote\?\.targetY/);
@@ -339,7 +340,7 @@ assert.match(playerSync,/movementInputY:serverState\.movement_input_y/);
 assert.match(playerSync,/movementInputX:row\.state\?\.movement_input_x/);
 assert.match(playerSync,/movementInputY:row\.state\?\.movement_input_y/);
 assert.match(playerSync,/velocityX,velocityY,positionReceivedAt,serverMoving/);
-assert.match(playerSync,/positionUpdatedAt: isDatabasePosition/);
+assert.match(playerSync,/positionUpdatedAt: isGameServerPosition/);
 assert.match(replica,/REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
 assert.match(replica,/entity\.motionSnapshots\.push/);
 assert.match(replica,/remote\.positionUpdatedAt/);
@@ -348,12 +349,12 @@ assert.match(playerSync,/moving:serverState\.moving/);
 assert.match(playerSync,/moving:row\.state\?\.moving/);
 assert.match(replica,/const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
 assert.match(replica,/const extrapolationMs=Math\.min\(REMOTE_MOTION_MAX_EXTRAPOLATION_MS,elapsed\)/);
-assert.match(replica,/const previousDirection=Number\.isFinite\(remote\.renderDirection\)/);
+assert.doesNotMatch(replica,/previousDirection=Number\.isFinite\(remote\.renderDirection\)/);
 assert.match(playerSync,/applyOwnServerPosition\(row,Number\(state\.lastMovementLatencyMs\)\|\|0\)/);
-assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-remote-snapshot-007"/);
+assert.match(playerSync,/import \{ applyOwnServerPosition \} from "\.\/movement\.js\?v=20261117-websocket-world-001"/);
 assert.match(session,/state\.lastLocalKnockbackAt=String\(player\.state\?\.last_knockback_at/);
 assert.doesNotMatch(session,/spawnTimestamp/);
-assert.match(rootHtml,/20261117-remote-snapshot-007/);
+assert.match(rootHtml,/20261117-websocket-world-001/);
 assert.doesNotMatch(playerSync,/compareServerTimestamps is not defined/);
 const timestampHelper = playerSync.slice(
   playerSync.indexOf("function compareServerTimestamps"),
@@ -366,21 +367,27 @@ assert.equal(timestampContext.compare("2026-11-17T21:00:00.000002Z","2026-11-17T
   "Remote timestamps must preserve PostgreSQL microsecond ordering.");
 assert.equal(timestampContext.compare("2026-11-17T21:00:00.000001Z","2026-11-17T21:00:00.000001Z"),0);
 assert.match(online,/sendPosition/);
-const onlineModules={online,session,realtime,actions,supabaseClient,playerSync,movement};
+assert.match(movement,/sendMovementInput\(payload\)/);
+assert.doesNotMatch(movement,/supabase\.rpc\(["']ktk_step_player/);
+assert.match(gameTransport,/new WebSocket\(GAME_SERVER_URL\)/);
+assert.match(gameTransport,/type: "input"/);
+assert.match(gameTransport,/type: "flush"/);
+
+const onlineModules={online,session,realtime,actions,supabaseClient,playerSync,movement,gameTransport};
 for(const [name,source] of Object.entries(onlineModules)) {
   assert.doesNotMatch(source,/20261117-(online-separation-001|movement-authority-002|realtime-entry-fix-001|entry-timeouts-001)/,
     "Módulo ESM ainda usa uma chave antiga: "+name);
   for(const match of source.matchAll(/from\s+["']([^"']+\.js\?v=[^"']+)["']/g)) {
-    assert.ok(match[1].endsWith("?v=20261117-remote-snapshot-007"),
+    assert.ok(match[1].endsWith("?v=20261117-websocket-world-001"),
       "Dependência ESM sem a chave única em "+name+": "+match[1]);
   }
 }
 for(const [path,version] of [
-  ["render/world-renderer.js","20261117-remote-snapshot-007"],
-  ["multiplayer/player-replica.js","20261117-remote-snapshot-007"],
-  ["js/game-state.js","20261117-remote-snapshot-007"],
-  ["input/input-controller.js","20261117-remote-snapshot-007"],
-  ["js/online.js","20261117-remote-snapshot-007"]
+  ["render/world-renderer.js","20261117-websocket-world-001"],
+  ["multiplayer/player-replica.js","20261117-websocket-world-001"],
+  ["js/game-state.js","20261117-websocket-world-001"],
+  ["input/input-controller.js","20261117-websocket-world-001"],
+  ["js/online.js","20261117-websocket-world-001"]
 ]) {
   assert.ok(html.includes("./"+path+"?v="+version),
     "Cache bust ausente: "+path);

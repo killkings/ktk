@@ -1,13 +1,14 @@
 /* Autenticação, entrada/saída e ciclo de vida da sessão. */
-import { state } from "./state.js?v=20261117-remote-snapshot-007";
+import { state } from "./state.js?v=20261117-websocket-world-001";
 import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
-} from "./supabase-client.js?v=20261117-remote-snapshot-007";
-import { sendPosition } from "./movement.js?v=20261117-remote-snapshot-007";
-import { subscribeWorld } from "./realtime.js?v=20261117-remote-snapshot-007";
-import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-remote-snapshot-007";
-import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-remote-snapshot-007";
-import { withTimeout } from "./request-timeout.js?v=20261117-remote-snapshot-007";
+} from "./supabase-client.js?v=20261117-websocket-world-001";
+import { sendPosition } from "./movement.js?v=20261117-websocket-world-001";
+import { subscribeWorld } from "./realtime.js?v=20261117-websocket-world-001";
+import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-websocket-world-001";
+import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-websocket-world-001";
+import { withTimeout } from "./request-timeout.js?v=20261117-websocket-world-001";
+import { connectGameServer, disconnectGameServer, flushGameServerPositions } from "./game-transport.js?v=20261117-websocket-world-001";
 
 export function setStatus(message, connected = false) {
   let el = document.getElementById("ktk-online-status");
@@ -107,9 +108,8 @@ export async function enter(options = {}) {
     // Não reproduz como novo um knockback que já constava do estado inicial.
     // A posição do ingresso não inclui position_updated_at no contrato SQL.
     state.lastLocalKnockbackAt=String(player.state?.last_knockback_at||"");
-    reportEntryProgress(options, "Conectando ao canal multiplayer...");
+    reportEntryProgress(options, "Conectando aos eventos do mundo...");
     await subscribeWorld(message => reportEntryProgress(options, message));
-    setStatus("● Online · mundo principal", true);
     state.joined = true;
     state.lastInputSignature = "";
     state.lastCheckpoint = 0;
@@ -117,10 +117,15 @@ export async function enter(options = {}) {
     state.stepController = null;
     state.activeStepId = 0;
     state.stepSequence++;
+    reportEntryProgress(options, "Conectando ao servidor autoritativo de movimento...");
+    await connectGameServer(state.accessToken);
+    setStatus("● Mundo online · servidor autoritativo", true);
     void setPlayerVisibility(document.visibilityState === "visible");
     return { ok: true, player };
   } catch (error) {
     console.error("KTK online:", error);
+    // Falha de conexão não é uma saída voluntária: não mata o personagem.
+    await disconnectGameServer();
     if (state.channel) {
       try { await withTimeout("O encerramento do canal anterior", 7000, () => supabase.removeChannel(state.channel)); } catch (cleanupError) {
         console.warn("KTK channel cleanup:", cleanupError);
@@ -169,6 +174,7 @@ export async function getPlayerState(signal) {
 
 export async function clearLocalSession(statusMessage) {
   state.leaving = true;
+  await disconnectGameServer();
   state.worldStateRequestId++;
   state.intentInFlight = false;
   state.connecting = false;
@@ -231,6 +237,7 @@ export async function leaveWorld() {
   if (!state.user) return { ok: false, error: "Não há uma sessão de jogador ativa para encerrar." };
 
   state.leaving = true;
+  if (state.gameSocketConnected) await flushGameServerPositions();
   state.stepSequence++;
   state.activeStepId = 0;
   state.stepInFlight = false;
@@ -273,35 +280,42 @@ export function startHeartbeat() {
   setInterval(() => {
     if (!state.online || !state.joined) return;
     void sendPosition(false).catch(error=>console.warn("KTK position heartbeat:",error));
-  }, 100);
+  }, 50);
   window.addEventListener("pagehide", () => {
-    // Mesmo se uma saída pelo Esc já começou, pagehide envia uma segunda
-    // solicitação idempotente keepalive como proteção contra fechamento da página.
     if (!state.online || !state.joined || !state.accessToken) return;
     state.leaving = true;
-    state.stepSequence++;
-    state.stepController?.abort();
-    state.stepController = null;
-    state.activeStepId = 0;
-    state.stepInFlight = false;
+    state.joined = false;
+    state.online = false;
     const token = state.accessToken;
-    const endpoint = SUPABASE_URL + "/rest/v1/rpc/ktk_leave_world";
-    // keepalive permite que a requisição continue mesmo quando a página fecha.
-    void fetch(endpoint, {
+    const socketUrl = window.KTK_GAME_SERVER_URL ||
+      "wss://ktk-authoritative-world-uriel29m.fly.dev/game";
+    const leaveUrl = socketUrl.replace(/^wss:/, "https:").replace(/^ws:/, "http:").replace(/\/game$/, "/leave");
+    // O próprio servidor grava a posição em memória antes de chamar ktk_leave_world.
+    void fetch(leaveUrl, {
       method: "POST",
       mode: "cors",
       credentials: "omit",
       keepalive: true,
-      headers: {
-        "apikey": SUPABASE_PUBLISHABLE_KEY,
-        "Authorization": "Bearer " + token,
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal"
-      },
-      body: "{}"
-    }).catch(error=>console.warn("KTK exit death:",error));
-    state.joined = false;
-    state.online = false;
+      headers: { "Content-Type": "text/plain;charset=UTF-8" },
+      body: JSON.stringify({ access_token: token })
+    }).then(response => {
+      if (!response.ok) throw new Error("HTTP " + response.status);
+    }).catch(error => {
+      console.warn("KTK pagehide server exit; using database fallback:", error?.message || error);
+      const endpoint = SUPABASE_URL + "/rest/v1/rpc/ktk_leave_world";
+      return fetch(endpoint, {
+        method: "POST",
+        mode: "cors",
+        credentials: "omit",
+        keepalive: true,
+        headers: {
+          "apikey": SUPABASE_PUBLISHABLE_KEY,
+          "Authorization": "Bearer " + token,
+          "Content-Type": "application/json"
+        },
+        body: "{}"
+      }).catch(fallbackError => console.warn("KTK pagehide fallback:", fallbackError?.message || fallbackError));
+    });
     if (state.channel) void supabase.removeChannel(state.channel);
     state.channel = null;
     state.user = null;
