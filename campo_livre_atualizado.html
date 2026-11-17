@@ -1044,11 +1044,6 @@
         remote.x=targetX; remote.y=targetY;
         remote.moving=false; remote.walkTime=0;
       }
-      const skeleton=window.KTKEnemySkeleton?.entity;
-      if(skeleton?.remoteAttacking) {
-        skeleton.remoteAttackElapsed=(skeleton.remoteAttackElapsed||0)+Math.max(0,dt);
-        if(skeleton.remoteAttackElapsed>=PUNCH_ANIMATION_SECONDS) skeleton.remoteAttacking=false;
-      }
       if(remote.knockback) {
         remote.knockback.progress=Math.min(1,(remote.knockback.progress||0)+Math.max(0,dt)/KNOCKBACK_SECONDS);
         remote.knockbackHeight=Math.sin(remote.knockback.progress*Math.PI)*KNOCKBACK_HEIGHT;
@@ -1084,6 +1079,11 @@
         });
       }
     });
+    const skeleton=window.KTKEnemySkeleton?.entity;
+    if(skeleton?.remoteAttacking) {
+      skeleton.remoteAttackElapsed=(skeleton.remoteAttackElapsed||0)+Math.max(0,dt);
+      if(skeleton.remoteAttackElapsed>=PUNCH_ANIMATION_SECONDS) skeleton.remoteAttacking=false;
+    }
   }
 
   function drawLayeredCharacter(g, x, y, layers, scale, direction, frame, damaged=false, syncFrameColumns=0) {
