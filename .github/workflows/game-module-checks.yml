@@ -3,6 +3,7 @@ name: Game module checks
 on:
   pull_request:
     paths:
+      - "index.html"
       - "campo_livre_atualizado.html"
       - "game/game-lifecycle.js"
       - "js/online.js"
@@ -27,6 +28,7 @@ on:
   push:
     branches: [main]
     paths:
+      - "index.html"
       - "campo_livre_atualizado.html"
       - "game/game-lifecycle.js"
       - "js/online.js"
