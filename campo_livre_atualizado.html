@@ -829,49 +829,86 @@
   }
 
   function loadLayer(path, recolorMode, paletteKey) {
-    const cacheKey = `${path}|${recolorMode || 'none'}|${paletteKey || ''}`;
-    if (imageCache.has(cacheKey)) return imageCache.get(cacheKey);
-    const promise = new Promise(resolve => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      let actualPath=path;
+    const cacheKey=path+'|'+(recolorMode||'none')+'|'+(paletteKey||'');
+    if(imageCache.has(cacheKey)) return imageCache.get(cacheKey);
+
+    const promise=new Promise(resolve=>{
       const requestedMotion=path.match(/\/(walk|run|idle|thrust|shoot|halfslash|slash)\.png$/)?.[1];
-      const fallbackMotions=requestedMotion==='halfslash'?['slash','walk']:(requestedMotion&&requestedMotion!=='walk'?['walk']:[]);
-      let fallbackIndex=0;
-      img.onload = () => {
-        const original = document.createElement('canvas');
-        original.width = img.naturalWidth;
-        original.height = img.naturalHeight;
-        const g = original.getContext('2d',{willReadFrequently:true});
-        g.drawImage(img,0,0);
-        let finalImage = original;
-        try {
-          if (recolorMode === 'skin') finalImage = recolorPalette(original,skinSource,skinPalettes[paletteKey] || skinPalettes.brown);
-          else if (recolorMode === 'face') {
-            const [skinKey,eyeKey]=paletteKey.split(':');
-            finalImage = recolorFace(original,skinPalettes[skinKey] || skinPalettes.brown,eyePalettes[eyeKey] || eyePalettes.brown);
-          }
-          else if (recolorMode === 'hair') finalImage = recolorHair(original,paletteKey);
-          else if (recolorMode === 'black') finalImage = recolorBlack(original);
-          else if (recolorMode === 'tint') finalImage = recolorByLuminance(original,tintPaletteFromColor(paletteKey));
-        } catch (error) {
-          fileColorFallback = true;
-          console.warn('Personalização de cores indisponível nesta origem; usando os sprites originais.',error);
-          finalImage = original;
-        }
-        resolve({image:finalImage,path:actualPath,missing:false});
+      const fallbackMotions=requestedMotion==='halfslash'
+        ? ['slash','walk']
+        : (requestedMotion&&requestedMotion!=='walk' ? ['walk'] : []);
+      const sources=[path,...fallbackMotions.map(motion=>
+        path.replace(/\/(?:run|idle|thrust|shoot|halfslash|slash)\.png$/,'/'+motion+'.png')
+      )];
+      let sourceIndex=0;
+      let retryCount=0;
+      let settled=false;
+
+      const finish=result=>{
+        if(settled) return;
+        settled=true;
+        resolve(result);
       };
-      img.onerror = () => {
-        if (fallbackIndex<fallbackMotions.length) {
-          actualPath=path.replace(/\/(?:run|idle|thrust|shoot|halfslash|slash)\.png$/,`/${fallbackMotions[fallbackIndex++]}.png`);
-          img.src=LPC_ROOT+actualPath;
+
+      const handleSourceFailure=()=>{
+        if(retryCount<1) {
+          retryCount++;
+          setTimeout(loadCurrentSource,350);
           return;
         }
-        resolve({image:null,path,missing:true});
+        retryCount=0;
+        sourceIndex++;
+        if(sourceIndex<sources.length) {
+          loadCurrentSource();
+          return;
+        }
+        finish({image:null,path,missing:true});
       };
-      img.src = LPC_ROOT + path;
+
+      const loadCurrentSource=()=>{
+        const actualPath=sources[sourceIndex];
+        const img=new Image();
+        img.crossOrigin='anonymous';
+        img.onload=()=>{
+          try {
+            const original=document.createElement('canvas');
+            original.width=img.naturalWidth;
+            original.height=img.naturalHeight;
+            const g=original.getContext('2d',{willReadFrequently:true});
+            if(!g||!original.width||!original.height) throw new Error('Sprite sem dimensões válidas.');
+            g.drawImage(img,0,0);
+            let finalImage=original;
+            try {
+              if(recolorMode==='skin') finalImage=recolorPalette(original,skinSource,skinPalettes[paletteKey]||skinPalettes.brown);
+              else if(recolorMode==='face') {
+                const [skinKey,eyeKey]=String(paletteKey||'brown:brown').split(':');
+                finalImage=recolorFace(original,skinPalettes[skinKey]||skinPalettes.brown,eyePalettes[eyeKey]||eyePalettes.brown);
+              } else if(recolorMode==='hair') finalImage=recolorHair(original,paletteKey);
+              else if(recolorMode==='black') finalImage=recolorBlack(original);
+              else if(recolorMode==='tint') finalImage=recolorByLuminance(original,tintPaletteFromColor(paletteKey));
+            } catch(error) {
+              fileColorFallback=true;
+              console.warn('Personalização de cores indisponível nesta origem; usando os sprites originais.',error);
+              finalImage=original;
+            }
+            finish({image:finalImage,path:actualPath,missing:false});
+          } catch(error) {
+            console.warn('KTK sprite decode:',actualPath,error);
+            handleSourceFailure();
+          }
+        };
+        img.onerror=handleSourceFailure;
+        img.src=LPC_ROOT+actualPath;
+      };
+
+      loadCurrentSource();
     });
+
     imageCache.set(cacheKey,promise);
+    // Keep successful images cached, but never poison the cache with failures.
+    void promise.then(result=>{
+      if(result?.missing && imageCache.get(cacheKey)===promise) imageCache.delete(cacheKey);
+    });
     return promise;
   }
 
@@ -996,13 +1033,41 @@
     drawPreview();
   }
 
+  function scheduleRemoteAppearanceRetry(remote,signature) {
+    if(remote.appearanceRetryTimer) clearTimeout(remote.appearanceRetryTimer);
+    const attempt=Number(remote.appearanceRetryCount)||0;
+    const delays=[1000,2500,5000,10000,20000,30000];
+    const delay=delays[Math.min(attempt,delays.length-1)];
+    remote.appearanceRetryCount=attempt+1;
+    remote.appearanceRetryAt=Date.now()+delay;
+    remote.appearanceRetryTimer=setTimeout(()=>{
+      remote.appearanceRetryTimer=null;
+      if(remotePlayers.get(String(remote.id))!==remote) return;
+      if(remote.appearanceSignature!==signature) return;
+      void loadRemoteCharacterLayers(remote);
+    },delay);
+  }
+
   async function loadRemoteCharacterLayers(remote) {
     const characterData=remote.character||{};
     const wearables=remote.wearables||{};
     const signature=JSON.stringify({characterData,wearables});
-    if(remote.appearanceSignature===signature && remote.layersReady) return;
-    remote.appearanceSignature=signature;
-    remote.layersReady=false;
+
+    if(remote.appearanceSignature!==signature) {
+      if(remote.appearanceRetryTimer) clearTimeout(remote.appearanceRetryTimer);
+      remote.appearanceRetryTimer=null;
+      remote.appearanceSignature=signature;
+      remote.appearanceLoadedSignature='';
+      remote.layersReady=false;
+      remote.appearanceRetryCount=0;
+      remote.appearanceRetryAt=0;
+    }
+    if(remote.appearanceLoading && remote.appearanceLoadingSignature===signature) {
+      return remote.appearanceLoading;
+    }
+    if(remote.layersReady && remote.appearanceLoadedSignature===signature) return;
+    if(Date.now()<(Number(remote.appearanceRetryAt)||0)) return;
+
     const definitions=buildLayerDefinitions(characterData,wearables);
     const loadSet=defs=>Promise.all(defs.map(def=>loadLayer(def.path,def.mode,def.palette).then(result=>({
       ...result,definition:def,fallbackMotion:result.path!==def.path
@@ -1010,25 +1075,61 @@
     const loadMotion=motion=>loadSet(definitions.map(def=>({
       ...def,path:def.path.replace(/\/walk\.png$/,'/'+motion+'.png')
     })));
-    const [walk,idle,punch,slash,thrust,shoot]=await Promise.all([
-      loadSet(definitions),
-      loadMotion('idle'),
-      loadMotion('halfslash'),
-      loadMotion('slash'),
-      loadMotion('thrust'),
-      loadMotion('shoot')
-    ]);
-    if(remote.appearanceSignature!==signature) return;
-    remote.walkLayers=walk.filter(layer=>layer.image&&!layer.missing);
-    remote.idleLayers=idle.filter(layer=>layer.image&&!layer.missing);
-    remote.attackLayers={
-      punch:punch.filter(layer=>layer.image&&!layer.missing),
-      slash:slash.filter(layer=>layer.image&&!layer.missing),
-      thrust:thrust.filter(layer=>layer.image&&!layer.missing),
-      shoot:shoot.filter(layer=>layer.image&&!layer.missing)
-    };
-    remote.layers=remote.idleLayers;
-    remote.layersReady=true;
+
+    const task=(async()=>{
+      const [walk,idle,punch,slash,thrust,shoot]=await Promise.all([
+        loadSet(definitions),
+        loadMotion('idle'),
+        loadMotion('halfslash'),
+        loadMotion('slash'),
+        loadMotion('thrust'),
+        loadMotion('shoot')
+      ]);
+      if(remote.appearanceSignature!==signature) return;
+
+      const usable=layers=>layers.filter(layer=>layer.image&&!layer.missing);
+      remote.walkLayers=usable(walk);
+      remote.idleLayers=usable(idle);
+      remote.attackLayers={
+        punch:usable(punch),
+        slash:usable(slash),
+        thrust:usable(thrust),
+        shoot:usable(shoot)
+      };
+      // A missing idle sheet must not make a successfully loaded walk sprite invisible.
+      if(!remote.idleLayers.length) remote.idleLayers=remote.walkLayers;
+      if(!remote.walkLayers.length) remote.walkLayers=remote.idleLayers;
+      remote.layers=remote.idleLayers;
+
+      const failed=[...walk,...idle,...punch,...slash,...thrust,...shoot]
+        .filter(layer=>layer.missing||!layer.image);
+      remote.layersReady=failed.length===0;
+      remote.appearanceLoadedSignature=signature;
+
+      if(failed.length) {
+        scheduleRemoteAppearanceRetry(remote,signature);
+        console.warn('KTK remote appearance incomplete; retry scheduled:',remote.id,failed.map(layer=>layer.definition?.path||layer.path));
+      } else {
+        remote.appearanceRetryCount=0;
+        remote.appearanceRetryAt=0;
+        if(remote.appearanceRetryTimer) clearTimeout(remote.appearanceRetryTimer);
+        remote.appearanceRetryTimer=null;
+      }
+    })();
+
+    remote.appearanceLoadingSignature=signature;
+    remote.appearanceLoading=task;
+    try {
+      await task;
+    } catch(error) {
+      if(remote.appearanceSignature===signature) scheduleRemoteAppearanceRetry(remote,signature);
+      console.warn('KTK remote appearance load failed:',remote.id,error);
+    } finally {
+      if(remote.appearanceLoading===task) {
+        remote.appearanceLoading=null;
+        remote.appearanceLoadingSignature='';
+      }
+    }
   }
 
   function updateRemotePlayerMotion(dt) {
@@ -3564,6 +3665,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-exit-life-fix1"></script>
+<script type="module" src="./js/online.js?v=20261117-remote-appearance-retry1"></script>
 </body>
 </html>
