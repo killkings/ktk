@@ -189,7 +189,9 @@ function broadcastCombat(action = {}) {
     user_id: state.user.id,
     display_name: state.displayName,
     x: local.x, y: local.y,
-    direction: local.direction,
+    direction: Number.isFinite(Number(action.direction))
+      ? Math.max(0, Math.min(3, Number(action.direction)))
+      : local.direction,
     character: local.character,
     wearables: local.wearables,
     session_id: state.sessionId,
