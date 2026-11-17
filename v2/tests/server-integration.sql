@@ -798,4 +798,146 @@ begin
 end
 $$;
 
+-- Hidden tabs are paused, never auto-killed. Unannounced stale sessions
+-- eventually die and leave their server-owned inventory as public loot.
+do $$
+declare
+  v_paused_uid uuid := '10000000-0000-4000-8000-000000000011';
+  v_disconnected_uid uuid := '10000000-0000-4000-8000-000000000012';
+  v_paused public.ktk_v2_players;
+  v_disconnected public.ktk_v2_players;
+  v_skeleton public.ktk_v2_entities;
+  v_result jsonb;
+  v_failed boolean:=false;
+  v_health numeric;
+  v_satiety numeric;
+  v_stamina numeric;
+  v_expired integer;
+begin
+  insert into auth.users(id) values (v_paused_uid),(v_disconnected_uid);
+  update public.ktk_v2_players
+  set last_seen_at=clock_timestamp()-interval '1 hour'
+  where world_id='main' and is_alive;
+
+  perform set_config('request.jwt.claim.sub',v_paused_uid::text,true);
+  perform public.ktk_v2_enter_world('Teste Aba Suspensa','{}'::jsonb);
+  select * into v_skeleton from public.ktk_v2_entities
+  where world_id='main' and entity_id='skeleton-1';
+
+  update public.ktk_v2_players
+  set x=v_skeleton.x-45,y=v_skeleton.y,
+      state=jsonb_set(
+        jsonb_set(
+          jsonb_set(
+            jsonb_set(state,'{health}','80'::jsonb,true),
+            '{stamina}','40'::jsonb,true
+          ),
+          '{satiety}','30'::jsonb,true
+        ),
+        '{hydration}','30'::jsonb,true
+      ) || '{"moving":false,"running":false,"guarding":false}'::jsonb,
+      last_seen_at=clock_timestamp(),movement_updated_at=clock_timestamp(),
+      revision=revision+1
+  where user_id=v_paused_uid and world_id='main';
+
+  -- The newest visibility sequence wins even if network responses arrive late.
+  perform set_config('request.jwt.claim.sub',v_paused_uid::text,true);
+  v_result:=public.ktk_v2_set_suspended(true,2);
+  v_result:=public.ktk_v2_set_suspended(false,1);
+  select * into v_paused from public.ktk_v2_players where user_id=v_paused_uid;
+  if coalesce((v_paused.state->>'suspended')::boolean,false) is not true
+     or (v_paused.state->>'visibility_sequence')::bigint<>2 then
+    raise exception 'V2_STALE_VISIBILITY_EVENT_UNPAUSED_CHARACTER';
+  end if;
+
+  v_failed:=false;
+  begin
+    perform public.ktk_v2_step_player(1::smallint,0::smallint,false,false);
+  exception when others then
+    v_failed:=sqlerrm='PLAYER_SUSPENDED';
+  end;
+  if not v_failed then raise exception 'V2_SUSPENDED_CHARACTER_COULD_MOVE'; end if;
+
+  update public.ktk_v2_entities
+  set state=state||jsonb_build_object(
+    'health',70,'max_health',70,'defeated',false,
+    'attack',7,'attack_ready_at',clock_timestamp()-interval '1 second',
+    'attack_started_at',null
+  ),revision=revision+1,updated_at=clock_timestamp()
+  where world_id='main' and entity_id='skeleton-1';
+  update public.ktk_v2_worlds
+  set last_simulation_at=clock_timestamp()-interval '2 seconds'
+  where id='main';
+  perform ktk_v2_private.simulation_tick();
+
+  select * into v_paused from public.ktk_v2_players where user_id=v_paused_uid;
+  select * into v_skeleton from public.ktk_v2_entities
+  where world_id='main' and entity_id='skeleton-1';
+  v_health:=(v_paused.state->>'health')::numeric;
+  v_stamina:=(v_paused.state->>'stamina')::numeric;
+  v_satiety:=(v_paused.state->>'satiety')::numeric;
+  if v_health<>80 or v_stamina<>40 or v_satiety<>30 then
+    raise exception 'V2_SUSPENDED_CHARACTER_SURVIVAL_ADVANCED';
+  end if;
+  if nullif(v_paused.state->>'last_knockback_at','') is not null
+     or nullif(v_skeleton.state->>'attack_started_at','') is not null then
+    raise exception 'V2_SKELETON_TARGETED_SUSPENDED_CHARACTER';
+  end if;
+
+  -- A hidden tab remains alive even beyond the abandoned-session timeout.
+  update public.ktk_v2_players
+  set last_seen_at=clock_timestamp()-interval '20 minutes',revision=revision+1
+  where user_id=v_paused_uid and world_id='main';
+
+  -- A character whose browser disappeared without an exit signal expires after
+  -- the grace period and drops its inventory into the shared world.
+  perform set_config('request.jwt.claim.sub',v_disconnected_uid::text,true);
+  perform public.ktk_v2_enter_world('Teste Desconexão','{}'::jsonb);
+  update public.ktk_v2_players
+  set state=jsonb_set(
+    state,'{inventory}',
+    jsonb_build_array(
+      jsonb_build_object(
+        'item_id','equipment-longsword','displayName','Espada longa',
+        'quantity',1,'durability',100,'maxDurability',150
+      ),null
+    ),true
+  ),
+  last_seen_at=clock_timestamp()-interval '20 minutes',
+  movement_updated_at=clock_timestamp()-interval '20 minutes',
+  revision=revision+1
+  where user_id=v_disconnected_uid and world_id='main';
+
+  select ktk_v2_private.expire_disconnected_players() into v_expired;
+
+  select * into v_paused from public.ktk_v2_players where user_id=v_paused_uid;
+  select * into v_disconnected from public.ktk_v2_players where user_id=v_disconnected_uid;
+  if v_paused.is_alive is not true then
+    raise exception 'V2_SUSPENDED_CHARACTER_WAS_AUTO_KILLED';
+  end if;
+  if v_disconnected.is_alive is not false then
+    raise exception 'V2_ABANDONED_CHARACTER_WAS_NOT_EXPIRED';
+  end if;
+  if not exists (
+    select 1 from public.ktk_v2_entities
+    where world_id='main' and entity_type='item'
+      and state->>'dropped_by'=v_disconnected_uid::text
+      and state->>'item_id'='equipment-longsword'
+      and nullif(state->>'expires_at','') is not null
+  ) then
+    raise exception 'V2_DISCONNECT_DID_NOT_DROP_INVENTORY_AS_LOOT';
+  end if;
+
+  -- A resume request uses a later sequence and reactivates the same character.
+  perform set_config('request.jwt.claim.sub',v_paused_uid::text,true);
+  v_result:=public.ktk_v2_set_suspended(false,3);
+  select * into v_paused from public.ktk_v2_players where user_id=v_paused_uid;
+  if coalesce((v_paused.state->>'suspended')::boolean,true) is not false
+     or (v_paused.state->>'visibility_sequence')::bigint<>3 then
+    raise exception 'V2_RESUME_DID_NOT_REACTIVATE_CHARACTER';
+  end if;
+  perform public.ktk_v2_step_player(1::smallint,0::smallint,false,false);
+end
+$$;
+
 rollback;
