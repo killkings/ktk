@@ -740,7 +740,6 @@ async function leaveWorld() {
     state.stepInFlight = false;
     state.lastAppearanceSignature = "";
     state.lastDbHeartbeat = 0;
-    state.lastInputSignature = "";
     state.lastTrack = 0;
     updateRemotes();
     setStatus("○ Personagem morto ao sair · fora do mundo", false);
