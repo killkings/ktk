@@ -78,6 +78,14 @@ jobs:
           PGUSER: postgres
           PGPASSWORD: postgres
         run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117174000_ktk_v2_projectiles.sql
+      - name: Apply V2 guard and collision migration to disposable database
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: ktk_v2_test
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261117175000_ktk_v2_guard_and_world_collisions.sql
       - name: Test server lifecycle, movement and crown
         env:
           PGHOST: localhost
