@@ -26,7 +26,7 @@ The server sends new Supabase API keys in the `apikey` header. It validates play
 
 ## Deploy
 
-The SQL migration `supabase/migrations/20261117230000_authoritative_websocket_position_sync.sql` must be applied to the Kill the King Supabase project before starting this server.
+The SQL migration `supabase/migrations/20261117231058_authoritative_websocket_position_sync.sql` must be applied to the Kill the King Supabase project before starting this server.
 
 Install Fly CLI and authenticate, then create the app name if available:
 
