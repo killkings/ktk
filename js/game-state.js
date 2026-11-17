@@ -157,7 +157,7 @@ var  playerVisual = {
 var  camera = {x:0,y:0};
 
   function setAuthoritativePlayerPosition(
-    x,y,direction,snap=false,latencyMs=0,requestInput=null,currentInput=null
+    x,y,direction,snap=false,latencyMs=0,requestInput=null,currentInput=null,intentTimeline=null
   ) {
     const serverX=Number(x),serverY=Number(y);
     if(!Number.isFinite(serverX)||!Number.isFinite(serverY)) return false;
@@ -223,16 +223,19 @@ var  camera = {x:0,y:0};
       expectedY+=(inputY/inputLength)*distance;
     };
 
-    if(!hasRequestIntent) {
+    if(Array.isArray(intentTimeline)&&hasRequestIntent) {
+      // Reconstrói cada mudança de tecla ocorrida enquanto a resposta estava
+      // em trânsito, inclusive várias trocas rápidas de direção.
+      intentTimeline.forEach(segment=>{
+        applyIntentSegment(segment,Math.max(0,Number(segment?.durationMs)||0));
+      });
+    } else if(!hasRequestIntent) {
       // Knockback e outras correções discretas não carregam a intenção da RPC.
       applyIntentSegment(controls,Math.min(oneWayLatencyMs,intentAgeMs));
     } else if(sameIntent) {
-      applyIntentSegment(controls,oneWayLatencyMs);
+      applyIntentSegment(requestInput,oneWayLatencyMs);
     } else {
-      // A resposta representa um instante anterior à chegada ao navegador.
-      // Se a tecla mudou durante a viagem, primeiro valeu a intenção enviada
-      // na RPC e só depois a intenção atual. Antes, o código aplicava apenas
-      // a intenção atual (inclusive "parado"), causando puxões para trás.
+      // Compatibilidade para respostas sem histórico temporal disponível.
       const currentIntentMs=Math.min(oneWayLatencyMs,intentAgeMs);
       const requestIntentMs=Math.max(0,oneWayLatencyMs-currentIntentMs);
       applyIntentSegment(requestInput,requestIntentMs);
