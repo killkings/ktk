@@ -66,3 +66,28 @@ end
 $function$;
 
 grant execute on function realtime.topic() to anon, authenticated;
+
+-- Simulate the production V1 catalog so the V2 compatibility import is tested.
+create schema if not exists ktk_private;
+create table if not exists ktk_private.item_catalog (
+  item_id text primary key,
+  display_name text not null,
+  item_type text not null,
+  wear_slot text null,
+  attack_bonus integer not null default 0,
+  defense_bonus integer not null default 0,
+  range_tiles numeric not null default 0.8,
+  stamina_cost numeric not null default 0,
+  attack_interval numeric not null default 0.5,
+  max_durability integer not null default 0,
+  durability_unit text null,
+  two_handed boolean not null default false,
+  metadata jsonb not null default '{}'::jsonb
+);
+insert into ktk_private.item_catalog(
+  item_id,display_name,item_type,attack_bonus,defense_bonus,range_tiles,
+  stamina_cost,attack_interval,max_durability,durability_unit,metadata
+) values (
+  'test-v1-catalog-import','Item legado de teste','tool',7,2,1.25,
+  4,0.75,55,'uses','{"imported_from_v1":true}'::jsonb
+) on conflict(item_id) do nothing;
