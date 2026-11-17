@@ -37,40 +37,31 @@ function drawTerrain(ctx, width, height, cameraX, cameraY, seed) {
   }
 }
 
-function drawPlayer(ctx, player, cameraX, cameraY, localUserId) {
+function drawPlayer(ctx, player, cameraX, cameraY, lpcRenderer, deltaSeconds) {
   const x = player.visualX - cameraX;
   const y = player.visualY - cameraY;
-  const isLocal = player.userId === localUserId;
   ctx.fillStyle = "#17201566";
   ctx.beginPath();
-  ctx.ellipse(x, y + 8, 12, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y + 27, 20, 8, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = isLocal ? "#e7dfc5" : (player.clanColor || "#9ab7d2");
-  ctx.beginPath();
-  ctx.arc(x, y, 9, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = isLocal ? "#273522" : "#17251c";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  const directions = [[0,-5],[-5,0],[0,5],[5,0]];
-  const [dx,dy] = directions[player.direction] || directions[2];
-  ctx.fillStyle = "#17251a";
-  ctx.beginPath();
-  ctx.arc(x + dx, y + dy, 2, 0, Math.PI * 2);
-  ctx.fill();
+  // Local and remote players use this exact same LPC layer loader and painter.
+  if (lpcRenderer) lpcRenderer.draw(ctx, player, x, y, deltaSeconds);
+  else {
+    ctx.fillStyle = "#e7dfc5";
+    ctx.fillRect(x - 9, y - 10, 18, 28);
+  }
 
   ctx.font = "12px system-ui";
   ctx.textAlign = "center";
   ctx.lineWidth = 3;
   ctx.strokeStyle = "#15271acc";
-  ctx.strokeText(player.displayName, x, y - 17);
+  ctx.strokeText(player.displayName, x, y - 49);
   ctx.fillStyle = "#fff";
-  ctx.fillText(player.displayName, x, y - 17);
+  ctx.fillText(player.displayName, x, y - 49);
 }
 
-export function renderWorld(canvas, players, localUserId, deltaSeconds, entities = [], worldSeed = 0, kingUserId = null) {
+export function renderWorld(canvas, players, localUserId, deltaSeconds, entities = [], worldSeed = 0, kingUserId = null, lpcRenderer = null) {
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -96,7 +87,7 @@ export function renderWorld(canvas, players, localUserId, deltaSeconds, entities
   drawTerrain(ctx, viewWidth, viewHeight, cameraX, cameraY, worldSeed);
   const ordered = [...players].sort((a,b) => a.visualY - b.visualY);
   ordered.forEach(player => drawPlayer(
-    ctx, player, cameraX - viewWidth / 2, cameraY - viewHeight / 2, localUserId
+    ctx, player, cameraX - viewWidth / 2, cameraY - viewHeight / 2, lpcRenderer, deltaSeconds
   ));
   entities.forEach(entity => drawEntity(
     ctx, entity, cameraX - viewWidth / 2, cameraY - viewHeight / 2
@@ -104,7 +95,7 @@ export function renderWorld(canvas, players, localUserId, deltaSeconds, entities
   const king = players.find(player => player.userId === kingUserId);
   if (king) {
     const crownX = king.visualX - (cameraX - viewWidth / 2);
-    const crownY = king.visualY - (cameraY - viewHeight / 2) - 28;
+    const crownY = king.visualY - (cameraY - viewHeight / 2) - 54;
     ctx.fillStyle = "#f4d35e";
     ctx.font = "18px system-ui";
     ctx.textAlign = "center";
