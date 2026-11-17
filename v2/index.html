@@ -18,14 +18,48 @@
           <label for="display-name">Nome do personagem</label>
           <input id="display-name" name="displayName" maxlength="24" minlength="2" autocomplete="off" required placeholder="Seu nome no mundo">
           <div class="creator-grid">
+            <label>Modelo
+              <select id="gender" name="gender">
+                <option value="male">Masculino</option>
+                <option value="female">Feminino</option>
+              </select>
+            </label>
             <label>Tom de pele
               <select id="skin-color" name="skin">
-                <option value="light">Claro</option><option value="tan">Moreno</option><option value="brown">Castanho</option><option value="dark">Escuro</option>
+                <option value="light">Claro</option>
+                <option value="amber">Pêssego</option>
+                <option value="olive">Oliva</option>
+                <option value="taupe">Bege</option>
+                <option value="bronze">Bronze</option>
+                <option value="brown" selected>Castanho</option>
+                <option value="black">Escuro</option>
+              </select>
+            </label>
+            <label>Cor do cabelo
+              <select id="hair-color" name="hair">
+                <option value="black">Preto</option>
+                <option value="dark_brown" selected>Castanho escuro</option>
+                <option value="brown">Castanho</option>
+                <option value="chestnut">Auburn</option>
+                <option value="ginger">Ruivo</option>
+                <option value="blonde">Loiro</option>
+                <option value="white">Branco</option>
+              </select>
+            </label>
+            <label>Penteado LPC
+              <select id="hairstyle" name="hairstyle">
+                <option value="hair_pixie">Carregando penteados…</option>
               </select>
             </label>
             <label>Cor da roupa
               <select id="clothing-color" name="clothing">
-                <option value="#e7e2c9">Linho</option><option value="#8d3030">Vermelho</option><option value="#315d9b">Azul</option><option value="#47774b">Verde</option><option value="#d3aa37">Amarelo</option>
+                <option value="#e7e2c9">Linho</option>
+                <option value="#8d3030">Vermelho</option>
+                <option value="#315d9b">Azul</option>
+                <option value="#47774b">Verde</option>
+                <option value="#d3aa37">Amarelo</option>
+                <option value="#493b67">Roxo</option>
+                <option value="#333b43">Grafite</option>
               </select>
             </label>
           </div>
@@ -47,6 +81,7 @@
       <div id="game-error" class="game-error" role="status" aria-live="polite"></div>
     </section>
   </main>
-  <script type="module" src="./js/main.js?v=v2-001"></script>
+  <script src="../personagem.js?v=lpc-catalog-20261117"></script>
+  <script type="module" src="./js/main.js?v=v2-002"></script>
 </body>
 </html>
