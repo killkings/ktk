@@ -1,13 +1,13 @@
 const TILE = 64;
 
-function hash(x, y) {
-  let value = Math.imul((x | 0) ^ Math.imul((y | 0) + 1013, 0x045d9f3b), 0x27d4eb2d);
+function hash(x, y, seed = 0) {
+  let value = Math.imul((x | 0) ^ Math.imul((y | 0) + 1013 + (Number(seed) | 0), 0x045d9f3b), 0x27d4eb2d);
   value = Math.imul(value ^ (value >>> 15), 0x85ebca6b);
   value = Math.imul(value ^ (value >>> 13), 0xc2b2ae35);
   return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
 }
 
-function drawTerrain(ctx, width, height, cameraX, cameraY) {
+function drawTerrain(ctx, width, height, cameraX, cameraY, seed) {
   const left = cameraX - width / 2;
   const top = cameraY - height / 2;
   const firstX = Math.floor(left / TILE);
@@ -23,13 +23,13 @@ function drawTerrain(ctx, width, height, cameraX, cameraY) {
       const worldY = firstY + row;
       const screenX = worldX * TILE - left;
       const screenY = worldY * TILE - top;
-      const value = hash(worldX, worldY);
+      const value = hash(worldX, worldY, seed);
       ctx.fillStyle = value > 0.82 ? "#729957" : value < 0.12 ? "#5d8148" : "#698f50";
       ctx.fillRect(screenX, screenY, TILE, TILE);
-      const detailCount = 2 + Math.floor(hash(worldX + 31, worldY - 11) * 4);
+      const detailCount = 2 + Math.floor(hash(worldX + 31, worldY - 11, seed) * 4);
       for (let i = 0; i < detailCount; i++) {
-        const dx = hash(worldX * 13 + i, worldY * 7 - i) * (TILE - 8) + 4;
-        const dy = hash(worldY * 17 - i, worldX * 5 + i) * (TILE - 8) + 4;
+        const dx = hash(worldX * 13 + i, worldY * 7 - i, seed) * (TILE - 8) + 4;
+        const dy = hash(worldY * 17 - i, worldX * 5 + i, seed) * (TILE - 8) + 4;
         ctx.fillStyle = i % 2 ? "#8eab60" : "#4d7441";
         ctx.fillRect(screenX + dx, screenY + dy, 2, 2);
       }
@@ -70,7 +70,7 @@ function drawPlayer(ctx, player, cameraX, cameraY, localUserId) {
   ctx.fillText(player.displayName, x, y - 17);
 }
 
-export function renderWorld(canvas, players, localUserId, deltaSeconds) {
+export function renderWorld(canvas, players, localUserId, deltaSeconds, entities = [], worldSeed = 0, kingUserId = null) {
   const rect = canvas.getBoundingClientRect();
   if (!rect.width || !rect.height) return;
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -93,9 +93,49 @@ export function renderWorld(canvas, players, localUserId, deltaSeconds) {
   }
   const cameraX = local.visualX;
   const cameraY = local.visualY;
-  drawTerrain(ctx, viewWidth, viewHeight, cameraX, cameraY);
+  drawTerrain(ctx, viewWidth, viewHeight, cameraX, cameraY, worldSeed);
   const ordered = [...players].sort((a,b) => a.visualY - b.visualY);
   ordered.forEach(player => drawPlayer(
     ctx, player, cameraX - viewWidth / 2, cameraY - viewHeight / 2, localUserId
   ));
+  entities.forEach(entity => drawEntity(
+    ctx, entity, cameraX - viewWidth / 2, cameraY - viewHeight / 2
+  ));
+  const king = players.find(player => player.userId === kingUserId);
+  if (king) {
+    const crownX = king.visualX - (cameraX - viewWidth / 2);
+    const crownY = king.visualY - (cameraY - viewHeight / 2) - 28;
+    ctx.fillStyle = "#f4d35e";
+    ctx.font = "18px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText("♛", crownX, crownY);
+  }
+}
+
+function drawEntity(ctx, entity, cameraX, cameraY) {
+  if (!entity || entity.state?.status === "held") return;
+  const x = Number(entity.x) - cameraX;
+  const y = Number(entity.y) - cameraY;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+  if (entity.entity_type === "crown") {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.fillStyle = "#f0d35c";
+    ctx.beginPath();
+    ctx.moveTo(0,-12); ctx.lineTo(4,-4); ctx.lineTo(12,-8);
+    ctx.lineTo(9,5); ctx.lineTo(-9,5); ctx.lineTo(-12,-8); ctx.lineTo(-4,-4);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = "#5e491d"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = "#fff0a6"; ctx.fillRect(-6,6,12,3);
+    ctx.restore();
+  } else if (entity.entity_type === "enemy") {
+    ctx.fillStyle = "#c5c9c3";
+    ctx.beginPath(); ctx.arc(x,y,10,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "#353a37"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#782e27"; ctx.fillRect(x-5,y-2,3,2); ctx.fillRect(x+2,y-2,3,2);
+  } else if (entity.entity_type === "item") {
+    ctx.fillStyle = "#d7c28b";
+    ctx.fillRect(x-5,y-5,10,10);
+    ctx.strokeStyle = "#493e2b"; ctx.strokeRect(x-5,y-5,10,10);
+  }
 }
