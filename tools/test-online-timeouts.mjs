@@ -39,7 +39,7 @@ assert.match(realtimeSource, /\.subscribe\(\(status, err\) =>/);
 assert.doesNotMatch(realtimeSource, /\bsetStatus\s*\(/);
 assert.doesNotMatch(realtimeSource, /\.track\s*\(/);
 assert.doesNotMatch(realtimeSource, /presence\s*:/);
-assert.doesNotMatch(session, /trackPresence|Lendo o estado inicial do personagem|getPlayerState\\(signal\\)/);
+assert.doesNotMatch(session, /trackPresence|Lendo o estado inicial do personagem|getPlayerState\(signal\)/);
 assert.match(playerSyncSource, /request = request\.abortSignal\(signal\)/);
 assert.match(catalog, /request=request\.abortSignal\(signal\)/);
 assert.doesNotMatch(lifecycle, /onProgress\s*:/);
