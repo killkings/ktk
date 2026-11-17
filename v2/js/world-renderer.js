@@ -192,3 +192,78 @@ function drawEntityHealth(ctx,x,y,state) {
   ctx.fillStyle="#202a21";ctx.fillRect(x-17,y,34,4);
   ctx.fillStyle="#a94840";ctx.fillRect(x-17,y,34*Math.max(0,Math.min(1,health/maximum)),4);
 }
+
+
+export function renderWorld(
+  canvas,
+  players,
+  localUserId,
+  deltaSeconds,
+  entities = [],
+  worldSeed = 0,
+  kingUserId = null,
+  lpcRenderer = null
+) {
+  if (!canvas || typeof canvas.getBoundingClientRect !== "function") return;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const width = Math.round(rect.width * dpr);
+  const height = Math.round(rect.height * dpr);
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const viewWidth = rect.width;
+  const viewHeight = rect.height;
+  const local = players.find(player => player.userId === localUserId) || null;
+  if (!local) {
+    ctx.fillStyle = "#183d2b";
+    ctx.fillRect(0, 0, viewWidth, viewHeight);
+    return;
+  }
+
+  const cameraX = Number(local.visualX);
+  const cameraY = Number(local.visualY);
+  if (!Number.isFinite(cameraX) || !Number.isFinite(cameraY)) {
+    ctx.fillStyle = "#183d2b";
+    ctx.fillRect(0, 0, viewWidth, viewHeight);
+    return;
+  }
+
+  const left = cameraX - viewWidth / 2;
+  const top = cameraY - viewHeight / 2;
+  drawTerrain(ctx, viewWidth, viewHeight, cameraX, cameraY, worldSeed);
+
+  // Players and world entities are painted in world-Y order so trees, drops,
+  // projectiles and characters share one consistent top-down depth ordering.
+  const objects = [
+    ...players.map(player => ({kind:"player", y:Number(player.visualY), value:player})),
+    ...entities.map(entity => ({kind:"entity", y:Number(entity.y), value:entity}))
+  ].filter(entry => Number.isFinite(entry.y))
+    .sort((a,b) => a.y-b.y || (a.kind==="entity" ? -1 : 1));
+
+  for (const entry of objects) {
+    if (entry.kind === "player") {
+      drawPlayer(ctx, entry.value, left, top, lpcRenderer, deltaSeconds);
+    } else {
+      drawEntity(ctx, entry.value, left, top);
+    }
+  }
+
+  const king = players.find(player => player.userId === kingUserId);
+  if (king) {
+    const crownX = king.visualX - left;
+    const crownY = king.visualY - top - 54;
+    ctx.fillStyle = "#f4d35e";
+    ctx.font = "18px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText("♛", crownX, crownY);
+  }
+}
