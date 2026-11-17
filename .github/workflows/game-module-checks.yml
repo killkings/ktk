@@ -1,0 +1,57 @@
+name: Game module checks
+
+on:
+  pull_request:
+    paths:
+      - "campo_livre_atualizado.html"
+      - "mapa/fallback/**"
+      - "mapa/player/stats*.js"
+      - "render/world-renderer.js"
+      - ".github/workflows/game-module-checks.yml"
+  push:
+    branches: [main]
+    paths:
+      - "campo_livre_atualizado.html"
+      - "mapa/fallback/**"
+      - "mapa/player/stats*.js"
+      - "render/world-renderer.js"
+      - ".github/workflows/game-module-checks.yml"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: |
+          node --check mapa/player/stats.js
+          node --check mapa/player/stats-ui.js
+          node --check mapa/fallback/grass-renderer.js
+          node --check render/world-renderer.js
+      - name: Check module boundaries and script order
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const assert = require('node:assert/strict');
+
+          const model = fs.readFileSync('mapa/player/stats.js', 'utf8');
+          const ui = fs.readFileSync('mapa/player/stats-ui.js', 'utf8');
+          const fallback = fs.readFileSync('mapa/fallback/grass-renderer.js', 'utf8');
+          const controller = fs.readFileSync('render/world-renderer.js', 'utf8');
+          const html = fs.readFileSync('campo_livre_atualizado.html', 'utf8');
+
+          assert.doesNotMatch(model, /\bdocument\b|querySelector/);
+          assert.match(model, /function subscribe\(/);
+          assert.match(ui, /playerStats\.subscribe\(render\)/);
+          assert.match(fallback, /function makeGrassTile\(/);
+          assert.match(fallback, /window\.KTKGrassFallback\s*=\s*\{\s*draw/);
+          assert.doesNotMatch(controller, /function hash2\(|function makeGrassTile\(|function drawGrass\(/);
+          assert.match(controller, /window\.KTKGrassFallback/);
+
+          assert.ok(html.indexOf('mapa/player/stats.js') < html.indexOf('mapa/player/stats-ui.js'));
+          assert.ok(html.indexOf('mapa/fallback/grass-renderer.js') < html.indexOf('render/world-renderer.js'));
+          console.log('Module boundaries and script order are valid.');
+          NODE
