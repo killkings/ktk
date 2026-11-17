@@ -377,7 +377,7 @@
 })();
 </script>
 <script src="./personagem.js?v=stable-20261115-13"></script>
-<script src="./mapa/player/stats.js?v=20261117-final-authority-audit1"></script>
+<script src="./mapa/player/stats.js?v=20261117-full-audit-fixes1"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
 <script src="./enemy/skeleton/skeleton.js?v=stable-20261117-combat1"></script>
 <script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
@@ -1818,7 +1818,7 @@
     };
   }
 
-  function applyWorldEntity(row) {
+  function applyWorldEntity(row, source='realtime') {
     if(!row||!row.entity_id) return false;
     const entityId=String(row.entity_id);
     const worldState=row.state&&typeof row.state==='object'?row.state:{};
@@ -1875,7 +1875,7 @@
       return true;
     }
     if(entityId==='king-crown') {
-      crownRealtimeSeen=true;
+      if(source!=='snapshot') crownRealtimeSeen=true;
       const crown=getKingCrownItem();
       if(!crown) return false;
       if(worldState.status==='ground') {
@@ -1937,7 +1937,7 @@
     // Uma fotografia RPC pode ter sido iniciada antes de um evento Realtime.
     // Deletes explícitos e revisões por entidade são a fonte de verdade; uma
     // fotografia antiga nunca remove uma entidade que acabou de chegar.
-    rows.forEach(row=>applyWorldEntity(row));
+    rows.forEach(row=>applyWorldEntity(row,'snapshot'));
     if(!crownRealtimeSeen) {
       kingCrownClaimedBy=snapshot.world?.king_user_id?String(snapshot.world.king_user_id):null;
     }
@@ -1974,7 +1974,9 @@
   function startPunch() {
     if(!gameStarted || !screens.game.classList.contains('active') || punch.cooldown>0 || boomerangProjectile.active || arrowProjectile.active || stoneProjectile.active || magicProjectile.active) return;
     const selectedItem=inventory[selectedInventorySlot];
-    const selectedWeapon=selectedItem&&!selectedItem.wearSlot&&selectedItem.equipmentClass!=='shield'&&selectedItem.itemType!=='ammo'?selectedItem:null;
+    const selectableWeaponClasses=new Set(['melee','ranged','magic','tool']);
+    const selectedWeapon=selectedItem&&!selectedItem.wearSlot&&selectableWeaponClasses.has(selectedItem.equipmentClass)
+      &&selectedItem.itemType!=='ammo'?selectedItem:null;
     const magicLevel=window.KTKPlayerStats.stats.magicLevel.value;
     const innateMagic=magicLevel>=6&&!isMagicWeapon(selectedWeapon);
     const magicProfile=innateMagic?getInnateMagicProfile(magicLevel):null;
@@ -3394,7 +3396,7 @@
       if((key==='1'||key==='2')&&!event.repeat) selectInventorySlot(Number(key)-1);
       if(key==='m'&&!event.repeat) {
         void window.KTKOnline?.gameAction?.('magic_level',{}).then(result=>{
-          const level=Number(result?.magic_level)||0;
+          const level=Number(result?.state?.magic_level)||0;
           const maxLevel=window.KTKPlayerStats.stats.magicLevel.max;
           toast(`Nível mágico: ${level}/${maxLevel}.`);
         }).catch(error=>toast(error?.message||'O servidor não alterou o nível mágico.'));
@@ -3496,6 +3498,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-final-authority-audit1"></script>
+<script type="module" src="./js/online.js?v=20261117-full-audit-fixes1"></script>
 </body>
 </html>
