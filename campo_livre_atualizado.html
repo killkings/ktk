@@ -377,7 +377,7 @@
 })();
 </script>
 <script src="./personagem.js?v=stable-20261115-13"></script>
-<script src="./mapa/player/stats.js?v=20261117-movement-spawnfix1"></script>
+<script src="./mapa/player/stats.js?v=20261117-authoritative-regression-fix1"></script>
 <script src="./mapa/mapa.js?v=stable-20261116-14"></script>
 <script src="./enemy/skeleton/skeleton.js?v=stable-20261117-combat1"></script>
 <script src="./mapa/items/longsword.js?v=stable-20261117-lpc1"></script>
@@ -3150,6 +3150,7 @@
       y:camera.y*(canvas.clientHeight||0)+player.y,
       direction:player.direction,
       running:Boolean(playerRunning),
+      moving:Boolean(playerMoving),
       guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield()),
       character:{...character},
       combatStats:(()=>{
@@ -3513,6 +3514,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-movement-spawnfix1"></script>
+<script type="module" src="./js/online.js?v=20261117-authoritative-regression-fix1"></script>
 </body>
 </html>
