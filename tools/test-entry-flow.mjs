@@ -81,6 +81,7 @@ const context = vm.createContext({
   character: {},
   newCharacterRequired: false,
   gameStarted: false,
+  playerDead: false,
   toastTimer: 0,
   screens,
   showScreen(which) {
