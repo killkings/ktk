@@ -1779,6 +1779,45 @@
     worldItems.add(item);
     return true;
   }
+  function applyWorldEntity(row) {
+    if(!row||!row.entity_id) return false;
+    const entityId=String(row.entity_id);
+    const worldState=row.state&&typeof row.state==='object'?row.state:{};
+    if(entityId==='king-crown') {
+      const crown=getKingCrownItem();
+      if(!crown) return false;
+      if(worldState.status==='ground') {
+        crown.x=Number(row.x)||0;
+        crown.y=Number(row.y)||0;
+        crown.collected=false;
+        worldItems.add(crown);
+        kingCrownClaimedBy=null;
+      } else {
+        crown.collected=true;
+        worldItems.delete(crown);
+        kingCrownClaimedBy=worldState.owner_id||null;
+      }
+      updateKingStatus();
+      return true;
+    }
+    if(entityId==='skeleton-1'&&window.KTKEnemySkeleton?.entity) {
+      const skeleton=window.KTKEnemySkeleton.entity;
+      skeleton.x=Number(row.x)||0;
+      skeleton.y=Number(row.y)||0;
+      skeleton.health=Number.isFinite(Number(worldState.health))?Number(worldState.health):skeleton.health;
+      skeleton.maxHealth=Number.isFinite(Number(worldState.max_health))?Number(worldState.max_health):skeleton.maxHealth;
+      skeleton.defeated=Boolean(worldState.defeated);
+      return true;
+    }
+    return false;
+  }
+  function applyWorldState(snapshot) {
+    if(!snapshot||typeof snapshot!=='object') return false;
+    (Array.isArray(snapshot.entities)?snapshot.entities:[]).forEach(applyWorldEntity);
+    if(snapshot.world?.king_user_id) kingCrownClaimedBy=String(snapshot.world.king_user_id);
+    updateKingStatus();
+    return true;
+  }
 
   function updateSkeletonStatsPosition(width,height) {
     const panel=document.getElementById('skeleton-stats');
@@ -2550,9 +2589,16 @@
     return true;
   }
 
-  function equipCollectedWearable(item) {
+  async function equipCollectedWearable(item) {
     const targetSlot=item?.wearSlot;
     if(!item||!wearableSlotOrder.includes(targetSlot)) return false;
+    if(item.isKingCrown) {
+      const claim=await window.KTKOnline?.claimKingCrown?.();
+      if(!claim?.ok) {
+        toast(claim?.error||'O servidor não confirmou a posse da Coroa Real.');
+        return true;
+      }
+    }
     const previous=equippedWearables[targetSlot];
     equippedWearables[targetSlot]=item;
     item.collected=true;
@@ -2566,7 +2612,6 @@
     if(item.isKingCrown) {
       kingCrownClaimedBy=window.KTKOnline?.userId||'local';
       syncKingCrownWorldItem('carried');
-      window.KTKOnline?.broadcastCombat({kind:'crown_claimed'});
     }
     [item.image,item.iconImage].filter(Boolean).forEach(image=>{
       if(!image.complete) image.addEventListener('load',renderInventory,{once:true});
@@ -2623,7 +2668,7 @@
     });
   }
 
-  function collectNearbyItem() {
+  async function collectNearbyItem() {
     const worldX=camera.x*canvas.clientWidth+player.x;
     const worldY=camera.y*canvas.clientHeight+player.y;
     const hasArrowStack=Boolean(getArrowAmmoStack());
@@ -2694,7 +2739,7 @@
       toast('Flecha coletada.');
       return true;
     }
-    if(itemToCollect.wearSlot&&equipCollectedWearable(itemToCollect)) return true;
+    if(itemToCollect.wearSlot&&await equipCollectedWearable(itemToCollect)) return true;
     const previousItem=inventory[selectedInventorySlot];
     if(previousItem&&previousItem!==itemToCollect) {
       dropItemAtPlayer(previousItem,(player.direction+2)%4);
@@ -2718,10 +2763,14 @@
     item.y=camera.y*canvas.clientHeight+player.y+direction.y*48;
     item.collected=false;
     item.isStartingWearable=false;
-    worldItems.add(item);
     if(item.isKingCrown) {
-      kingCrownClaimedBy=null;
-      window.KTKOnline?.broadcastCombat({kind:'crown_dropped',crown_x:item.x,crown_y:item.y});
+      item.collected=true;
+      worldItems.delete(item);
+      void window.KTKOnline?.dropKingCrown?.(item.x,item.y).then(result=>{
+        if(!result?.ok) toast(result?.error||'O servidor não confirmou a devolução da coroa.');
+      });
+    } else {
+      worldItems.add(item);
     }
     updateKingStatus();
   }
@@ -2765,9 +2814,9 @@
     g.restore();
   }
 
-  function interactWithSelectedItem() {
+  async function interactWithSelectedItem() {
     if(collectNearbyArrowIntoStack()) return;
-    if(collectNearbyItem()) return;
+    if(await collectNearbyItem()) return;
     const selectedItem=inventory[selectedInventorySlot];
     if(!selectedItem) return;
     if(selectedItem.type!=='item'||!Number.isFinite(selectedItem.x)||!Number.isFinite(selectedItem.y)) {
@@ -2977,6 +3026,7 @@
       if(health.value<=health.min) handlePlayerDeath();
       return true;
     },
+    applyWorldEntity,applyWorldState,
     setLocalState:(x,y,direction)=>{
       if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
       camera.x=0; camera.y=0;
@@ -3099,14 +3149,9 @@
 
       if(!equipmentItemsArranged&&equipmentCatalog) {
         try {
-          const wearableDrops=equipmentCatalog.buildMapWearableDrops();
+          const wearableDrops=[];
           equipmentCatalog.arrangeFirstMap(canvas.clientWidth,canvas.clientHeight,wearableDrops);
           wearableDrops.forEach(item=>worldItems.add(item));
-          const remoteKing=[...remotePlayers.values()].find(remote=>remote.isKing||remote.hasKingCrown||remote.wearables?.head?.isKingCrown);
-          if(remoteKing) {
-            kingCrownClaimedBy=remoteKing.id;
-            syncKingCrownWorldItem('carried');
-          }
           equipmentItemsArranged=true;
         } catch(error) {
           console.error('KTK map initialization:',error);
@@ -3279,6 +3324,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-11-crown-sync"></script>
+<script type="module" src="./js/online.js?v=20261117-12-authoritative-world"></script>
 </body>
 </html>
