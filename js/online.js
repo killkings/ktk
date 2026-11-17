@@ -399,7 +399,7 @@ async function enter(options = {}) {
     let sessionData;
     if (options.newCharacter) {
       // Morte é permanente: a nova tentativa recebe um auth.uid() totalmente novo.
-      // A identidade antiga e seu registro de morte permanecem no banco.
+      // O servidor remove o histórico morto deste nome quando o personagem é recriado.
       if (state.channel) {
         try { await supabase.removeChannel(state.channel); } catch (cleanupError) {
           console.warn("KTK old session cleanup:", cleanupError);
@@ -438,7 +438,7 @@ async function enter(options = {}) {
         p_display_name: displayName, p_character: options.character || {}
       });
       if (error) throw error;
-      player = data;
+      player = data?.player;
     } else {
       const { data, error } = await supabase.rpc("ktk_join_world", {
         p_display_name: displayName, p_character: options.character || {}
