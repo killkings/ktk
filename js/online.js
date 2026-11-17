@@ -4,18 +4,9 @@ const SUPABASE_URL = "https://mtddtvqtljtgzggpdogl.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_U5CdIRdPg0Brfn7x2Bj2hQ_VCXjwRQH";
 const WORLD_ID = "main";
 const TOPIC = "world:main";
-const ephemeralAuthStorage = (() => {
-  const values = new Map();
-  return {
-    getItem: key => values.has(key) ? values.get(key) : null,
-    setItem: (key,value) => { values.set(key,value); },
-    removeItem: key => { values.delete(key); }
-  };
-})();
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    persistSession: true,
-    storage: ephemeralAuthStorage,
+    persistSession: false,
     autoRefreshToken: true,
     detectSessionInUrl: false
   },
@@ -26,9 +17,8 @@ const state = {
   user: null, accessToken: "", channel: null, joined: false, online: false,
   leaving: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0, lastDbHeartbeat: 0,
-  lastPosition: null, lastAppearanceSignature: "", lastIntentSignature: "", lastInputSignature: "",
+  lastPosition: null, lastIntentSignature: "", lastInputSignature: "",
   stepInFlight: false, stepController: null, stepSequence: 0, activeStepId: 0,
-  combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
   remote: new Map(), profileCache: new Map(), profileLoads: new Map(),
   profileRetryTimers: new Map(), profileRetryCounts: new Map(), seenCombatEvents: new Set(),
@@ -50,24 +40,14 @@ function setStatus(message, connected = false) {
   el.style.borderColor = connected ? "rgba(155,215,135,.55)" : "rgba(238,190,120,.45)";
 }
 
-function readLocal() {
-  const data = window.KTKWorldEntities?.getLocalState?.();
+function readControlInput() {
+  const data = window.KTKWorldEntities?.getLocalControls?.();
   if (!data) return null;
   return {
-    user_id: state.user?.id,
-    display_name: state.displayName,
-    x: Number(data.x), y: Number(data.y),
-    direction: Number.isFinite(Number(data.direction)) ? Math.max(0, Math.min(3, Number(data.direction))) : 2,
     inputX: Number.isFinite(Number(data.inputX)) ? Math.max(-1, Math.min(1, Math.trunc(Number(data.inputX)))) : 0,
     inputY: Number.isFinite(Number(data.inputY)) ? Math.max(-1, Math.min(1, Math.trunc(Number(data.inputY)))) : 0,
-    character: data.character || {},
-    wearables: data.wearables || {},
-    combat_stats: data.combatStats || {},
-    moving: Boolean(data.moving),
     running: Boolean(data.running),
-    guarding: Boolean(data.guarding),
-    is_alive: true,
-    updated_at: Date.now()
+    guarding: Boolean(data.guarding)
   };
 }
 
@@ -306,37 +286,6 @@ function acceptRemote(payload, source = "broadcast") {
   void loadRemoteProfile(id);
 }
 
-function acceptCombat() {
-  // Combat, dano e projéteis só são aceitos quando chegam como estado do banco.
-}
-
-function broadcastCombat(action = {}) {
-  if (!state.online || !state.joined || !state.channel || !state.user) return false;
-  const local = readLocal();
-  if (!local || !action || typeof action !== "object") return false;
-  const packet = {
-    ...action,
-    user_id: state.user.id,
-    display_name: state.displayName,
-    x: local.x, y: local.y,
-    direction: Number.isFinite(Number(action.direction))
-      ? Math.max(0, Math.min(3, Number(action.direction)))
-      : local.direction,
-    character: local.character,
-    wearables: local.wearables,
-    combat_stats: local.combat_stats || {},
-    session_id: state.sessionId,
-    event_id: state.sessionId + ":combat:" + (++state.combatSequence),
-    sent_at: Date.now()
-  };
-  void state.channel.send({ type: "broadcast", event: "combat", payload: packet })
-    .then(result => {
-      if (result?.status && result.status !== "ok") console.warn("KTK combat broadcast:", result.status);
-    })
-    .catch(error => console.warn("KTK combat broadcast:", error));
-  return true;
-}
-
 function rebuildPresence() {
   if (!state.channel) return;
   const presence = state.channel.presenceState();
@@ -429,17 +378,18 @@ async function subscribeWorld() {
 }
 
 async function trackPresence() {
-  if (state.leaving || !state.channel || !state.online || !state.joined) return;
-  const payload = readLocal();
-  if (!payload) return;
-  const { error } = await state.channel.track(payload);
+  if (state.leaving || !state.channel || !state.online || !state.joined || !state.user) return;
+  const { error } = await state.channel.track({
+    user_id: state.user.id,
+    session_id: state.sessionId
+  });
   if (error) console.warn("KTK presence:", error.message);
   state.lastTrack = Date.now();
 }
 
 async function sendPosition(force = false) {
   if (state.leaving || !state.online || !state.channel || !state.joined) return;
-  const payload = readLocal();
+  const payload = readControlInput();
   if (!payload) return;
 
   const now = Date.now();
@@ -450,31 +400,6 @@ async function sendPosition(force = false) {
   const guarding = Boolean(payload.guarding);
   const inputSignature = JSON.stringify({ inputX, inputY, running, guarding });
   const inputChanged = inputSignature !== state.lastInputSignature;
-
-  const appearanceSignature = JSON.stringify({
-    character: payload.character || {},
-    wearables: payload.wearables || {},
-    combatStats: payload.combat_stats || {}
-  });
-  const appearanceChanged = appearanceSignature !== state.lastAppearanceSignature;
-  if (appearanceChanged) {
-    state.lastAppearanceSignature = appearanceSignature;
-    void trackPresence();
-  }
-  if (now - state.lastTrack >= 10000) void trackPresence();
-
-  if (now - state.lastDbHeartbeat >= 10000) {
-    state.lastDbHeartbeat = now;
-    const heartbeatController = new AbortController();
-    const heartbeatTimeout = setTimeout(() => heartbeatController.abort(), 1200);
-    void supabase.rpc("ktk_touch_player")
-      .abortSignal(heartbeatController.signal)
-      .then(({ error }) => {
-        if (error) console.warn("KTK world heartbeat:", error.message);
-      })
-      .catch(error => console.warn("KTK world heartbeat:", error?.message || error))
-      .finally(() => clearTimeout(heartbeatTimeout));
-  }
 
   // O cliente envia somente a intenção de movimento. A posição, a velocidade
   // e as colisões são calculadas no banco, a partir da posição já registrada.
@@ -608,6 +533,7 @@ async function enter(options = {}) {
     }
     await subscribeWorld();
     state.joined = true;
+    void trackPresence();
     state.lastInputSignature = "";
     state.lastCheckpoint = 0;
     state.stepInFlight = false;
@@ -679,28 +605,61 @@ async function gameAction(action, payload = {}) {
   return data;
 }
 
-async function markDead() {
-  if (!state.user) return;
-  const { error } = await supabase.rpc("ktk_mark_dead");
-  if (error) console.error("KTK death save:", error);
-  if (state.channel) {
-    await state.channel.send({ type: "broadcast", event: "leave", payload: { user_id: state.user.id } });
-    await supabase.removeChannel(state.channel);
-  }
+async function clearLocalSession(statusMessage) {
+  state.leaving = true;
+  state.stepSequence++;
+  state.activeStepId = 0;
+  state.stepInFlight = false;
+  state.stepController?.abort();
+  state.stepController = null;
+
+  const channel = state.channel;
   state.channel = null;
+  if (channel) {
+    try { await supabase.removeChannel(channel); }
+    catch (error) { console.warn("KTK channel cleanup:", error?.message || error); }
+  }
+
   state.online = false;
   state.joined = false;
-  state.remote.clear();
+  state.user = null;
+  state.accessToken = "";
+  state.displayName = "";
   state.lastPosition = null;
   state.lastIntentSignature = "";
   state.lastInputSignature = "";
-  state.stepSequence++;
-  state.stepController?.abort();
-  state.stepController = null;
-  state.activeStepId = 0;
-  state.stepInFlight = false;
+  state.lastCheckpoint = 0;
+  state.lastDbHeartbeat = 0;
+  state.lastTrack = 0;
+  state.remote.clear();
+  state.profileCache.clear();
+  state.profileLoads.clear();
+  state.profileRetryTimers.forEach(timer => clearTimeout(timer));
+  state.profileRetryTimers.clear();
+  state.profileRetryCounts.clear();
+  state.seenCombatEvents.clear();
+  state.sessionId = "";
+
+  try {
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) console.warn("KTK in-memory sign-out:", error.message);
+  } catch (error) {
+    console.warn("KTK in-memory sign-out:", error?.message || error);
+  }
+
+  state.leaving = false;
   updateRemotes();
-  setStatus("○ Personagem morto · fora do mundo", false);
+  setStatus(statusMessage || "○ Sessão encerrada · fora do mundo", false);
+}
+
+async function markDead() {
+  if (!state.user) return;
+  const { error } = await supabase.rpc("ktk_mark_dead");
+  if (error) {
+    const { data, error: stateError } = await supabase.rpc("ktk_get_player_state");
+    if (stateError || data?.is_alive !== false) throw error;
+  }
+  await clearLocalSession("○ Personagem morto · sessão apagada");
 }
 
 // Saída voluntária encerra a vida no banco antes de desligar a sessão multiplayer.
@@ -720,29 +679,7 @@ async function leaveWorld() {
     if (error) throw error;
     if (data && data.ok === false) throw new Error("O servidor não confirmou a morte do personagem.");
 
-    if (state.channel) {
-      try {
-        await supabase.removeChannel(state.channel);
-      } catch (cleanupError) {
-        // A morte já foi confirmada no banco; uma falha de limpeza do canal não a desfaz.
-        console.warn("KTK channel cleanup after exit:", cleanupError);
-      }
-    }
-
-    state.channel = null;
-    state.online = false;
-    state.joined = false;
-    state.user = null;
-    state.remote.clear();
-    state.lastPosition = null;
-    state.lastIntentSignature = "";
-    state.lastInputSignature = "";
-    state.stepInFlight = false;
-    state.lastAppearanceSignature = "";
-    state.lastDbHeartbeat = 0;
-    state.lastTrack = 0;
-    updateRemotes();
-    setStatus("○ Personagem morto ao sair · fora do mundo", false);
+    await clearLocalSession("○ Personagem morto ao sair · sessão apagada");
     return { ok: true, data };
   } catch (error) {
     state.leaving = false;
@@ -805,7 +742,20 @@ function startHeartbeat() {
     state.online = false;
     if (state.channel) void supabase.removeChannel(state.channel);
     state.channel = null;
+    state.user = null;
+    state.accessToken = "";
+    state.displayName = "";
+    state.remote.clear();
+    state.profileCache.clear();
+    state.profileRetryTimers.forEach(timer => clearTimeout(timer));
+    state.profileRetryTimers.clear();
+    void supabase.auth.signOut({ scope: "local" }).catch(error => {
+      console.warn("KTK pagehide session cleanup:", error?.message || error);
+    });
   }, {capture:true});
+  window.addEventListener("pageshow", event => {
+    if (event.persisted) window.location.reload();
+  });
 }
 
 async function claimKingCrown() {
@@ -826,7 +776,7 @@ async function dropKingCrown(x,y) {
 }
 
 window.KTKOnline = {
-  enter, markDead, leaveWorld, broadcastCombat, claimKingCrown, dropKingCrown, getPlayerState, gameAction,
+  enter, markDead, leaveWorld, claimKingCrown, dropKingCrown, getPlayerState, gameAction,
   get userId() { return state.user?.id || null; },
   get connected() { return state.online; }
 };
