@@ -14,7 +14,7 @@ const state = {
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0,
   lastPosition: null, lastAppearanceSignature: "", positionSequence: 0, combatSequence: 0,
   sessionId: window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2)),
-  remote: new Map(), profileCache: new Map(), connecting: false
+  remote: new Map(), profileCache: new Map(), seenCombatEvents: new Set(), connecting: false
 };
 
 function setStatus(message, connected = false) {
@@ -39,6 +39,7 @@ function readLocal() {
     direction: Number.isFinite(Number(data.direction)) ? Math.max(0, Math.min(3, Number(data.direction))) : 2,
     character: data.character || {},
     wearables: data.wearables || {},
+    combat_stats: data.combatStats || {},
     is_alive: true,
     updated_at: Date.now()
   };
@@ -121,6 +122,7 @@ function acceptRemote(payload, source = "broadcast") {
     wearables: payload.wearables && Object.keys(payload.wearables).length
       ? payload.wearables
       : (previous?.wearables || {}),
+    combatStats: payload.combat_stats || previous?.combatStats || {},
     type: "player",
     lastUpdate: Date.now(),
     sessionId: sessionId || previous?.sessionId || "",
@@ -133,6 +135,22 @@ function acceptRemote(payload, source = "broadcast") {
 
 function acceptCombat(payload) {
   if (!payload?.user_id || payload.user_id === state.user?.id) return;
+  const kind = String(payload.kind || "");
+  if (!["attack_start","projectile_start","skeleton_hit","player_damaged","skeleton_attack","pvp_hit"].includes(kind)) return;
+  const eventId = String(payload.event_id || "");
+  if (!eventId || state.seenCombatEvents.has(eventId)) return;
+  state.seenCombatEvents.add(eventId);
+  if (state.seenCombatEvents.size > 256) {
+    state.seenCombatEvents = new Set([...state.seenCombatEvents].slice(-128));
+  }
+  if (kind === "pvp_hit" && String(payload.target_user_id || "") === String(state.user?.id || "")) {
+    window.KTKWorldEntities?.applyRemoteDamage?.({
+      damage: payload.damage,
+      knockback_x: payload.knockback_x,
+      knockback_y: payload.knockback_y,
+      event_id: eventId
+    });
+  }
   const id = String(payload.user_id);
   let remote = state.remote.get(id);
   if (!remote && Number.isFinite(Number(payload.x)) && Number.isFinite(Number(payload.y))) {
@@ -142,16 +160,13 @@ function acceptCombat(payload) {
       x: payload.x, y: payload.y, direction: payload.direction,
       character: payload.character || {},
       wearables: payload.wearables || {},
+      combat_stats: payload.combat_stats || {},
       session_id: payload.session_id,
       sent_at: payload.sent_at
     }, "broadcast");
     remote = state.remote.get(id);
   }
   if (!remote) return;
-  const kind = String(payload.kind || "");
-  if (!["attack_start","projectile_start","skeleton_hit","player_damaged","skeleton_attack"].includes(kind)) return;
-  const eventId = String(payload.event_id || "");
-  if (!eventId) return;
   const events = remote.combatEvents || [];
   if (events.some(event => event.event_id === eventId)) return;
   events.push({
@@ -173,6 +188,9 @@ function acceptCombat(payload) {
     speed: Math.max(1, Number(payload.speed) || 500),
     max_distance: Math.max(1, Number(payload.max_distance) || 160),
     damage: Math.max(0, Number(payload.damage) || 0),
+    target_user_id: payload.target_user_id ? String(payload.target_user_id) : null,
+    target_health: Number.isFinite(Number(payload.target_health)) ? Number(payload.target_health) : null,
+    combat_stats: payload.combat_stats || {},
     knockback_x: Number(payload.knockback_x) || 0,
     knockback_y: Number(payload.knockback_y) || 0
   });
@@ -194,6 +212,7 @@ function broadcastCombat(action = {}) {
       : local.direction,
     character: local.character,
     wearables: local.wearables,
+    combat_stats: local.combat_stats || {},
     session_id: state.sessionId,
     event_id: state.sessionId + ":combat:" + (++state.combatSequence),
     sent_at: Date.now()
