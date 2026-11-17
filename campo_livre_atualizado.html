@@ -226,7 +226,8 @@
         </div>
         <p class="small-note"><a href="./creditos-lpc.html" target="_blank" rel="noopener">Créditos e licenças dos sprites (LPC)</a></p>
 
-        <div class="creator-actions">
+        <div class="creator-actions" style="flex-wrap:wrap">
+          <input id="ktk-display-name" maxlength="24" minlength="2" autocomplete="nickname" placeholder="Nome do personagem" aria-label="Nome do personagem" style="width:100%;min-width:0;padding:11px 14px;border:1px solid rgba(238,247,226,.2);border-radius:12px;color:#edf3e8;background:#20392b;outline:none">
           <button class="secondary" id="back-welcome">Voltar</button>
           <button class="primary" id="enter-world" style="flex:1">Entrar no mundo →</button>
         </div>
@@ -2426,11 +2427,26 @@
     remotePlayers.clear();
     (players||[]).forEach(remote=>{
       if(!remote || remote.id==null || !Number.isFinite(remote.x) || !Number.isFinite(remote.y)) return;
-      remotePlayers.set(String(remote.id),{...remote,type:'player'});
+      remotePlayers.set(String(remote.id),{...remote,type:'player',layers:idleLayers.length?idleLayers:currentLayers,radius:COLLISION_RADIUS});
     });
     updateKingStatus();
   }
-  window.KTKWorldEntities={setRemotePlayers,entities:getWorldEntities,addItem:addWorldItem};
+  window.KTKWorldEntities={
+    setRemotePlayers,entities:getWorldEntities,addItem:addWorldItem,
+    getLocalState:()=>({
+      x:camera.x*(canvas.clientWidth||0)+player.x,
+      y:camera.y*(canvas.clientHeight||0)+player.y,
+      direction:player.direction,
+      character:{...character}
+    }),
+    setLocalState:(x,y,direction)=>{
+      if(!Number.isFinite(Number(x))||!Number.isFinite(Number(y))) return false;
+      camera.x=0; camera.y=0;
+      player.x=Number(x); player.y=Number(y);
+      player.direction=Math.max(0,Math.min(3,Number(direction)||2));
+      return true;
+    }
+  };
   function handlePlayerDeath() {
     if(playerDead) return;
     playerDead=true;
@@ -2463,10 +2479,29 @@
     rebuildCharacterLayers();
     document.getElementById('enter-world').textContent='Criar novo personagem';
     showScreen('death');
+    window.KTKOnline?.markDead();
     updateKingStatus();
   }
 
-  function startGame() {
+  async function startGame() {
+    let onlinePlayer=null;
+    if(window.KTKOnline) {
+      const onlineResult=await window.KTKOnline.enter({
+        displayName:document.getElementById('ktk-display-name')?.value||'',
+        character:{...character},
+        newCharacter:newCharacterRequired
+      });
+      if(!onlineResult.ok) {
+        toast(onlineResult.error||'Não foi possível entrar no mundo online.');
+        if(onlineResult.dead) {
+          playerDead=true;
+          newCharacterRequired=true;
+          showScreen('death');
+        }
+        return;
+      }
+      onlinePlayer=onlineResult.player;
+    }
     if(newCharacterRequired) {
       equipStartingWearables();
       playerStats?.resetForNewCharacter();
@@ -2496,6 +2531,12 @@
       toast('Você chegou ao mundo. Explore à vontade!');
     } else {
       toast('Aparência atualizada. Boa exploração!');
+    }
+    if(onlinePlayer) {
+      player.x=Number(onlinePlayer.x)||0;
+      player.y=Number(onlinePlayer.y)||96;
+      player.direction=Number(onlinePlayer.direction)||2;
+      camera.x=0; camera.y=0;
     }
     document.getElementById('enter-world').textContent='Entrar no mundo →';
     showScreen('game');
@@ -2659,5 +2700,6 @@
   requestAnimationFrame(render);
 })();
 </script>
+<script type="module" src="./js/online.js?v=20261117-1"></script>
 </body>
 </html>
