@@ -12,7 +12,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 const state = {
   user: null, channel: null, joined: false, online: false,
   displayName: "", lastSent: 0, lastCheckpoint: 0, lastTrack: 0,
-  lastPosition: null, remote: new Map(), profileCache: new Map(), connecting: false
+  lastPosition: null, lastAppearanceSignature: "", remote: new Map(), profileCache: new Map(), connecting: false
 };
 
 function setStatus(message, connected = false) {
@@ -36,6 +36,7 @@ function readLocal() {
     x: Number(data.x), y: Number(data.y),
     direction: Number(data.direction) || 2,
     character: data.character || {},
+    wearables: data.wearables || {},
     is_alive: true,
     updated_at: Date.now()
   };
@@ -198,18 +199,25 @@ async function sendPosition(force = false) {
   if (!payload) return;
   const now = Date.now();
   const previous = state.lastPosition;
+  const appearanceSignature = JSON.stringify({
+    character: payload.character || {},
+    wearables: payload.wearables || {}
+  });
+  const appearanceChanged = appearanceSignature !== state.lastAppearanceSignature;
   const moved = !previous || Math.hypot(payload.x - previous.x, payload.y - previous.y) > 0.35 ||
     payload.direction !== previous.direction;
 
-  if (moved && (force || now - state.lastSent >= 60)) {
+  if ((moved || appearanceChanged) && (force || appearanceChanged || now - state.lastSent >= 60)) {
     state.lastSent = now;
+    state.lastAppearanceSignature = appearanceSignature;
     state.lastPosition = { x: payload.x, y: payload.y, direction: payload.direction };
     const packet = {
       user_id: state.user.id,
       display_name: state.displayName,
       x: payload.x, y: payload.y,
       direction: payload.direction,
-      character: payload.character
+      character: payload.character,
+      wearables: payload.wearables
     };
     // Broadcast de baixa latência: não espera a gravação periódica no banco.
     void state.channel.send({ type: "broadcast", event: "position", payload: packet })
