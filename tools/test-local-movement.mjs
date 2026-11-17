@@ -347,6 +347,7 @@ assert.doesNotMatch(replica,/Math\.min\(450,packetAgeMs\)/);
 assert.match(playerSync,/moving:serverState\.moving/);
 assert.match(playerSync,/moving:row\.state\?\.moving/);
 assert.match(replica,/const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
+assert.match(replica,/const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS/);
 assert.match(replica,/const extrapolationMs=Math\.min\(REMOTE_MOTION_MAX_EXTRAPOLATION_MS,elapsed\)/);
 assert.match(replica,/const previousDirection=Number\.isFinite\(remote\.renderDirection\)/);
 assert.match(playerSync,/applyOwnServerPosition\(row,Number\(state\.lastMovementLatencyMs\)\|\|0\)/);
