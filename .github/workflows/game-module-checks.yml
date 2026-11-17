@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "campo_livre_atualizado.html"
+      - "game/game-lifecycle.js"
+      - "js/online.js"
+      - "tools/test-entry-flow.mjs"
       - "mapa/fallback/**"
       - "mapa/player/stats*.js"
       - "render/world-renderer.js"
@@ -12,6 +15,9 @@ on:
     branches: [main]
     paths:
       - "campo_livre_atualizado.html"
+      - "game/game-lifecycle.js"
+      - "js/online.js"
+      - "tools/test-entry-flow.mjs"
       - "mapa/fallback/**"
       - "mapa/player/stats*.js"
       - "render/world-renderer.js"
@@ -31,6 +37,10 @@ jobs:
           node --check mapa/player/stats-ui.js
           node --check mapa/fallback/grass-renderer.js
           node --check render/world-renderer.js
+          node --check game/game-lifecycle.js
+          node --input-type=module --check < js/online.js
+      - name: Check world-entry button flow
+        run: node tools/test-entry-flow.mjs
       - name: Check module boundaries and script order
         run: |
           node <<'NODE'
