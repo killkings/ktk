@@ -155,8 +155,8 @@ assert.equal(collisionContext.playerVisual.x,0,
 // Queue own Realtime updates while the step RPC is in flight. Preserve the newest
 // database timestamp and reject duplicates delivered after the RPC response.
 const movementExecutable=movement
-  .replace(/^import[\\s\\S]*?from\\s+["'][^"']+["'];\\s*/gm,"")
-  .replace(/^export\\s+/gm,"");
+  .replace(/^import[\s\S]*?from\s+["'][^"']+["'];\s*/gm,"")
+  .replace(/^export\s+/gm,"");
 const appliedOwnPositions=[];
 const movementState={
   stepInFlight:true,leaving:false,lastPosition:null,pendingOwnPosition:null,
@@ -187,15 +187,15 @@ assert.equal(movementHarness.acceptOwnDatabasePosition(ownOlder),false,
 
 assert.match(sweptMigration,/movement_segment_hits_circle/);
 assert.match(sweptMigration,/v_closest_distance<p_radius/);
-assert.match(sweptMigration,/ktk_private\\.movement_segment_hits_circle/);
+assert.match(sweptMigration,/ktk_private\.movement_segment_hits_circle/);
 assert.match(sweptMigration,/from public,anon,authenticated/);
-assert.match(playerSync,/acceptOwnDatabasePosition\\(row\\)/);
-assert.match(playerSync,/compareServerTimestamps\\(positionTimestamp/);
+assert.match(playerSync,/acceptOwnDatabasePosition\(row\)/);
+assert.match(playerSync,/compareServerTimestamps\(positionTimestamp/);
 assert.match(playerSync,/movement-pipeline-004/);
-assert.match(realtime,/player-sync\\.js\\?v=20261117-movement-pipeline-004/);
+assert.match(realtime,/player-sync\.js\?v=20261117-movement-pipeline-004/);
 assert.match(movement,/export function compareServerTimestamps/);
-assert.match(movement,/flushPendingOwnPosition\\(\\)/);
-assert.match(index,/campo_livre_atualizado\\.html\\?v=20261117-movement-pipeline-004/);
+assert.match(movement,/flushPendingOwnPosition\(\)/);
+assert.match(index,/campo_livre_atualizado\.html\?v=20261117-movement-pipeline-004/);
 
 context.setAuthoritativePlayerPosition(
   103,120,3,false,150,requestInput,
@@ -267,7 +267,7 @@ for(const [path,version] of [
 }
 assert.match(gameState,/moveLocalPlayerSegment/);
 assert.match(gameState,/movementSegmentHitsCircle/);
-assert.match(gameState,/if\\(\\(playerInputX>0&&correctionX<0\\)/);
+assert.match(gameState,/if\(\(playerInputX>0&&correctionX<0\)/);
 assert.match(index,/movement-pipeline-004/);
-assert.match(index,/campo_livre_atualizado\\.html\\?v=20261117-movement-pipeline-004/);
+assert.match(index,/campo_livre_atualizado\.html\?v=20261117-movement-pipeline-004/);
 console.log("Movement prediction, monotonic reconciliation, own-position ordering, swept collision and cache redirect passed.");
