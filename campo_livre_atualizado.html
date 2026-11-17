@@ -547,6 +547,7 @@
   const playerStats = window.KTKPlayerStats;
   const arrowSpriteItem = equipmentCatalog?.items.find(item=>item.id==='equipment-arrow')||null;
   const worldItems = new Set();
+  let kingCrownClaimedBy = null;
   const wearableSlotOrder = ['head','chest','waist','legs','feet'];
   const equippedWearables = Object.fromEntries(wearableSlotOrder.map(slot=>[slot,null]));
   const startingWearables = { chest: 'cosmetic-linen-shirt', legs: 'cosmetic-trousers', feet: 'cosmetic-shoes' };
@@ -2477,13 +2478,35 @@
       status.textContent='Você é o rei';
       return;
     }
-    const remoteKing=[...remotePlayers.values()].find(remote=>remote.isKing||remote.hasKingCrown);
+    const remoteKing=[...remotePlayers.values()].find(remote=>remote.isKing||remote.hasKingCrown||remote.wearables?.head?.isKingCrown);
     if(remoteKing) {
       status.textContent=`${remoteKing.name||'Outro jogador'} é o rei`;
       return;
     }
     const crownOnGround=[...worldItems].some(item=>item.isKingCrown&&!item.collected);
     status.textContent=crownOnGround||!gameStarted?'Coroa Real livre':'Coroa em disputa';
+  }
+
+  function getKingCrownItem() {
+    return [...worldItems].find(item=>item.isKingCrown)
+      || equipmentCatalog?.items?.find(item=>item.isKingCrown)
+      || null;
+  }
+
+  function syncKingCrownWorldItem(state,x,y) {
+    const crown=getKingCrownItem();
+    if(!crown) return;
+    if(state==='carried') {
+      crown.collected=true;
+      worldItems.delete(crown);
+    } else if(state==='ground') {
+      crown.collected=false;
+      crown.isStartingWearable=false;
+      crown.x=Number.isFinite(Number(x))?Number(x):0;
+      crown.y=Number.isFinite(Number(y))?Number(y):0;
+      worldItems.add(crown);
+    }
+    updateKingStatus();
   }
 
   function selectInventorySlot(index) {
@@ -2514,6 +2537,11 @@
     item.collected=true;
     renderInventory();
     rebuildCharacterLayers();
+    if(item.isKingCrown) {
+      kingCrownClaimedBy=window.KTKOnline?.userId||'local';
+      syncKingCrownWorldItem('carried');
+      window.KTKOnline?.broadcastCombat({kind:'crown_claimed'});
+    }
     toast(item.isKingCrown
       ? 'Você pegou a Coroa Real. Você agora é o rei!'
       : previous
@@ -2535,6 +2563,11 @@
     }
     renderInventory();
     rebuildCharacterLayers();
+    if(item.isKingCrown) {
+      kingCrownClaimedBy=window.KTKOnline?.userId||'local';
+      syncKingCrownWorldItem('carried');
+      window.KTKOnline?.broadcastCombat({kind:'crown_claimed'});
+    }
     [item.image,item.iconImage].filter(Boolean).forEach(image=>{
       if(!image.complete) image.addEventListener('load',renderInventory,{once:true});
     });
@@ -2686,6 +2719,10 @@
     item.collected=false;
     item.isStartingWearable=false;
     worldItems.add(item);
+    if(item.isKingCrown) {
+      kingCrownClaimedBy=null;
+      window.KTKOnline?.broadcastCombat({kind:'crown_dropped',crown_x:item.x,crown_y:item.y});
+    }
     updateKingStatus();
   }
 
@@ -2795,6 +2832,15 @@
       entity.character=remote.character||entity.character||{};
       entity.wearables=remote.wearables||entity.wearables||{};
       entity.combatStats=remote.combatStats||entity.combatStats||{};
+      const remoteHasKingCrown=Boolean(remote.isKing||remote.hasKingCrown||entity.wearables?.head?.isKingCrown);
+      entity.isKing=remoteHasKingCrown;
+      entity.hasKingCrown=remoteHasKingCrown;
+      if(remoteHasKingCrown) {
+        kingCrownClaimedBy=id;
+        syncKingCrownWorldItem('carried');
+      } else if(kingCrownClaimedBy===id) {
+        kingCrownClaimedBy=null;
+      }
       entity.type='player';
       entity.radius=COLLISION_RADIUS;
       remotePlayers.set(id,entity);
@@ -2834,6 +2880,16 @@
               target.knockback={x:event.knockback_x,y:event.knockback_y,progress:0};
               target.knockbackHeight=0;
             }
+          } else if(event.kind==='crown_claimed') {
+            entity.isKing=true;
+            entity.hasKingCrown=true;
+            kingCrownClaimedBy=id;
+            syncKingCrownWorldItem('carried');
+          } else if(event.kind==='crown_dropped') {
+            entity.isKing=false;
+            entity.hasKingCrown=false;
+            if(kingCrownClaimedBy===id) kingCrownClaimedBy=null;
+            syncKingCrownWorldItem('ground',event.crown_x,event.crown_y);
           } else if(event.kind==='skeleton_hit') {
             const skeleton=window.KTKEnemySkeleton.entity;
             if(!skeleton.defeated&&event.damage>0) {
@@ -2891,6 +2947,8 @@
         if(!item) return [slot,null];
         return [slot,{
           displayName:item.displayName||slot,
+          itemId:item.id||null,
+          isKingCrown:Boolean(item.isKingCrown),
           wearCategory:item.wearCategory||'cosmetic',
           durability:Number.isFinite(Number(item.durability))?Number(item.durability):1,
           appearanceLayers:Array.isArray(item.appearanceLayers)
@@ -3044,6 +3102,11 @@
           const wearableDrops=equipmentCatalog.buildMapWearableDrops();
           equipmentCatalog.arrangeFirstMap(canvas.clientWidth,canvas.clientHeight,wearableDrops);
           wearableDrops.forEach(item=>worldItems.add(item));
+          const remoteKing=[...remotePlayers.values()].find(remote=>remote.isKing||remote.hasKingCrown||remote.wearables?.head?.isKingCrown);
+          if(remoteKing) {
+            kingCrownClaimedBy=remoteKing.id;
+            syncKingCrownWorldItem('carried');
+          }
           equipmentItemsArranged=true;
         } catch(error) {
           console.error('KTK map initialization:',error);
@@ -3216,6 +3279,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-10-pvp"></script>
+<script type="module" src="./js/online.js?v=20261117-11-crown-sync"></script>
 </body>
 </html>
