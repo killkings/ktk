@@ -325,7 +325,8 @@ async function sendPosition(force = false) {
   const previous = state.lastPosition;
   const appearanceSignature = JSON.stringify({
     character: payload.character || {},
-    wearables: payload.wearables || {}
+    wearables: payload.wearables || {},
+    combatStats: payload.combat_stats || {}
   });
   const appearanceChanged = appearanceSignature !== state.lastAppearanceSignature;
   const moved = !previous || Math.hypot(payload.x - previous.x, payload.y - previous.y) > 0.35 ||
@@ -342,6 +343,7 @@ async function sendPosition(force = false) {
       direction: payload.direction,
       character: payload.character,
       wearables: payload.wearables,
+      combat_stats: payload.combat_stats || {},
       session_id: state.sessionId,
       sequence: ++state.positionSequence,
       sent_at: now
