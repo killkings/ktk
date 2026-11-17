@@ -93,6 +93,9 @@ function acceptRemote(payload) {
     targetY: y,
     direction: Math.max(0, Math.min(3, Number(payload.direction) || 2)),
     character: hasCharacter ? payload.character : (previous?.character || {}),
+    wearables: payload.wearables && Object.keys(payload.wearables).length
+      ? payload.wearables
+      : (previous?.wearables || {}),
     type: "player",
     lastUpdate: Date.now()
   });
