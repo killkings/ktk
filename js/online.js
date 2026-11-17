@@ -51,6 +51,18 @@ function updateRemotes() {
   }
 }
 
+function acceptWorldEntityChange(payload) {
+  const row=payload?.record||payload?.new||payload;
+  if(row?.entity_id) window.KTKWorldEntities?.applyWorldEntity?.(row);
+}
+
+async function loadWorldState() {
+  const {data,error}=await supabase.rpc("ktk_get_world_state");
+  if(error) throw error;
+  window.KTKWorldEntities?.applyWorldState?.(data);
+  return data;
+}
+
 function acceptDatabaseChange(payload) {
   const row = payload?.new || payload?.record || payload;
   if (!row?.user_id || row.user_id === state.user?.id) return;
@@ -59,9 +71,6 @@ function acceptDatabaseChange(payload) {
     updateRemotes();
     return;
   }
-  // Eventos do banco são apenas uma fonte de entrada inicial. Depois que
-  // chega um broadcast ao vivo, uma atualização atrasada do checkpoint não
-  // pode sobrescrever a posição mais recente.
   acceptRemote({
     user_id: row.user_id, x: row.x, y: row.y, direction: row.direction,
     display_name: row.display_name, character: row.character
@@ -91,7 +100,7 @@ function acceptRemote(payload, source = "broadcast") {
   // Presence e banco servem para descobrir quem já está no mundo, mas seus
   // retratos podem ter até vários segundos. Nunca deixam um jogador já
   // sincronizado voltar para uma coordenada antiga.
-  if (previous && source !== "broadcast") return;
+  if (previous && source === "presence") return;
 
   const sessionId = String(payload.session_id || "");
   const rawSequence = Number(payload.sequence);
@@ -243,7 +252,7 @@ function rebuildPresence() {
     // Um sync de presença não deve substituir coordenadas já recebidas por broadcast.
     acceptRemote(entry, "presence");
   });
-  for (const id of state.remote.keys()) if (!active.has(id)) state.remote.delete(id);
+  // Falhas momentâneas no Presence não removem entidades do estado compartilhado.
   updateRemotes();
 }
 
@@ -288,11 +297,21 @@ async function subscribeWorld() {
   state.channel
     .on("broadcast", { event: "INSERT" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
-    .on("broadcast", { event: "position" }, ({ payload }) => acceptRemote(payload))
     .on("broadcast", { event: "combat" }, ({ payload }) => acceptCombat(payload))
+    .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => acceptWorldEntityChange(payload))
+    .on("broadcast", { event: "ENTITY_UPDATE" }, ({ payload }) => acceptWorldEntityChange(payload))
+    .on("broadcast", { event: "ENTITY_DELETE" }, ({ payload }) => acceptWorldEntityChange(payload))
     .on("presence", { event: "sync" }, rebuildPresence)
     .on("presence", { event: "join" }, rebuildPresence)
-    .on("presence", { event: "leave" }, rebuildPresence);
+    .on("presence", { event: "leave" }, ({key}) => {
+      rebuildPresence();
+      const id=String(key||"");
+      setTimeout(()=>{
+        if(!id || state.channel?.presenceState()?.[id]?.length) return;
+        state.remote.delete(id);
+        updateRemotes();
+      },15000);
+    });
 
   await new Promise((resolve, reject) => {
     let settled = false;
@@ -312,6 +331,7 @@ async function subscribeWorld() {
   });
   state.online = true;
   await loadExistingPlayers();
+  await loadWorldState();
   await trackPresence();
   setStatus("● Online · mundo principal", true);
 }
@@ -340,39 +360,31 @@ async function sendPosition(force = false) {
   const moved = !previous || Math.hypot(payload.x - previous.x, payload.y - previous.y) > 0.35 ||
     payload.direction !== previous.direction;
 
-  if ((moved || appearanceChanged) && (force || appearanceChanged || now - state.lastSent >= 60)) {
+  if ((moved || appearanceChanged) && (force || appearanceChanged || now - state.lastSent >= 90)) {
     state.lastSent = now;
     state.lastAppearanceSignature = appearanceSignature;
     state.lastPosition = { x: payload.x, y: payload.y, direction: payload.direction };
-    const packet = {
-      user_id: state.user.id,
-      display_name: state.displayName,
-      x: payload.x, y: payload.y,
-      direction: payload.direction,
-      character: payload.character,
-      wearables: payload.wearables,
-      combat_stats: payload.combat_stats || {},
-      session_id: state.sessionId,
-      sequence: ++state.positionSequence,
-      sent_at: now
-    };
-    // Broadcast de baixa latência: não espera a gravação periódica no banco.
-    void state.channel.send({ type: "broadcast", event: "position", payload: packet })
-      .then(result => {
-        if (result?.status && result.status !== "ok") console.warn("KTK position broadcast:", result.status);
-      })
-      .catch(error => console.warn("KTK position broadcast:", error));
+    state.lastPosition = { x: payload.x, y: payload.y, direction: payload.direction };
   }
 
   if (appearanceChanged) void trackPresence();
   if (now - state.lastTrack >= 10000) void trackPresence();
-  if (now - state.lastCheckpoint >= 1000) {
+  if ((moved || force) && now - state.lastCheckpoint >= 90) {
     state.lastCheckpoint = now;
-    const { error: checkpointError } = await supabase.rpc("ktk_checkpoint_player", {
+    const { data: checkpoint, error: checkpointError } = await supabase.rpc("ktk_checkpoint_player", {
       p_x: payload.x, p_y: payload.y, p_direction: payload.direction
     });
-    if (checkpointError && !String(checkpointError.message || "").includes("MOVEMENT_TOO_FAST")) {
-      console.warn("KTK checkpoint:", checkpointError.message);
+    if (checkpointError) {
+      console.warn("KTK authoritative movement:", checkpointError.message);
+      return;
+    }
+    if (checkpoint && Number.isFinite(Number(checkpoint.x)) && Number.isFinite(Number(checkpoint.y))) {
+      const dx=Number(checkpoint.x)-payload.x;
+      const dy=Number(checkpoint.y)-payload.y;
+      if(checkpoint.accepted===false || Math.hypot(dx,dy)>1.5) {
+        window.KTKWorldEntities?.setLocalState?.(checkpoint.x,checkpoint.y,checkpoint.direction);
+        state.lastPosition={x:Number(checkpoint.x),y:Number(checkpoint.y),direction:Number(checkpoint.direction)};
+      }
     }
   }
 }
@@ -467,8 +479,22 @@ function startHeartbeat() {
   });
 }
 
+async function claimKingCrown() {
+  const {data,error}=await supabase.rpc("ktk_claim_king_crown");
+  if(error) return {ok:false,error:error.message||"Não foi possível reivindicar a coroa."};
+  await loadWorldState();
+  return {ok:true,data};
+}
+
+async function dropKingCrown(x,y) {
+  const {data,error}=await supabase.rpc("ktk_drop_king_crown",{p_x:Number(x),p_y:Number(y)});
+  if(error) return {ok:false,error:error.message||"Não foi possível soltar a coroa."};
+  await loadWorldState();
+  return {ok:true,data};
+}
+
 window.KTKOnline = {
-  enter, markDead, broadcastCombat,
+  enter, markDead, broadcastCombat, claimKingCrown, dropKingCrown,
   get userId() { return state.user?.id || null; },
   get connected() { return state.online; }
 };
