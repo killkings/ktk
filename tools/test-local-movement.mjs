@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch] = await Promise.all([
+const [input, replica, gameState, renderer, movement, online, html, migration, resetPatch, playerSync, rootHtml] = await Promise.all([
   read("../input/input-controller.js"),
   read("../multiplayer/player-replica.js"),
   read("../js/game-state.js"),
@@ -12,7 +12,9 @@ const [input, replica, gameState, renderer, movement, online, html, migration, r
   read("../js/online.js"),
   read("../campo_livre_atualizado.html"),
   read("../supabase/migrations/20261117204627_authoritative_movement_latency_and_intent_timeline.sql"),
-  read("../supabase/migrations/20261117204956_ignore_stale_movement_intent_after_lifecycle_reset.sql")
+  read("../supabase/migrations/20261117204956_ignore_stale_movement_intent_after_lifecycle_reset.sql"),
+  read("../online/player-sync.js"),
+  read("../index.html")
 ]);
 
 // Keyboard state includes the age of the exact active intent, not the last
@@ -173,9 +175,9 @@ assert.match(gameState,/errorDistance\/correctionSpeed/);
 assert.doesNotMatch(gameState,/latencyTolerance/);
 assert.match(online,/sendPosition/);
 for(const [path,version] of [
-  ["render/world-renderer.js","20261117-movement-authority-002"],
+  ["render/world-renderer.js","20261117-movement-reconciliation-004"],
   ["multiplayer/player-replica.js","20261117-movement-authority-002"],
-  ["js/game-state.js","20261117-movement-visual-003"],
+  ["js/game-state.js","20261117-movement-reconciliation-004"],
   ["input/input-controller.js","20261117-movement-authority-002"],
   ["js/online.js","20261117-movement-authority-002"]
 ]) {
