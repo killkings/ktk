@@ -1000,13 +1000,26 @@
     const loadSet=defs=>Promise.all(defs.map(def=>loadLayer(def.path,def.mode,def.palette).then(result=>({
       ...result,definition:def,fallbackMotion:result.path!==def.path
     }))));
-    const [walk,idle]=await Promise.all([
+    const loadMotion=motion=>loadSet(definitions.map(def=>({
+      ...def,path:def.path.replace(/\/walk\.png$/,'/'+motion+'.png')
+    })));
+    const [walk,idle,punch,slash,thrust,shoot]=await Promise.all([
       loadSet(definitions),
-      loadSet(definitions.map(def=>({...def,path:def.path.replace(/\/walk\.png$/,'/idle.png')})))
+      loadMotion('idle'),
+      loadMotion('halfslash'),
+      loadMotion('slash'),
+      loadMotion('thrust'),
+      loadMotion('shoot')
     ]);
     if(remote.appearanceSignature!==signature) return;
     remote.walkLayers=walk.filter(layer=>layer.image&&!layer.missing);
     remote.idleLayers=idle.filter(layer=>layer.image&&!layer.missing);
+    remote.attackLayers={
+      punch:punch.filter(layer=>layer.image&&!layer.missing),
+      slash:slash.filter(layer=>layer.image&&!layer.missing),
+      thrust:thrust.filter(layer=>layer.image&&!layer.missing),
+      shoot:shoot.filter(layer=>layer.image&&!layer.missing)
+    };
     remote.layers=remote.idleLayers;
     remote.layersReady=true;
   }
@@ -1030,6 +1043,40 @@
       } else {
         remote.x=targetX; remote.y=targetY;
         remote.moving=false; remote.walkTime=0;
+      }
+      if(remote.knockback) {
+        remote.knockback.progress=Math.min(1,(remote.knockback.progress||0)+Math.max(0,dt)/KNOCKBACK_SECONDS);
+        remote.knockbackHeight=Math.sin(remote.knockback.progress*Math.PI)*KNOCKBACK_HEIGHT;
+        if(remote.knockback.progress>=1) {
+          remote.knockback=null;
+          remote.knockbackHeight=0;
+        }
+      }
+      if(Array.isArray(remote.remoteProjectiles)) {
+        remote.remoteProjectiles=remote.remoteProjectiles.filter(projectile=>{
+          projectile.elapsed+=Math.max(0,dt);
+          const step=projectile.speed*Math.max(0,dt);
+          if(projectile.projectileType==='boomerang'&&projectile.phase==='returning') {
+            const dx=remote.x-projectile.x,dy=remote.y-projectile.y;
+            const distance=Math.hypot(dx,dy);
+            if(distance<=Math.max(step,BOOMERANG_PROJECTILE_RADIUS)) return false;
+            projectile.x+=dx/distance*step;
+            projectile.y+=dy/distance*step;
+            return true;
+          }
+          const travel=Math.min(step,Math.max(0,projectile.maxDistance-projectile.distance));
+          projectile.distance+=travel;
+          projectile.x+=projectile.vectorX*travel;
+          projectile.y+=projectile.vectorY*travel;
+          if(projectile.distance>=projectile.maxDistance) {
+            if(projectile.projectileType==='boomerang') {
+              projectile.phase='returning';
+              return true;
+            }
+            return false;
+          }
+          return true;
+        });
       }
     });
   }
@@ -1173,6 +1220,65 @@
       g.fillRect(trailX-sparkleSize/2,trailY-sparkleSize/2,sparkleSize,sparkleSize);
     }
     g.restore();
+  }
+
+  function drawRemoteProjectile(g,x,y,projectile) {
+    const item=equipmentCatalog?.items.find(candidate=>candidate.id===projectile.weaponId);
+    if(projectile.projectileType==='arrow') {
+      const image=arrowSpriteItem?.image;
+      const bounds=getArrowProjectileBounds(projectile.direction);
+      if(!image?.naturalWidth||!bounds) return;
+      const width=bounds.width*WORLD_SCALE,height=bounds.height*WORLD_SCALE;
+      const directionAngles=[-Math.PI/2,Math.PI,Math.PI/2,0];
+      g.save();
+      g.imageSmoothingEnabled=false;
+      g.translate(x,y);
+      g.rotate(Math.atan2(projectile.vectorY,projectile.vectorX)-directionAngles[projectile.direction]);
+      g.drawImage(image,bounds.sourceX,bounds.sourceY,bounds.width,bounds.height,-width/2,-height/2,width,height);
+      g.restore();
+      return;
+    }
+    if(projectile.projectileType==='stone') {
+      const size=STONE_PROJECTILE_DISPLAY_SIZE*WORLD_SCALE;
+      g.save();
+      g.imageSmoothingEnabled=false;
+      g.translate(x,y);
+      g.rotate(projectile.elapsed*10);
+      g.drawImage(stoneProjectileSprite,-size/2,-size/2,size,size);
+      g.restore();
+      return;
+    }
+    if(projectile.projectileType==='magic') {
+      const pulse=1+Math.sin(projectile.elapsed*18)*0.16;
+      const radius=7*pulse;
+      g.save();
+      g.globalCompositeOperation='lighter';
+      g.shadowColor='rgba(255,255,255,.95)';
+      g.shadowBlur=14;
+      g.fillStyle='rgba(238,246,255,.34)';
+      g.beginPath(); g.arc(x,y,radius+5,0,Math.PI*2); g.fill();
+      g.shadowBlur=6;
+      g.fillStyle='#e9f1ff';
+      g.beginPath(); g.arc(x,y,radius,0,Math.PI*2); g.fill();
+      g.fillStyle='#ffffff';
+      g.beginPath(); g.arc(x-projectile.vectorX*1.5,y-projectile.vectorY*1.5,radius*.48,0,Math.PI*2); g.fill();
+      for(let i=1;i<=3;i++) {
+        const trailX=x-projectile.vectorX*i*9,trailY=y-projectile.vectorY*i*9;
+        const sparkleSize=Math.max(1,4-i);
+        g.globalAlpha=(4-i)/6;
+        g.fillRect(trailX-sparkleSize/2,trailY-sparkleSize/2,sparkleSize,sparkleSize);
+      }
+      g.restore();
+      return;
+    }
+    if(projectile.projectileType==='boomerang'&&item?.image?.naturalWidth) {
+      const frameSize=item.heldFrameSize||192;
+      const columns=Math.max(1,Math.floor(item.image.naturalWidth/frameSize));
+      const frame=Math.floor(projectile.elapsed*18)%Math.min(columns,item.attackFrameCount||6);
+      drawLayeredCharacter(g,x,y,[{
+        image:item.image,frameSize,displaySize:BOOMERANG_PROJECTILE_DISPLAY_SIZE,staticFrame:frame
+      }],WORLD_SCALE,projectile.direction,frame);
+    }
   }
 
   function drawGroundShadow(g,x,y,rx,ry,opacity=.34) {
@@ -1339,6 +1445,33 @@
       layers.push({image:shield.image,frameSize,z,staticFrame});
     }
 
+    return layers.sort((a,b)=>(a.z??a.definition?.z??0)-(b.z??b.definition?.z??0));
+  }
+
+  function getRemotePlayerAttackLayers(baseLayers,attack) {
+    const item=attack.weaponId==='longsword-1'
+      ? window.KTKWorldSword?.entity
+      : equipmentCatalog?.items.find(candidate=>candidate.id===attack.weaponId);
+    const reverseBodyFrames=Boolean(item?.attackReverseBodyFrames);
+    const layers=reverseBodyFrames
+      ? baseLayers.map(layer=>({...layer,reverseFrameCount:item.attackFrameCount||attack.frameCount||6}))
+      : [...baseLayers];
+    if(item&&item.itemType!=='ammo'&&item.equipmentClass!=='shield'&&!item.wearSlot) {
+      if(item.id==='longsword-1') {
+        layers.push(...swordSlashLayers);
+      } else {
+        const image=item.attackImage?.naturalWidth?item.attackImage:item.image;
+        if(image?.naturalWidth) {
+          const frameSize=item.attackFrameSize||item.heldFrameSize||FRAME_SIZE;
+          const displaySize=item.attackDisplaySize||frameSize;
+          const backgroundImage=item.attackBackgroundImage||null;
+          if(backgroundImage?.naturalWidth) {
+            layers.push({image:backgroundImage,frameSize,displaySize,z:Number(item.attackBackgroundZ??-1)});
+          }
+          layers.push({image,frameSize,displaySize,z:Number(item.attackEquipmentZ??150)});
+        }
+      }
+    }
     return layers.sort((a,b)=>(a.z??a.definition?.z??0)-(b.z??b.definition?.z??0));
   }
 
@@ -1516,10 +1649,28 @@
           else drawWorldItem(ctx,entity,screenX,screenY);
           if(entity===focusedItem) drawWorldItemLabel(ctx,entity,screenX,screenY);
         } else if(entity.type==='player') {
-          const remoteLayers=entity.moving&&entity.walkLayers?.length?entity.walkLayers:(entity.idleLayers?.length?entity.idleLayers:entity.layers);
-          const remoteFrame=entity.moving?Math.floor((entity.walkTime||0)*10)%WALK_COLUMNS:0;
-          drawLayeredCharacter(ctx,screenX,screenY-(entity.knockbackHeight||0),remoteLayers,WORLD_SCALE,entity.direction,remoteFrame,Boolean(entity.knockback));
+          const attack=entity.attackAnimation;
+          const attackElapsed=attack?(performance.now()-attack.startedAt)/1000:Infinity;
+          const attackActive=Boolean(attack&&attackElapsed>=0&&attackElapsed<attack.duration);
+          if(attack&&!attackActive&&attackElapsed>=attack.duration) entity.attackAnimation=null;
+          const attackBase=attackActive
+            ? (entity.attackLayers?.[attack.type]?.length?entity.attackLayers[attack.type]:entity.attackLayers?.slash)
+            : null;
+          const remoteLayers=attackBase?.length
+            ? getRemotePlayerAttackLayers(attackBase,attack)
+            : entity.moving&&entity.walkLayers?.length?entity.walkLayers:(entity.idleLayers?.length?entity.idleLayers:entity.layers);
+          const remoteFrame=attackActive
+            ? Math.min(attack.frameCount-1,Math.floor(attackElapsed/attack.duration*attack.frameCount))
+            : entity.moving?Math.floor((entity.walkTime||0)*10)%WALK_COLUMNS:0;
+          const remoteDirection=attackActive?attack.direction:entity.direction;
+          const bodyLayer=remoteLayers?.find(layer=>layer.definition?.name==='corpo')||remoteLayers?.[0];
+          const bodySize=bodyLayer?.frameSize||FRAME_SIZE;
+          const bodyWidth=bodyLayer?.image?.naturalWidth||bodyLayer?.image?.width||bodySize;
+          const bodyColumns=Math.max(1,Math.floor(bodyWidth/bodySize));
+          drawLayeredCharacter(ctx,screenX,screenY-(entity.knockbackHeight||0),remoteLayers,WORLD_SCALE,remoteDirection,remoteFrame,Boolean(entity.knockback),attackActive?bodyColumns:0);
           drawNearbyEntityStats(ctx,entity,screenX,screenY);
+        } else if(entity.type==='remote-projectile') {
+          drawRemoteProjectile(ctx,screenX,screenY,entity);
         } else if(entity.type==='boomerang-projectile') {
           drawBoomerangProjectile(ctx,screenX,screenY);
         } else if(entity.type==='arrow-projectile') {
@@ -1609,7 +1760,10 @@
     const skeleton=window.KTKEnemySkeleton.entity;
     const entities=skeleton.defeated?[]:[skeleton];
     worldItems.forEach(item=>{if(!item.collected) entities.push(item);});
-    remotePlayers.forEach(remote=>entities.push({type:'player',radius:COLLISION_RADIUS,...remote}));
+    remotePlayers.forEach(remote=>{
+      entities.push({type:'player',radius:COLLISION_RADIUS,...remote});
+      (remote.remoteProjectiles||[]).forEach(projectile=>entities.push(projectile));
+    });
     return entities;
   }
 
@@ -1691,6 +1845,14 @@
     punch.attackBonus=Number(weapon?.attackBonus)||0;
     punch.damageMultiplier=innateCast?magicProfile.damageMultiplier:1;
     punch.weaponItem=weapon;
+    window.KTKOnline?.broadcastCombat({
+      kind:'attack_start',
+      direction:punch.direction,
+      attack_type:!weapon?'punch':weapon.attackType==='thrust'?'thrust':weapon.attackType==='shoot'?'shoot':'slash',
+      weapon_id:weapon?.id||null,
+      duration:PUNCH_ANIMATION_SECONDS,
+      frame_count:weapon?.attackFrameCount||6
+    });
   }
 
   function updatePunch(deltaSeconds) {
@@ -1821,6 +1983,15 @@
     projectile.phase='outbound';
     projectile.impactElapsed=0;
     projectile.hitApplied=false;
+    const projectileType=projectile===arrowProjectile?'arrow':projectile===stoneProjectile?'stone':'magic';
+    window.KTKOnline?.broadcastCombat({
+      kind:'projectile_start',
+      projectile_type:projectileType,
+      projectile_x:projectile.x,projectile_y:projectile.y,
+      vector_x:projectile.vectorX,vector_y:projectile.vectorY,
+      speed:projectile.speed,max_distance:projectile.maxDistance,
+      direction,weapon_id:item?.id||null
+    });
   }
 
   function launchArrowProjectile(item,direction) {
@@ -1901,6 +2072,14 @@
     boomerangProjectile.speed=Number(item.projectileSpeed)>0?Number(item.projectileSpeed):480;
     boomerangProjectile.phase='outbound';
     boomerangProjectile.hitApplied=false;
+    window.KTKOnline?.broadcastCombat({
+      kind:'projectile_start',
+      projectile_type:'boomerang',
+      projectile_x:boomerangProjectile.x,projectile_y:boomerangProjectile.y,
+      vector_x:boomerangProjectile.vectorX,vector_y:boomerangProjectile.vectorY,
+      speed:boomerangProjectile.speed,max_distance:boomerangProjectile.maxDistance,
+      direction,weapon_id:item?.id||null
+    });
   }
 
   function updateBoomerangProjectile(deltaSeconds) {
@@ -2019,6 +2198,10 @@
       wearEquippedArmor();
       health.value=Math.max(health.min,health.value-damage);
       window.KTKPlayerStats.render();
+      window.KTKOnline?.broadcastCombat({
+        kind:'player_damaged',damage,
+        knockback_x:vector.x,knockback_y:vector.y
+      });
       if(health.value<=health.min) handlePlayerDeath();
     } else {
       target.attacking=false;
@@ -2031,6 +2214,13 @@
       refreshSkeletonCombatStats();
     }
     startKnockback(target,vector);
+    if(target===window.KTKEnemySkeleton.entity) {
+      window.KTKOnline?.broadcastCombat({
+        kind:'skeleton_hit',damage,
+        target_x:targetPosition.x,target_y:targetPosition.y,
+        knockback_x:vector.x,knockback_y:vector.y
+      });
+    }
   }
 
   function startKnockback(target,vector) {
@@ -2089,6 +2279,10 @@
     enemy.attacking=true;
     enemy.attackElapsed=0;
     enemy.attackHitApplied=false;
+    window.KTKOnline?.broadcastCombat({
+      kind:'skeleton_attack',direction:enemy.direction,
+      duration:PUNCH_ANIMATION_SECONDS,frame_count:6
+    });
   }
 
   function getEquipmentAttributeDetails(item) {
@@ -2842,6 +3036,6 @@
   requestAnimationFrame(render);
 })();
 </script>
-<script type="module" src="./js/online.js?v=20261117-8"></script>
+<script type="module" src="./js/online.js?v=20261117-9-combat"></script>
 </body>
 </html>
