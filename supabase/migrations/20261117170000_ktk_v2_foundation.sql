@@ -230,6 +230,8 @@ begin
     end
   );
 
+  -- Serialize spawn selection with movement and crown transitions.
+  perform pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('ktk-v2:main:movement'));
   perform 1 from public.ktk_v2_worlds where id = 'main' for update;
   if not found then raise exception 'WORLD_NOT_FOUND'; end if;
 
