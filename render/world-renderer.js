@@ -139,12 +139,13 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
 
-  function getHeadOnlyLayers(layers) {
+  function getHeadOnlyLayers(layers, extraImages=[]) {
     const headLayerNames = new Set(['cabeca','rosto','cabelo','barba','bigode']);
+    const keepImages = new Set((Array.isArray(extraImages)?extraImages:[]).filter(Boolean));
     return (Array.isArray(layers) ? layers : []).filter(layer => {
       const definition = layer?.definition || {};
       const name = String(definition.name || '').toLowerCase();
-      return headLayerNames.has(name) || definition.wearSlot === 'head';
+      return headLayerNames.has(name) || definition.wearSlot === 'head' || keepImages.has(layer?.image);
     });
   }
 
@@ -204,7 +205,7 @@
         const characterWorldX=localPlayer?camera.x*w+playerVisual.x:Number(entity.x);
         const characterWorldY=localPlayer?camera.y*h+playerVisual.y:Number(entity.y);
         const inLakeWater=characterEntity&&Boolean(
-          window.KTKWorldMap?.isInLake?.(characterWorldX,characterWorldY)
+          window.KTKWorldMap?.isInWater?.(characterWorldX,characterWorldY)
         );
         if(characterEntity&&!inLakeWater) drawGroundShadow(ctx,screenX,screenY+16.5,8.5,3.5,.34);
         else if(entity.type==='enemy') drawGroundShadow(ctx,screenX,screenY+33,18,7,.36);
@@ -223,10 +224,24 @@
           const bodyImageWidth=bodyFrameLayer?.image?.naturalWidth||bodyFrameLayer?.image?.width||bodyFrameSize;
           const bodyFrameColumns=Math.max(1,Math.floor(bodyImageWidth/bodyFrameSize));
           const direction=punch.active?punch.direction:(playerMoving?playerVisual.direction:player.direction);
+          const selectedItem=inventory[selectedInventorySlot];
+          const fishingRodHeld=inLakeWater&&selectedItem?.id==='rod'&&leftMouseHeld;
           let weaponMode=punch.active?(punch.weaponAttack?'attack':'none'):'held';
-          if(boomerangProjectile.active&&inventory[selectedInventorySlot]===boomerangProjectile.item) weaponMode='none';
-          const playerLayers=getPlayerLayers(baseLayers,weaponMode);
-          const visiblePlayerLayers=inLakeWater?getHeadOnlyLayers(playerLayers):playerLayers;
+          if(fishingRodHeld) weaponMode='attack';
+          if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
+          let playerLayers=getPlayerLayers(baseLayers,weaponMode);
+          const fishingRodImages=fishingRodHeld
+            ? [selectedItem.attackBackgroundImage,selectedItem.attackImage].filter(Boolean)
+            : [];
+          if(fishingRodHeld) {
+            const castFrame=Math.max(0,(Number(selectedItem.attackFrameCount)||13)-1);
+            playerLayers=playerLayers.map(layer=>
+              fishingRodImages.includes(layer.image)?{...layer,staticFrame:castFrame}:layer
+            );
+          }
+          const visiblePlayerLayers=inLakeWater
+            ? getHeadOnlyLayers(playerLayers,fishingRodImages)
+            : playerLayers;
           drawLayeredCharacter(ctx,screenX,screenY-(player.knockbackHeight||0),visiblePlayerLayers,PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
           const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
           if(chatBubble) visibleChatBubbles.push({
