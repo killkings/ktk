@@ -200,6 +200,7 @@
     left:18px;
     display:flex;
     width:var(--player-panel-width);
+    box-sizing:border-box;
     flex-direction:column;
     align-items:stretch;
     gap:12px;
@@ -263,17 +264,16 @@
 
 /* Chat multiplayer posicionado logo abaixo do status do jogador. */
 #game-ui .player-sidebar > .chat-composer {
-  position:relative;
+  position:static;
   z-index:4;
-  inset:auto;
-  left:auto;
-  bottom:auto;
-  transform:none;
   display:flex;
+  flex:0 0 auto;
+  align-self:stretch;
   align-items:center;
   gap:7px;
   width:100%;
   min-width:0;
+  max-width:100%;
   margin:0;
   padding:7px;
   box-sizing:border-box;
@@ -313,8 +313,10 @@
 #chat-composer button:disabled { opacity:.55; cursor:wait; }
 @media (max-width:740px) {
   #game-ui .player-sidebar > .chat-composer {
+    align-self:stretch;
     width:100%;
     min-width:0;
+    max-width:100%;
   }
 }
 @media (max-height:600px) {
