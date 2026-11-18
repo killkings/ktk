@@ -29,6 +29,60 @@
     background-size:96px 96px,128px 128px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,64px 64px;
     background-position:0 0,31px 19px,0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0;
   }
+  #world[data-grass-room="0-0"] {
+    background-color:#587b43;
+    background-image:radial-gradient(ellipse 24px 15px at 18px 17px,rgba(179,207,111,.22) 0 28%,transparent 76%),radial-gradient(ellipse 20px 13px at 66px 60px,rgba(27,73,35,.27) 0 25%,transparent 78%),radial-gradient(ellipse 2px 7px at 12px 10px,rgba(220,237,160,.66) 0 44%,transparent 75%),radial-gradient(ellipse 2px 6px at 18px 13px,rgba(204,225,135,.55) 0 42%,transparent 75%),radial-gradient(ellipse 2px 7px at 52px 44px,rgba(30,73,32,.60) 0 42%,transparent 75%),repeating-linear-gradient(68deg,rgba(26,72,31,.08) 0 1px,transparent 1px 10px);
+    background-size:88px 88px,122px 122px,88px 88px,88px 88px,88px 88px,58px 58px;
+    background-position:0 0,27px 31px,0 0,0 0,0 0,0 0;
+  }
+  #world[data-grass-room="1-0"] {
+    background-color:#719b4d;
+    background-image:radial-gradient(ellipse 18px 12px at 30px 23px,rgba(199,221,130,.25) 0 25%,transparent 78%),radial-gradient(ellipse 18px 12px at 82px 72px,rgba(40,91,42,.18) 0 24%,transparent 78%),radial-gradient(ellipse 2px 8px at 18px 14px,rgba(231,242,172,.78) 0 42%,transparent 74%),radial-gradient(ellipse 2px 6px at 24px 17px,rgba(220,235,155,.70) 0 42%,transparent 74%),radial-gradient(ellipse 2px 8px at 72px 54px,rgba(42,88,40,.51) 0 42%,transparent 74%),repeating-linear-gradient(82deg,rgba(43,88,40,.07) 0 1px,transparent 1px 14px);
+    background-size:104px 104px,136px 136px,104px 104px,104px 104px,104px 104px,72px 72px;
+    background-position:10px 5px,40px 24px,10px 5px,10px 5px,10px 5px,0 0;
+  }
+  #world[data-grass-room="2-0"] {
+    background-color:#4f8748;
+    background-image:radial-gradient(ellipse 27px 18px at 25px 24px,rgba(143,193,96,.24) 0 30%,transparent 78%),radial-gradient(ellipse 24px 16px at 82px 70px,rgba(24,67,37,.25) 0 30%,transparent 78%),radial-gradient(ellipse 2px 7px at 14px 15px,rgba(209,234,143,.65) 0 42%,transparent 74%),radial-gradient(ellipse 2px 7px at 21px 17px,rgba(203,226,133,.57) 0 42%,transparent 74%),radial-gradient(ellipse 2px 6px at 67px 56px,rgba(28,76,37,.61) 0 42%,transparent 74%),repeating-linear-gradient(58deg,rgba(23,72,33,.09) 0 1px,transparent 1px 9px);
+    background-size:92px 92px,142px 142px,92px 92px,92px 92px,92px 92px,52px 52px;
+    background-position:0 0,33px 45px,0 0,0 0,0 0,0 0;
+  }
+  #world[data-grass-room="0-1"] {
+    background-color:#668b46;
+    background-image:radial-gradient(ellipse 22px 14px at 22px 38px,rgba(185,207,111,.22) 0 27%,transparent 78%),radial-gradient(ellipse 20px 14px at 74px 20px,rgba(34,79,37,.20) 0 28%,transparent 78%),radial-gradient(ellipse 2px 7px at 10px 31px,rgba(220,238,157,.73) 0 40%,transparent 72%),radial-gradient(ellipse 2px 6px at 16px 34px,rgba(210,230,143,.59) 0 40%,transparent 72%),radial-gradient(ellipse 2px 7px at 63px 12px,rgba(37,81,37,.58) 0 40%,transparent 72%),repeating-linear-gradient(104deg,rgba(40,82,37,.08) 0 1px,transparent 1px 11px);
+    background-size:112px 112px,124px 124px,112px 112px,112px 112px,112px 112px,64px 64px;
+    background-position:17px 9px,53px 29px,17px 9px,17px 9px,17px 9px,0 0;
+  }
+  #world[data-grass-room="1-1"] {
+    background-color:#719b50;
+    background-image:radial-gradient(ellipse 17px 13px at 22px 20px,rgba(155,190,101,.20) 0 38%,transparent 78%),radial-gradient(ellipse 15px 12px at 68px 58px,rgba(43,91,43,.16) 0 42%,transparent 80%),radial-gradient(ellipse 2px 6px at 9px 10px,rgba(218,235,156,.72) 0 42%,transparent 72%),radial-gradient(ellipse 2px 5px at 14px 13px,rgba(220,233,153,.58) 0 42%,transparent 72%),radial-gradient(ellipse 2px 6px at 34px 27px,rgba(44,91,43,.58) 0 42%,transparent 72%),radial-gradient(ellipse 2px 5px at 39px 29px,rgba(44,91,43,.48) 0 42%,transparent 72%),radial-gradient(ellipse 2px 6px at 56px 8px,rgba(212,231,145,.64) 0 42%,transparent 72%),radial-gradient(ellipse 2px 5px at 61px 11px,rgba(212,231,145,.52) 0 42%,transparent 72%),radial-gradient(ellipse 2px 6px at 83px 43px,rgba(39,84,39,.55) 0 42%,transparent 72%),radial-gradient(ellipse 2px 5px at 88px 46px,rgba(39,84,39,.42) 0 42%,transparent 72%),repeating-linear-gradient(74deg,rgba(43,89,39,.075) 0 1px,transparent 1px 12px);
+    background-size:96px 96px,128px 128px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,64px 64px;
+    background-position:0 0,31px 19px,0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0;
+  }
+  #world[data-grass-room="2-1"] {
+    background-color:#5b8746;
+    background-image:radial-gradient(ellipse 26px 14px at 27px 18px,rgba(192,211,117,.20) 0 24%,transparent 77%),radial-gradient(ellipse 22px 13px at 86px 61px,rgba(27,70,34,.24) 0 27%,transparent 77%),radial-gradient(ellipse 2px 8px at 15px 9px,rgba(215,237,150,.7) 0 42%,transparent 74%),radial-gradient(ellipse 2px 6px at 21px 13px,rgba(211,232,143,.55) 0 42%,transparent 74%),radial-gradient(ellipse 2px 8px at 74px 49px,rgba(37,80,37,.61) 0 42%,transparent 74%),repeating-linear-gradient(92deg,rgba(31,72,34,.08) 0 1px,transparent 1px 13px);
+    background-size:106px 106px,146px 146px,106px 106px,106px 106px,106px 106px,68px 68px;
+    background-position:9px 18px,51px 27px,9px 18px,9px 18px,9px 18px,0 0;
+  }
+  #world[data-grass-room="0-2"] {
+    background-color:#78994b;
+    background-image:radial-gradient(ellipse 22px 14px at 18px 28px,rgba(214,218,125,.25) 0 30%,transparent 78%),radial-gradient(ellipse 19px 13px at 76px 74px,rgba(53,92,40,.16) 0 28%,transparent 78%),radial-gradient(ellipse 2px 7px at 10px 21px,rgba(239,239,167,.76) 0 40%,transparent 74%),radial-gradient(ellipse 2px 6px at 16px 25px,rgba(224,232,147,.66) 0 40%,transparent 74%),radial-gradient(ellipse 2px 7px at 64px 64px,rgba(52,91,42,.51) 0 40%,transparent 74%),repeating-linear-gradient(62deg,rgba(60,91,39,.07) 0 1px,transparent 1px 13px);
+    background-size:98px 98px,132px 132px,98px 98px,98px 98px,98px 98px,76px 76px;
+    background-position:6px 16px,38px 53px,6px 16px,6px 16px,6px 16px,0 0;
+  }
+  #world[data-grass-room="1-2"] {
+    background-color:#628546;
+    background-image:radial-gradient(ellipse 25px 15px at 33px 18px,rgba(170,204,103,.22) 0 27%,transparent 78%),radial-gradient(ellipse 23px 15px at 86px 75px,rgba(29,72,37,.25) 0 29%,transparent 78%),radial-gradient(ellipse 2px 8px at 22px 10px,rgba(215,237,145,.67) 0 40%,transparent 74%),radial-gradient(ellipse 2px 6px at 28px 14px,rgba(202,227,131,.57) 0 40%,transparent 74%),radial-gradient(ellipse 2px 8px at 75px 59px,rgba(35,78,37,.60) 0 40%,transparent 74%),repeating-linear-gradient(112deg,rgba(28,70,34,.085) 0 1px,transparent 1px 10px);
+    background-size:116px 116px,151px 151px,116px 116px,116px 116px,116px 116px,56px 56px;
+    background-position:14px 4px,59px 45px,14px 4px,14px 4px,14px 4px,0 0;
+  }
+  #world[data-grass-room="2-2"] {
+    background-color:#6c9348;
+    background-image:radial-gradient(ellipse 21px 14px at 20px 18px,rgba(194,218,126,.24) 0 27%,transparent 78%),radial-gradient(ellipse 18px 12px at 76px 57px,rgba(32,77,41,.21) 0 26%,transparent 78%),radial-gradient(ellipse 2px 7px at 12px 10px,rgba(231,241,165,.75) 0 40%,transparent 73%),radial-gradient(ellipse 2px 6px at 18px 14px,rgba(218,233,150,.6) 0 40%,transparent 73%),radial-gradient(ellipse 2px 7px at 67px 47px,rgba(38,83,40,.58) 0 40%,transparent 73%),repeating-linear-gradient(78deg,rgba(35,77,38,.07) 0 1px,transparent 1px 12px);
+    background-size:102px 102px,139px 139px,102px 102px,102px 102px,102px 102px,62px 62px;
+    background-position:4px 11px,47px 34px,4px 11px,4px 11px,4px 11px,0 0;
+  }
   .screen { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px; }
   .screen.active { display:flex; }
   #welcome { background:radial-gradient(ellipse at 50% 42%,rgba(112,151,83,.28),transparent 44%),linear-gradient(145deg,#10251b,#1e4932 55%,#12291e); }
