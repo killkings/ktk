@@ -134,7 +134,7 @@ vm.runInContext(mapSource, mapContext);
 const worldMap = mapContext.window.KTKWorldMap;
 assert.equal(typeof worldMap.getCollisionCircles, "function",
   "O mapa deve manter a API de colisores para o módulo de movimento.");
-assert.deepEqual(worldMap.getCollisionCircles(0, 0, 640), [],
+assert.equal(worldMap.getCollisionCircles(0, 0, 640).length, 0,
   "O mapa não deve gerar árvores nem colisores de troncos.");
 assert.doesNotMatch(mapSource, /drawTreeShadow|drawTreeFallback|trees_summer\.png|treeChance|decoration\.tree/,
   "A geração e a renderização de árvores devem estar removidas.");
