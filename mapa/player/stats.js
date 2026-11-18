@@ -11,7 +11,7 @@
     magicLevel:  { value: 0, min: 0, max: 10 },
     attack:      { value: 10, min: 0, max: 99 },
     defense:     { value: 10, min: 0, max: 99 },
-    speed:       { value: 2, min: 1, max: 3 }
+    speed:       { value: 2, min: 1, max: 4.5 }
   };
   const initialValues = Object.fromEntries(Object.entries(stats).map(([name, stat]) => [name, stat.value]));
   const changeListeners = new Set();
@@ -82,22 +82,23 @@
     notifyChange();
   }
 
-  function updateStamina(deltaSeconds, moving, runRequested, defending) {
+  function updateStamina(deltaSeconds, moving, runRequested, defending, speedMultiplier = 1) {
     // Os valores são replicados pelo Supabase; este método só calcula a animação/velocidade visual.
     const hasStamina = stats.stamina.value > 0;
     const running = Boolean(moving && runRequested && hasStamina);
     const shielding = Boolean(defending && hasStamina);
     const baseSpeed = running ? 3 : 2;
     const shieldSpeed = shielding ? baseSpeed * 0.5 : baseSpeed;
-    stats.speed.value = clamp(
+    const equipmentAdjustedSpeed = clamp(
       shieldSpeed - Math.max(0, Number(getEquipmentSpeedPenalty()) || 0),
       stats.speed.min,
-      stats.speed.max
+      3
     );
+    const terrainMultiplier = Math.max(1, Number(speedMultiplier) || 1);
+    stats.speed.value = Math.min(stats.speed.max, equipmentAdjustedSpeed * terrainMultiplier);
     notifyChange();
     return { running, speed: stats.speed.value, shielding, stamina: stats.stamina.value };
   }
-
   function updateMana() {
     // Regeneração e limites de mana pertencem à simulação do banco.
   }
