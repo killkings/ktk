@@ -112,8 +112,8 @@ export function acceptDatabaseChange(payload) {
   if (!row?.user_id) return;
   if (row.user_id === state.user?.id) {
     if (row.state) window.KTKWorldEntities?.applyServerState?.(row.state);
-    // A posição contínua vem das respostas RPC. Um golpe é um deslocamento
-    // discreto do servidor e só entra se seu timestamp superar a posição atual.
+    // A caminhada contínua chega por Broadcast do navegador. Apenas um
+    // knockback validado pelo servidor pode reposicionar o jogador local.
     const knockbackAt=String(row.state?.last_knockback_at||"");
     if (row.is_alive !== false && knockbackAt && knockbackAt!==state.lastLocalKnockbackAt) {
       state.lastLocalKnockbackAt=knockbackAt;
