@@ -18,6 +18,8 @@ function applyInventoryContentsFromServer(serverState) {
         const id=entry.item_id;
         let item=id==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(candidate=>candidate.id===id);
         if(!item) item=makeServerDropItem(id,entry);
+        // Defesa visual adicional: mesmo um snapshot legado não coloca roupa na mochila.
+        if(item?.wearSlot) return null;
         return item?{...item,...entry,id,collected:true}:null;
       }));
       lastServerInventorySignature=signature;
