@@ -282,7 +282,7 @@ assert.match(html,/combat-controller\.js\?v=20261118-ctrl-impact-v1/);
 assert.match(html,/online\.js\?v=20261118-inventory-interaction-v1/);
 assert.match(html,/player-replica\.js\?v=20261118-remote-hit-v1/);
 assert.match(html,/world\/world-entities\.js\?v=20261118-ctrl-impact-v2/);
-assert.match(html,/world-renderer\.js\?v=20261117-combat-v1/);
+assert.match(html,/world-renderer\.js\?v=20261118-character-head-portrait-v1/);
 assert.match(html,/input-controller\.js\?v=20261118-wearables-separated-v1/);
 assert.match(index,/20261118-character-head-portrait-v1/);
 assert.match(replicaSource,/function predictProjectile\(/);
