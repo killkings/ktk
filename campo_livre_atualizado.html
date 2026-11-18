@@ -157,7 +157,11 @@
             </section>
           </aside>
     </div>
-<div class="coords" id="coords">X 0000 · Y 0000</div>
+<form id="chat-composer" class="chat-composer" autocomplete="off">
+      <input id="chat-message" type="text" maxlength="120" placeholder="Converse com os jogadores… (T)" aria-label="Mensagem para os jogadores" autocomplete="off" spellcheck="false">
+      <button type="submit" aria-label="Enviar mensagem">Enviar</button>
+    </form>
+    <div class="coords" id="coords">X 0000 · Y 0000</div>
     <div class="skeleton-stats" id="skeleton-stats" aria-label="Atributos do esqueleto">
       <div class="skeleton-stat-line"><span>SAÚDE</span><span id="skeleton-health-value">60</span></div>
       <div class="skeleton-health-meter"><i id="skeleton-health-fill"></i></div>
@@ -200,6 +204,7 @@
 <script src="./multiplayer/player-replica.js?v=20261118-remote-hit-v1"></script>
 <script src="./game/game-lifecycle.js?v=20261118-inventory-expansion-v1"></script>
 <script src="./input/input-controller.js?v=20261118-inventory-numeric-keys-v1"></script>
-<script type="module" src="./js/online.js?v=20261118-ephemeral-player-v1"></script>
+<script src="./chat/chat-ui.js?v=20261118-world-chat-v1"></script>
+<script type="module" src="./js/online.js?v=20261118-world-chat-v1"></script>
 </body>
 </html>
