@@ -16,6 +16,17 @@
   const assets = new Map();
   const assetStatus = new Map();
 
+  // Textura LPC exclusiva para as oito salas externas. Não altera os Campos Centrais.
+  const emptyGrassAsset = new Image();
+  emptyGrassAsset.onload = () => {
+    tileCache.clear();
+    roomCanvasCache.clear();
+  };
+  emptyGrassAsset.onerror = () => {
+    // Se a arte não carregar, o piso verde original continua como fallback.
+  };
+  emptyGrassAsset.src = './mapa/assets/lpc-terrain-summer.png';
+
   const biomes = [
     {
       id: 'campos', name: 'Campos Centrais', base: '#719b50', detail: '#91ad60', accent: '#d4cc79',
@@ -214,8 +225,22 @@
     // Salas externas vazias: mesmo chão verde do mapa central, sem vegetação,
     // flores, recursos visuais ou obstáculos.
     if (biome.id === 'vazio') {
-      g.fillStyle = biome.base;
-      g.fillRect(0, 0, TILE, TILE);
+      if (emptyGrassAsset.complete &&
+          emptyGrassAsset.naturalWidth >= 112 &&
+          emptyGrassAsset.naturalHeight >= 48) {
+        // Amostra de grama LPC (16×16) ampliada em pixel art para 32×32.
+        // Pequenas inversões determinísticas reduzem a repetição visual entre tiles.
+        const flipX = random01(tx, ty, 801) > 0.5;
+        const flipY = random01(tx, ty, 802) > 0.5;
+        g.save();
+        g.translate(flipX ? TILE : 0, flipY ? TILE : 0);
+        g.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+        g.drawImage(emptyGrassAsset, 96, 32, 16, 16, 0, 0, TILE, TILE);
+        g.restore();
+      } else {
+        g.fillStyle = biome.base;
+        g.fillRect(0, 0, TILE, TILE);
+      }
       return;
     }
 
