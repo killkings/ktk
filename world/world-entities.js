@@ -135,12 +135,31 @@
     }
     if(entityId==='skeleton-1'&&window.KTKEnemySkeleton?.entity) {
       const skeleton=window.KTKEnemySkeleton.entity;
+      const previousX=Number(skeleton.x)||0;
+      const previousY=Number(skeleton.y)||0;
+      const previousHealth=Number(skeleton.health);
+      const nextX=Number(row.x)||0;
+      const nextY=Number(row.y)||0;
+      const nextHealth=Number.isFinite(Number(worldState.health))
+        ? Number(worldState.health) : skeleton.health;
+      const tookDamage=Number.isFinite(previousHealth)&&Number(nextHealth)<previousHealth;
       skeleton.lastServerRevision=incomingRevision;
-      skeleton.x=Number(row.x)||0;
-      skeleton.y=Number(row.y)||0;
-      skeleton.health=Number.isFinite(Number(worldState.health))?Number(worldState.health):skeleton.health;
+      skeleton.x=nextX;
+      skeleton.y=nextY;
+      skeleton.health=nextHealth;
       skeleton.maxHealth=Number.isFinite(Number(worldState.max_health))?Number(worldState.max_health):skeleton.maxHealth;
       skeleton.defeated=Boolean(worldState.defeated);
+      if(tookDamage&&source!=='snapshot') {
+        // O servidor já aplicou o dano e o deslocamento; reproduzimos o impacto
+        // confirmado na tela sem calcular dano nem mover o inimigo localmente.
+        startKnockback(skeleton,{
+          x:Math.sign(nextX-previousX),
+          y:Math.sign(nextY-previousY)
+        });
+        skeleton.attacking=false;
+        skeleton.attackElapsed=0;
+        skeleton.remoteAttacking=false;
+      }
       const attackStartedAt=String(worldState.attack_started_at||'');
       if(attackStartedAt&&attackStartedAt!==skeleton.lastServerAttackStartedAt) {
         skeleton.lastServerAttackStartedAt=attackStartedAt;
@@ -148,6 +167,7 @@
         skeleton.remoteAttackElapsed=0;
         skeleton.remoteAttacking=true;
       }
+      refreshSkeletonCombatStats();
       return true;
     }
     return false;

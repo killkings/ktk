@@ -95,7 +95,7 @@ const highLevelFist = makeCombatContext({
   magicLevel:10,
   response:{ok:true,hit:true,target_type:"player",damage:6,target_health:94}
 });
-highLevelFist.context.combatApi.startPunch({altKey:false});
+highLevelFist.context.combatApi.startPunch({altKey:true,ctrlKey:false});
 highLevelFist.context.combatApi.updatePunch(0.21);
 await new Promise(resolve => setImmediate(resolve));
 assert.equal(highLevelFist.calls.length,1);
@@ -103,7 +103,7 @@ assert.equal(highLevelFist.calls[0].action,"attack",
   "Level-six innate magic must not silently replace an unarmed punch.");
 assert.equal(highLevelFist.calls[0].payload.weapon_id,null);
 
-// Holding Alt while clicking explicitly selects level-six innate magic.
+// Holding Ctrl while clicking explicitly selects level-six innate magic.
 
 // 2) A selected magic weapon takes the projectile route, not the unarmed/melee route.
 const wand = makeCombatContext({
@@ -124,13 +124,58 @@ assert.equal(wand.predicted[0].direction,3);
 
 // 3) Level-six innate magic must also use the projectile action with the server item id.
 const innate = makeCombatContext({magicLevel:6,response:{ok:true,projectile_id:"projectile-innate"}});
-innate.context.combatApi.startPunch({altKey:true});
+innate.context.combatApi.startPunch({ctrlKey:true});
 innate.context.combatApi.updatePunch(0.21);
 await new Promise(resolve => setImmediate(resolve));
 assert.equal(innate.calls[0].action,"launch_projectile");
 assert.equal(innate.calls[0].payload.weapon_id,"level-six-innate-magic");
 assert.match(inputSource,/startPunch\(event\)/,
   "The mouse modifier must reach the combat controller.");
+
+// A server-confirmed skeleton health reduction must refresh the health bar and show impact.
+const worldEntityStart=worldEntities.indexOf("  function applyWorldEntity(");
+const worldEntityEnd=worldEntities.indexOf("  function applyWorldState(",worldEntityStart);
+assert.ok(worldEntityStart>=0&&worldEntityEnd>worldEntityStart);
+const worldEntityCode=worldEntities.slice(worldEntityStart,worldEntityEnd)+
+  "\nglobalThis.worldEntityApi={applyWorldEntity};";
+const skeleton={x:100,y:100,health:100,maxHealth:100,defeated:false,attacking:true,attackElapsed:0};
+let skeletonStatsRefreshes=0;
+const worldEntityContext={
+  serverEntityRevisions:new Map(),
+  serverWorldEntities:new Map(),
+  worldItems:new Set(),
+  remotePlayers:new Map(),
+  window:{KTKEnemySkeleton:{entity:skeleton}},
+  startKnockback(target,vector){target.knockback={...vector,progress:0};},
+  refreshSkeletonCombatStats(){skeletonStatsRefreshes++;}
+};
+vm.createContext(worldEntityContext);
+vm.runInContext(worldEntityCode,worldEntityContext);
+worldEntityContext.worldEntityApi.applyWorldEntity({
+  entity_id:"skeleton-1",entity_type:"enemy",x:118,y:100,revision:2,
+  state:{health:82,max_health:100,defeated:false}
+},"realtime");
+assert.equal(skeleton.health,82,"The server-confirmed magic damage must update local enemy health.");
+assert.equal(skeletonStatsRefreshes,1,"The enemy health display must refresh after the hit.");
+assert.deepEqual({...skeleton.knockback},{x:1,y:0,progress:0},
+  "A server-confirmed hit must replay its displacement as a visible impact.");
+assert.equal(skeleton.attacking,false,"A confirmed hit interrupts the enemy attack animation.");
+
+// Snapshots update health but do not replay an old hit animation on world entry.
+const previousKnockback=skeleton.knockback;
+worldEntityContext.worldEntityApi.applyWorldEntity({
+  entity_id:"skeleton-1",entity_type:"enemy",x:136,y:100,revision:3,
+  state:{health:64,max_health:100,defeated:false}
+},"snapshot");
+assert.equal(skeleton.knockback,previousKnockback,
+  "A stale world snapshot must not replay a past impact.");
+
+// The database retains responsibility for computing and applying the projectile's damage and push.
+assert.match(pvpRuleMigration, /'damage',greatest\\(1,round/);
+assert.match(pvpRuleMigration, /v_damage:=greatest\\(1,coalesce\\(\\(v_proj->>'damage'\\)::integer,5\\)\\)/);
+assert.match(pvpRuleMigration, /'health',greatest\\(0,v_target_health-v_damage\\)/);
+assert.match(pvpRuleMigration, /x=x\\+\\(v_dx\\/v_len\\)\\*18,y=y\\+\\(v_dy\\/v_len\\)\\*18/);
+
 
 // 4) The position action flush broadcasts first and persists the exact local point before returning.
 const movementCode = movementSource
@@ -205,13 +250,13 @@ assert.equal(actionEvents.some(event=>event.kind==="rpc"),true);
 assert.match(stateSource,/var\s+SPEED\s*=\s*225/);
 assert.match(stateSource,/function updateLocalPlayerVisual\(deltaSeconds\)/);
 assert.match(movementSource,/MOVING_CHECKPOINT_INTERVAL\s*=\s*500/);
-assert.match(html,/combat-controller\.js\?v=20261118-punch-v1/);
+assert.match(html,/combat-controller\.js\?v=20261118-ctrl-impact-v1/);
 assert.match(html,/online\.js\?v=20261118-remote-hit-v1/);
 assert.match(html,/player-replica\.js\?v=20261118-remote-hit-v1/);
-assert.match(html,/world\/world-entities\.js\?v=20261117-combat-v1/);
+assert.match(html,/world\/world-entities\.js\?v=20261118-ctrl-impact-v1/);
 assert.match(html,/world-renderer\.js\?v=20261117-combat-v1/);
-assert.match(html,/input-controller\.js\?v=20261118-punch-v1/);
-assert.match(index,/20261118-remote-hit-v1/);
+assert.match(html,/input-controller\.js\?v=20261118-ctrl-impact-v1/);
+assert.match(index,/20261118-ctrl-impact-v1/);
 assert.match(replicaSource,/function predictProjectile\(/);
 assert.match(worldRenderer,/entity\.type==='remote-projectile'&&entity\.phase==='outbound'/);
 
@@ -312,4 +357,4 @@ assert.equal(victimSprite.knockback.progress,knockbackProgress,
 assert.match(worldRenderer,/Boolean\(entity\.knockback\)/);
 assert.match(worldRenderer,/screenY-\(entity\.knockbackHeight\|\|0\)/);
 
-console.log("Combat flow passed: unarmed punch, magic projectiles, PvP rules, position sync, remote hit flash/knockback, unchanged facing, deduplication, and preserved walking physics.");
+console.log("Combat flow passed: Ctrl-triggered innate magic, authoritative enemy damage/impact rendering, magic projectiles, PvP rules, remote hit feedback, and preserved walking physics.");
