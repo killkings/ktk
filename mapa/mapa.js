@@ -461,7 +461,12 @@
       { x: .91, y: .33, sx: 384, sy: 0, sw: 32, sh: 64, phase: 3.1, amplitude: .034 },
       { x: .55, y: .91, sx: 416, sy: 0, sw: 32, sh: 64, phase: 5.1, amplitude: .033 }
     ];
-    // Ordena pelo ponto de apoio: plantas mais ao fundo são desenhadas primeiro.\n    // Isso evita que um sprite distante cubra a copa de uma planta à frente.\n    sprites.sort((a, b) => a.y - b.y);\n    ctx.save();\n    ctx.imageSmoothingEnabled = false;\n    for (const sprite of sprites) {
+    // Ordena pelo ponto de apoio: plantas mais ao fundo são desenhadas primeiro.
+    // Isso evita que um sprite distante cubra a copa de uma planta à frente.
+    sprites.sort((a, b) => a.y - b.y);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    for (const sprite of sprites) {
       const drawWidth = sprite.sw * baseScale;
       const drawHeight = sprite.sh * baseScale;
       const baseX = sprite.x * width;
