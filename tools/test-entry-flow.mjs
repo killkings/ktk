@@ -165,7 +165,9 @@ assert.equal(element("toast").textContent,
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
 assert.match(html, /id="enter-world"/);
 assert.match(html, /id="player-name"/);
-assert.match(html, /id="player-treasure">Tesouro: 0/);
+assert.match(html, /class="player-info-label">TESOURO/);
+assert.match(html, /id="player-treasure">0<\/span>/);
+assert.match(html, /class="world-label player-identity-card"/);
 assert.doesNotMatch(html, /mundo aberto · campo 01/);
 assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
 assert.match(html, /game-lifecycle\.js\?v=20261118-player-hud-v1/);
