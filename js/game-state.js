@@ -196,21 +196,66 @@ function updateLocalPlayerVisual(deltaSeconds) {
   const wantedY=inputY/inputLength*distance;
 
   const obstacles=[];
-  remotePlayers?.forEach(remote=>{
-    const obstacleX=Number.isFinite(remote?.targetX)?remote.targetX:Number(remote?.x);
-    const obstacleY=Number.isFinite(remote?.targetY)?remote.targetY:Number(remote?.y);
-    if(Number.isFinite(obstacleX)&&Number.isFinite(obstacleY)) {
-      obstacles.push({x:obstacleX,y:obstacleY,radius:COLLISION_RADIUS*2});
-    }
-  });
-  const skeleton=window.KTKEnemySkeleton?.entity;
-  if(skeleton&&!skeleton.defeated&&Number.isFinite(Number(skeleton.x))&&Number.isFinite(Number(skeleton.y))) {
-    obstacles.push({
-      x:Number(skeleton.x),y:Number(skeleton.y),
-      radius:COLLISION_RADIUS+Math.max(0,Number(skeleton.collision_radius)||18)
+
+  // Árvores e outros obstáculos estáticos vêm do próprio mapa, não de posições
+  // estimadas pelo desenho. O raio informado pelo mapa é somado ao do jogador.
+  const mapColliders=window.KTKWorldMap?.getCollisionCircles?.(
+    playerVisual.x,playerVisual.y,96
+  );
+  if(Array.isArray(mapColliders)) {
+    mapColliders.forEach(collider=>{
+      const obstacleX=Number(collider?.x);
+      const obstacleY=Number(collider?.y);
+      const obstacleRadius=Number(collider?.radius);
+      if(Number.isFinite(obstacleX)&&Number.isFinite(obstacleY)&&Number.isFinite(obstacleRadius)) {
+        obstacles.push({
+          x:obstacleX,y:obstacleY,
+          radius:COLLISION_RADIUS+Math.max(0,obstacleRadius)
+        });
+      }
     });
   }
 
+  // Cada jogador remoto ocupa seu próprio círculo de colisão.
+  remotePlayers?.forEach(remote=>{
+    const obstacleX=Number.isFinite(remote?.targetX)?remote.targetX:Number(remote?.x);
+    const obstacleY=Number.isFinite(remote?.targetY)?remote.targetY:Number(remote?.y);
+    const remoteRadius=Math.max(0,Number(remote?.radius)||COLLISION_RADIUS);
+    if(Number.isFinite(obstacleX)&&Number.isFinite(obstacleY)) {
+      obstacles.push({x:obstacleX,y:obstacleY,radius:COLLISION_RADIUS+remoteRadius});
+    }
+  });
+
+  // O esqueleto e os inimigos sincronizados também bloqueiam o deslocamento.
+  const skeleton=window.KTKEnemySkeleton?.entity;
+  if(skeleton&&!skeleton.defeated&&Number.isFinite(Number(skeleton.x))&&Number.isFinite(Number(skeleton.y))) {
+    const skeletonRadius=Math.max(0,Number(skeleton.collision_radius??skeleton.radius)||18);
+    obstacles.push({
+      x:Number(skeleton.x),y:Number(skeleton.y),
+      radius:COLLISION_RADIUS+skeletonRadius
+    });
+  }
+  serverWorldEntities?.forEach(entity=>{
+    if(!entity) return;
+    const entityType=String(entity.type||'');
+    const isResource=entityType==='resource'&&String(entity.status||'ready')!=='depleted';
+    const isEnemy=entityType==='enemy'&&!entity.defeated&&!entity.dead;
+    if(!isResource&&!isEnemy) return;
+    const obstacleX=Number.isFinite(entity.targetX)?entity.targetX:Number(entity.x);
+    const obstacleY=Number.isFinite(entity.targetY)?entity.targetY:Number(entity.y);
+    if(!Number.isFinite(obstacleX)||!Number.isFinite(obstacleY)) return;
+    const suppliedRadius=Number(entity.collisionRadius??entity.collision_radius??entity.radius);
+    const entityRadius=Number.isFinite(suppliedRadius)
+      ? Math.max(0,Math.min(28,suppliedRadius))
+      : (isResource?12:COLLISION_RADIUS);
+    obstacles.push({
+      x:obstacleX,y:obstacleY,
+      radius:COLLISION_RADIUS+entityRadius
+    });
+  });
+
+  // O mesmo resolvedor por subpassos da Caminhada Perfeita impede atravessar
+  // obstáculos sem mexer na velocidade, no tempo ou na suavidade do movimento.
   const blocked=(x,y,fromX,fromY)=>obstacles.some(obstacle=>{
     const before=Math.hypot(fromX-obstacle.x,fromY-obstacle.y);
     const after=Math.hypot(x-obstacle.x,y-obstacle.y);
