@@ -11,7 +11,7 @@ const [combatSource, movementSource, actionSource, stateSource, html, index, mig
   read("../campo_livre_atualizado.html"),
   read("../index.html"),
   read("../supabase/migrations/20261118005653_fix_combat_pipeline.sql"),
-  read("../supabase/migrations/20261118011315_fix_same_clan_pvp_rule.sql"),
+  read("../supabase/migrations/20261118011327_fix_same_clan_pvp_rule.sql"),
   read("../world/world-entities.js"),
   read("../render/world-renderer.js"),
   read("../multiplayer/player-replica.js")
