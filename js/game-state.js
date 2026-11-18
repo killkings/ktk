@@ -146,6 +146,7 @@ var  damageTintCache = new WeakMap();
 var  arrowProjectileBoundsCache = new Map();
 var  keys = new Set();
 var  rightMouseHeld = false;
+var  leftMouseHeld = false;
 var  shieldStaminaExhausted = false;
 var  player = {x:0,y:0,direction:2,knockback:null,knockbackHeight:0};
 var  playerVisual = {x:0,y:0,initialized:false,direction:2};
