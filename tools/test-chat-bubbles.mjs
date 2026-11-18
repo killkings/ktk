@@ -112,8 +112,14 @@ assert.match(inputSource,/closest\?\.\('#chat-composer'\)/);
 assert.match(rendererSource,/function drawChatBubble\(/);
 assert.match(rendererSource,/window\.KTKChat\?\.getBubble/);
 assert.match(html,/id="chat-composer"/);
+const sidebarStart=html.indexOf('class="player-sidebar"');
+const statusEnd=html.indexOf('</aside>',sidebarStart);
+const chatStart=html.indexOf('id="chat-composer"',sidebarStart);
+const sidebarEnd=html.indexOf('</div>\\n    <div class="coords"',chatStart);
+assert.ok(sidebarStart>=0&&statusEnd>sidebarStart&&chatStart>statusEnd&&sidebarEnd>chatStart,
+  "O campo de conversa deve ficar dentro da barra lateral, depois do status do jogador.");
 assert.match(html,/chat\/chat-ui\.js\?v=20261118-world-chat-v1/);
-assert.match(css,/\.chat-composer\s*\{/);
+assert.match(css,/#game-ui \.player-sidebar > \.chat-composer\s*\{[\s\S]*?position:relative/);
 assert.match(css,/pointer-events:auto/);
 
 console.log("World chat, authenticated Broadcast, speech bubbles and keyboard isolation passed.");
