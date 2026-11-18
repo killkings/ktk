@@ -431,6 +431,141 @@
     '-1,0':  [[.37,.99],[.29,.82],[.43,.67],[.28,.51],[.42,.36],[.29,.18],[.37,.01]]
   };
 
+  // Um lago em cada extremidade externa do anel de oito mapas.
+  // As posições ficam afastadas do traçado das estradas e nunca ocupam o centro.
+  const outerLakeLocations = {
+    '-1,-1': { x: .18, y: .18, rx: .078, ry: .095, phase: .3 },
+    '0,-1':  { x: .50, y: .14, rx: .095, ry: .065, phase: 1.1 },
+    '1,-1':  { x: .82, y: .18, rx: .078, ry: .095, phase: 2.0 },
+    '1,0':   { x: .90, y: .50, rx: .065, ry: .090, phase: 2.8 },
+    '1,1':   { x: .82, y: .82, rx: .078, ry: .095, phase: 3.6 },
+    '0,1':   { x: .50, y: .88, rx: .095, ry: .065, phase: 4.4 },
+    '-1,1':  { x: .18, y: .82, rx: .078, ry: .095, phase: 5.2 },
+    '-1,0':  { x: .10, y: .50, rx: .065, ry: .090, phase: 5.9 }
+  };
+
+  function traceLakeShape(g, centerX, centerY, radiusX, radiusY, phase, scale = 1) {
+    const count = 16;
+    const points = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i / count) - Math.PI / 2;
+      const variation = 1
+        + Math.sin(angle * 3 + phase) * .075
+        + Math.cos(angle * 5 - phase) * .045
+        + Math.sin(angle * 7 + phase * 2) * .022;
+      points.push({
+        x: centerX + Math.cos(angle) * radiusX * variation * scale,
+        y: centerY + Math.sin(angle) * radiusY * variation * scale
+      });
+    }
+
+    const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const first = midpoint(points[count - 1], points[0]);
+    g.beginPath();
+    g.moveTo(first.x, first.y);
+    for (let i = 0; i < count; i++) {
+      const current = points[i];
+      const nextMidpoint = midpoint(current, points[(i + 1) % count]);
+      g.quadraticCurveTo(current.x, current.y, nextMidpoint.x, nextMidpoint.y);
+    }
+    g.closePath();
+  }
+
+  function drawOuterLake(g, roomCol, roomRow, width, height) {
+    const lake = outerLakeLocations[`${roomCol},${roomRow}`];
+    if (!lake) return;
+
+    const centerX = lake.x * width;
+    const centerY = lake.y * height;
+    const radiusX = lake.rx * width;
+    const radiusY = lake.ry * height;
+    const scale = Math.min(width / 1920, height / 1080);
+
+    g.save();
+
+    // Sombra e margem de terra dão volume à margem irregular.
+    g.shadowColor = 'rgba(24,37,27,.34)';
+    g.shadowBlur = 12 * scale;
+    g.shadowOffsetY = 5 * scale;
+    traceLakeShape(g, centerX, centerY, radiusX, radiusY, lake.phase, 1.13);
+    g.fillStyle = 'rgba(28,43,31,.45)';
+    g.fill();
+
+    g.shadowColor = 'transparent';
+    g.shadowBlur = 0;
+    g.shadowOffsetY = 0;
+
+    traceLakeShape(g, centerX, centerY, radiusX, radiusY, lake.phase, 1.08);
+    g.fillStyle = '#77734f';
+    g.fill();
+
+    traceLakeShape(g, centerX, centerY, radiusX, radiusY, lake.phase, .99);
+    g.fillStyle = '#a89a68';
+    g.fill();
+
+    // Faixa rasa esverdeada entre a margem e a água mais profunda.
+    traceLakeShape(g, centerX, centerY, radiusX, radiusY, lake.phase, .91);
+    g.fillStyle = '#648d76';
+    g.fill();
+
+    const waterGradient = g.createLinearGradient(
+      centerX - radiusX, centerY - radiusY,
+      centerX + radiusX, centerY + radiusY
+    );
+    waterGradient.addColorStop(0, '#5a9b9a');
+    waterGradient.addColorStop(.48, '#397e8b');
+    waterGradient.addColorStop(1, '#285d73');
+    traceLakeShape(g, centerX, centerY, radiusX, radiusY, lake.phase, .79);
+    g.fillStyle = waterGradient;
+    g.fill();
+
+    // Reflexos discretos sobre a água.
+    g.strokeStyle = 'rgba(205,231,218,.50)';
+    g.lineWidth = Math.max(1, 2 * scale);
+    g.lineCap = 'round';
+    g.beginPath();
+    g.moveTo(centerX - radiusX * .37, centerY - radiusY * .34);
+    g.quadraticCurveTo(
+      centerX - radiusX * .12, centerY - radiusY * .49,
+      centerX + radiusX * .17, centerY - radiusY * .34
+    );
+    g.stroke();
+
+    g.strokeStyle = 'rgba(193,224,215,.32)';
+    g.lineWidth = Math.max(1, 1.4 * scale);
+    g.beginPath();
+    g.moveTo(centerX + radiusX * .12, centerY + radiusY * .13);
+    g.quadraticCurveTo(
+      centerX + radiusX * .31, centerY + radiusY * .04,
+      centerX + radiusX * .43, centerY + radiusY * .13
+    );
+    g.stroke();
+
+    // Pequenos tufos nas margens, sem fechar o acesso ao lago.
+    const reeds = [
+      [-.76, -.28], [.70, -.48], [.45, .72]
+    ];
+    reeds.forEach(([offsetX, offsetY], index) => {
+      const x = centerX + radiusX * offsetX;
+      const y = centerY + radiusY * offsetY;
+      g.strokeStyle = index % 2 ? '#667b48' : '#78884a';
+      g.lineWidth = Math.max(1, 2 * scale);
+      for (let blade = -1; blade <= 1; blade++) {
+        g.beginPath();
+        g.moveTo(x + blade * 3 * scale, y + 5 * scale);
+        g.quadraticCurveTo(
+          x + blade * 5 * scale,
+          y - 2 * scale,
+          x + blade * 7 * scale,
+          y - (8 + Math.abs(blade) * 2) * scale
+        );
+        g.stroke();
+      }
+    });
+
+    g.restore();
+  }
+
   function traceRoadPath(g, points, width, height) {
     g.beginPath();
     g.moveTo(points[0][0] * width, points[0][1] * height);
@@ -642,6 +777,7 @@
     }
 
     drawDecorations(roomCtx, left, top, width, height, size);
+    drawOuterLake(roomCtx, roomCol, roomRow, width, height);
     drawOuterRoad(roomCtx, roomCol, roomRow, width, height);
     return roomCanvas;
   }
