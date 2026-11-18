@@ -261,19 +261,22 @@
   .stat-row.mana-hidden { visibility:hidden; }
 
 
-/* Chat multiplayer: composer fixo na área de jogo e mensagens no canvas. */
-#game-ui .chat-composer {
-  position:absolute;
-  z-index:12;
-  left:calc(50% + 167px);
-  bottom:18px;
-  transform:translateX(-50%);
+/* Chat multiplayer posicionado logo abaixo do status do jogador. */
+#game-ui .player-sidebar > .chat-composer {
+  position:relative;
+  z-index:4;
+  inset:auto;
+  left:auto;
+  bottom:auto;
+  transform:none;
   display:flex;
   align-items:center;
   gap:7px;
-  width:min(420px,calc(100vw - 360px));
-  min-width:230px;
+  width:100%;
+  min-width:0;
+  margin:0;
   padding:7px;
+  box-sizing:border-box;
   border:1px solid rgba(229,238,211,.24);
   border-radius:14px;
   background:rgba(16,34,24,.88);
@@ -309,14 +312,12 @@
 #chat-composer button:hover { background:#e5efc2; }
 #chat-composer button:disabled { opacity:.55; cursor:wait; }
 @media (max-width:740px) {
-  #game-ui .chat-composer {
-    left:50%;
-    bottom:16px;
-    width:min(420px,calc(100vw - 24px));
+  #game-ui .player-sidebar > .chat-composer {
+    width:100%;
     min-width:0;
   }
 }
 @media (max-height:600px) {
-  #game-ui .chat-composer { bottom:9px; padding:5px; }
+  #game-ui .player-sidebar > .chat-composer { padding:5px; }
   #chat-message, #chat-composer button { height:32px; }
 }
