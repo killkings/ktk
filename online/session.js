@@ -270,20 +270,11 @@ export function startHeartbeat() {
     if (!state.online || !state.joined || state.leaving) return;
     void setPlayerVisibility(document.visibilityState === "visible");
   });
-  setInterval(() => {
-    if (!state.online || !state.joined) return;
-    void sendPosition(false).catch(error=>console.warn("KTK position heartbeat:",error));
-  }, 100);
   window.addEventListener("pagehide", () => {
     // Mesmo se uma saída pelo Esc já começou, pagehide envia uma segunda
     // solicitação idempotente keepalive como proteção contra fechamento da página.
     if (!state.online || !state.joined || !state.accessToken) return;
     state.leaving = true;
-    state.stepSequence++;
-    state.stepController?.abort();
-    state.stepController = null;
-    state.activeStepId = 0;
-    state.stepInFlight = false;
     const token = state.accessToken;
     const endpoint = SUPABASE_URL + "/rest/v1/rpc/ktk_leave_world";
     // keepalive permite que a requisição continue mesmo quando a página fecha.
