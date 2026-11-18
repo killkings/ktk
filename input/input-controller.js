@@ -52,16 +52,7 @@
   canvas.addEventListener('mousedown',event=>{
     if(event.button===0) {
       leftMouseHeld=true;
-      const selectedItem=inventory[selectedInventorySlot];
-      if(isFishingRodItem(selectedItem)) {
-        punch.active=false;
-        punch.elapsed=0;
-        punch.hitApplied=true;
-        punch.weaponAttack=false;
-        punch.weaponItem=null;
-      } else {
-        startPunch(event);
-      }
+      startPunch(event);
     }
     if(event.button===2) {
       event.preventDefault();
