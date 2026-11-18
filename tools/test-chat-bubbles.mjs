@@ -120,7 +120,13 @@ const sidebarTail=html.slice(chatStart,coordsStart);
 assert.ok(sidebarStart>=0&&statusEnd>sidebarStart&&chatStart>statusEnd&&coordsStart>chatStart&&sidebarTail.includes("</form>")&&sidebarTail.trimEnd().endsWith("</div>"),
   "O campo de conversa deve ficar dentro da barra lateral, depois do status do jogador.");
 assert.match(html,/chat\/chat-ui\.js\?v=20261118-world-chat-v1/);
-assert.match(css,/#game-ui \.player-sidebar > \.chat-composer\s*\{[\s\S]*?position:relative/);
+const chatCss=css.match(/#game-ui \.player-sidebar > \.chat-composer\s*\{([^}]*)\}/);
+assert.ok(chatCss,"O chat deve ter um bloco de layout próprio dentro da barra lateral.");
+assert.match(chatCss[1],/position:static/,"O chat precisa participar do fluxo normal, sem sobreposição.");
+assert.match(chatCss[1],/align-self:stretch/,"O chat deve ocupar toda a largura do painel.");
+assert.match(chatCss[1],/width:100%/,"O chat deve ter a mesma largura horizontal do status.");
+assert.match(chatCss[1],/flex:0 0 auto/,"O chat deve permanecer em uma faixa própria abaixo do status.");
 assert.match(css,/pointer-events:auto/);
+assert.match(html,/game\.css[^>]*chat-layout=20261118-v2/);
 
 console.log("World chat, authenticated Broadcast, speech bubbles and keyboard isolation passed.");
