@@ -13,6 +13,7 @@
   }
 
   window.addEventListener('keydown',event=>{
+    if(event.target?.closest?.('#chat-composer')) return;
     const key=event.key.toLowerCase();
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) event.preventDefault();
     if(key==='escape'&&!event.repeat&&gameStarted&&screens.game.classList.contains('active')) {
