@@ -85,7 +85,8 @@ export function sendPosition(force = false) {
 
   const now = performance.now();
   const stateSignature = [
-    snapshot.direction, snapshot.moving, snapshot.running, snapshot.guarding
+    snapshot.direction, snapshot.input_x, snapshot.input_y,
+    snapshot.moving, snapshot.running, snapshot.guarding
   ].join(":");
   const stateChanged = stateSignature !== lastBroadcastState;
   const elapsed = now - lastBroadcastAt;
