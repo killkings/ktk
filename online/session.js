@@ -9,6 +9,9 @@ import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261118
 import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-walk-v1";
 import { withTimeout } from "./request-timeout.js?v=20261117-walk-v1";
 
+let heartbeatTimer = null;
+let heartbeatInFlight = false;
+
 export function setStatus(message, connected = false) {
   let el = document.getElementById("ktk-online-status");
   if (!el) {
@@ -31,6 +34,7 @@ export async function enter(options = {}) {
   state.connecting = true;
   state.sessionId = window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2));
   resetMovementNetwork();
+  let createdAuthIdentity = false;
 
   try {
     const displayName = String(options.displayName || "").trim().slice(0, 24);
@@ -51,6 +55,13 @@ export async function enter(options = {}) {
       const { data: previousSession, error: previousSessionError } = await withTimeout("A leitura da sessão anterior", 10000, () => supabase.auth.getSession());
       if (previousSessionError) throw previousSessionError;
       if (previousSession?.session) {
+        const { data: previousExit, error: previousExitError } = await withTimeout(
+          "O encerramento do personagem anterior", 10000,
+          () => supabase.rpc("ktk_leave_world")
+        );
+        if (previousExitError) throw previousExitError;
+        if (previousExit?.ok === false) throw new Error("O servidor não confirmou a morte do personagem anterior.");
+
         const { error: signOutError } = await withTimeout("O encerramento da conta anterior", 10000, () => supabase.auth.signOut({ scope: "local" }));
         const { data: afterSignOut, error: afterSignOutError } = await withTimeout("A confirmação do encerramento anterior", 10000, () => supabase.auth.getSession());
         if (afterSignOutError) throw afterSignOutError;
@@ -62,6 +73,7 @@ export async function enter(options = {}) {
       reportEntryProgress(options, "Criando a conta temporária do jogador...");
       const result = await withTimeout("A criação da conta anônima", 15000, () => supabase.auth.signInAnonymously());
       if (result.error) throw new Error("Não foi possível criar outra conta de jogador. Confira se o login anônimo está ativado no Supabase: " + result.error.message);
+      createdAuthIdentity = true;
       sessionData = { session: result.data.session };
     } else {
       const { data, error } = await withTimeout("A leitura da sessão autenticada", 10000, () => supabase.auth.getSession());
@@ -71,6 +83,7 @@ export async function enter(options = {}) {
         reportEntryProgress(options, "Criando a conta temporária do jogador...");
       const result = await withTimeout("A criação da conta anônima", 15000, () => supabase.auth.signInAnonymously());
         if (result.error) throw new Error("Não foi possível criar sua conta de jogador. Confira se o login anônimo está ativado no Supabase: " + result.error.message);
+        createdAuthIdentity = true;
         sessionData = { session: result.data.session };
       }
     }
@@ -121,6 +134,26 @@ export async function enter(options = {}) {
     void setPlayerVisibility(document.visibilityState === "visible");
     return { ok: true, player };
   } catch (error) {
+    if (createdAuthIdentity) {
+      try {
+        const { error: discardError } = await withTimeout(
+          "A limpeza da identidade temporária", 8000,
+          () => supabase.rpc("ktk_discard_unused_identity")
+        );
+        if (!discardError) {
+          const { error: localSignOutError } = await supabase.auth.signOut({ scope: "local" });
+          if (localSignOutError) console.warn("KTK temporary identity sign-out:", localSignOutError.message);
+          state.user = null;
+          state.accessToken = "";
+        } else {
+          // A conta já possui um personagem vivo (por exemplo, falha ao abrir o canal).
+          // Mantém a sessão local para permitir que o jogador tente entrar novamente.
+          console.warn("KTK temporary identity retained:", discardError.message);
+        }
+      } catch (cleanupError) {
+        console.warn("KTK temporary identity cleanup:", cleanupError?.message || cleanupError);
+      }
+    }
     console.error("KTK online:", error);
     if (state.channel) {
       try { await withTimeout("O encerramento do canal anterior", 7000, () => supabase.removeChannel(state.channel)); } catch (cleanupError) {
@@ -225,8 +258,7 @@ export async function markDead() {
   await clearLocalSession("○ Personagem morto · sessão apagada");
 }
 
-// Saída voluntária encerra a vida no banco antes de desligar a sessão multiplayer.
-// A identidade Auth só é trocada quando o jogador escolhe criar o próximo personagem.
+// Saída voluntária encerra a vida e elimina perfil/identidade no servidor antes de desligar a sessão.
 
 export async function leaveWorld() {
   if (state.leaving) return { ok: false, error: "A saída do mundo já está sendo processada." };
@@ -255,6 +287,19 @@ export async function leaveWorld() {
   }
 }
 
+async function sendHeartbeat() {
+  if (heartbeatInFlight || state.leaving || !state.online || !state.joined || !state.user) return;
+  heartbeatInFlight = true;
+  try {
+    const { error } = await supabase.rpc("ktk_heartbeat");
+    if (error) console.warn("KTK player heartbeat:", error.message);
+  } catch (error) {
+    console.warn("KTK player heartbeat:", error?.message || error);
+  } finally {
+    heartbeatInFlight = false;
+  }
+}
+
 async function setPlayerVisibility(visible) {
   if (state.leaving || !state.online || !state.joined || !state.user) return;
   try {
@@ -268,6 +313,12 @@ async function setPlayerVisibility(visible) {
 }
 
 export function startHeartbeat() {
+  if (heartbeatTimer === null) {
+    heartbeatTimer = window.setInterval(() => {
+      void sendHeartbeat();
+    }, 20000);
+  }
+
   document.addEventListener("visibilitychange", () => {
     if (!state.online || !state.joined || state.leaving) return;
     void setPlayerVisibility(document.visibilityState === "visible");
