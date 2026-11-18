@@ -264,31 +264,35 @@
           const bodyFrameColumns=Math.max(1,Math.floor(bodyImageWidth/bodyFrameSize));
           const direction=punch.active?punch.direction:(playerMoving?playerVisual.direction:player.direction);
           const selectedItem=inventory[selectedInventorySlot];
-          const fishingRodHeld=inLakeWater&&selectedItem?.id==='rod'&&leftMouseHeld;
+          const fishingRodHeld=selectedItem?.id==='rod'&&leftMouseHeld;
           let weaponMode=punch.active?(punch.weaponAttack?'attack':'none'):'held';
           if(fishingRodHeld) weaponMode='attack';
           if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
           let playerLayers=getPlayerLayers(baseLayers,weaponMode,fishingRodHeld?selectedItem:null);
+          const fishingRodForegroundImage=selectedItem.attackImage?.naturalWidth
+            ? selectedItem.attackImage
+            : selectedItem.image;
+          const fishingRodBackgroundImage=selectedItem.attackBackgroundImage||selectedItem.heldBackgroundImage;
           const fishingRodOriginalImages=fishingRodHeld
-            ? [
-                selectedItem.attackImage?.naturalWidth?selectedItem.attackImage:selectedItem.image,
-                selectedItem.attackBackgroundImage||selectedItem.heldBackgroundImage
-              ].filter(Boolean)
+            ? [fishingRodForegroundImage,fishingRodBackgroundImage].filter(Boolean)
             : [];
           const fishingRodFrozenImages=[];
           if(fishingRodHeld) {
             playerLayers=playerLayers.map(layer=>{
               if(!fishingRodOriginalImages.includes(layer.image)) return layer;
-              const frozenImage=getFishingRodSingleFrame(
-                layer.image,
-                layer.frameSize||selectedItem.attackFrameSize||128
-              );
-              if(!frozenImage) return layer;
-              fishingRodFrozenImages.push(frozenImage);
+              const frameSize=Math.max(1,Number(layer.frameSize)||Number(selectedItem.attackFrameSize)||128);
+              const imageWidth=Number(layer.image.naturalWidth||layer.image.width)||0;
+              const frameCount=Math.max(1,Math.floor(imageWidth/frameSize));
+              const fixedFrame=Math.max(0,frameCount-2);
+              const frozenImage=getFishingRodSingleFrame(layer.image,frameSize);
+              // Se não for possível recortar a folha, o staticFrame ainda fixa
+              // a imagem original no penúltimo quadro e desliga a sincronização.
+              const visibleImage=frozenImage||layer.image;
+              fishingRodFrozenImages.push(visibleImage);
               return {
                 ...layer,
-                image:frozenImage,
-                staticFrame:0,
+                image:visibleImage,
+                staticFrame:frozenImage?0:fixedFrame,
                 syncToBody:false,
                 fallbackMotion:false
               };
