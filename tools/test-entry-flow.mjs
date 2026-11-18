@@ -168,7 +168,7 @@ assert.match(html, /id="player-name"/);
 assert.match(html, /id="player-treasure">Tesouro: 0/);
 assert.doesNotMatch(html, /mundo aberto · campo 01/);
 assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
-assert.match(html, /game-lifecycle\\.js\\?v=20261118-player-hud-v1/);
+assert.match(html, /game-lifecycle\.js\?v=20261118-player-hud-v1/);
 assert.match(html, /online\.js\?v=20261118-inventory-interaction-v1/);
 assert.doesNotMatch(lifecycle, /onProgress\s*:/);
 assert.ok(lifecycle.indexOf("showScreen('game')") < lifecycle.indexOf("applyServerState(onlinePlayer.state)"),
