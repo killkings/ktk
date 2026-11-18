@@ -230,17 +230,30 @@
           if(fishingRodHeld) weaponMode='attack';
           if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
           let playerLayers=getPlayerLayers(baseLayers,weaponMode,fishingRodHeld?selectedItem:null);
+          const fishingRodForegroundImages=fishingRodHeld
+            ? [selectedItem.attackImage,selectedItem.image].filter(Boolean)
+            : [];
           const fishingRodImages=fishingRodHeld
-            ? [selectedItem.attackBackgroundImage,selectedItem.attackImage].filter(Boolean)
+            ? [...fishingRodForegroundImages,selectedItem.attackBackgroundImage].filter(Boolean)
             : [];
           if(fishingRodHeld) {
-            const foregroundFrameCount=Math.max(1,Number(selectedItem.attackFrameCount)||13);
-            const penultimateForegroundFrame=Math.max(0,foregroundFrameCount-2);
-            playerLayers=playerLayers.map(layer=>
-              layer.image===selectedItem.attackImage
-                ? {...layer,staticFrame:penultimateForegroundFrame}
-                : layer
+            // O catálogo cria duas instâncias de Image para a mesma folha FG.
+            // Se a folha de ataque ainda estiver carregando, getPlayerLayers usa
+            // item.image como fallback; ambas precisam receber a mesma trava.
+            const foregroundLayer=playerLayers.find(layer=>
+              fishingRodForegroundImages.includes(layer.image)
             );
+            if(foregroundLayer) {
+              const frameSize=Math.max(1,Number(foregroundLayer.frameSize)||Number(selectedItem.attackFrameSize)||128);
+              const imageWidth=Number(foregroundLayer.image.naturalWidth||foregroundLayer.image.width)||0;
+              const foregroundFrameCount=Math.max(1,Math.floor(imageWidth/frameSize));
+              const penultimateForegroundFrame=Math.max(0,foregroundFrameCount-2);
+              playerLayers=playerLayers.map(layer=>
+                layer===foregroundLayer
+                  ? {...layer,staticFrame:penultimateForegroundFrame,syncToBody:false,fallbackMotion:false}
+                  : layer
+              );
+            }
           }
           const visiblePlayerLayers=inLakeWater
             ? getHeadOnlyLayers(playerLayers,fishingRodImages)
