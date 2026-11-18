@@ -141,7 +141,7 @@
     assets.set(file, image);
   }
 
-  ['terrain_summer.png', 'trees_summer.png', 'wildflowers_summer.png'].forEach(loadAsset);
+  ['terrain_summer.png', 'wildflowers_summer.png'].forEach(loadAsset);
 
   function setViewport(width, height) {
     const safeWidth = Math.max(1, Number(width) || 1920);
@@ -310,63 +310,16 @@
     }
   }
 
-  function drawTreeShadow(ctx, x, y, radiusX, radiusY) {
-    ctx.save();
-    ctx.fillStyle = 'rgba(12,18,11,.34)';
-    ctx.beginPath();
-    ctx.ellipse(x + 2, y, radiusX, radiusY, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
-  }
-
-  function drawTreeFallback(ctx, x, y, size, pine, tint) {
-    ctx.fillStyle = '#65563b';
-    ctx.fillRect(x - size * 0.12, y + size * 0.1, size * 0.24, size * 0.7);
-    ctx.fillStyle = tint;
-    if (pine) {
-      ctx.beginPath();
-      ctx.moveTo(x, y - size);
-      ctx.lineTo(x + size * 0.7, y + size * 0.5);
-      ctx.lineTo(x - size * 0.7, y + size * 0.5);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#789173';
-      ctx.beginPath();
-      ctx.moveTo(x, y - size * 0.68);
-      ctx.lineTo(x + size * 0.45, y + size * 0.12);
-      ctx.lineTo(x - size * 0.45, y + size * 0.12);
-      ctx.closePath();
-      ctx.fill();
-    } else {
-      ctx.beginPath();
-      ctx.arc(x, y, size * 0.72, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#74945a';
-      ctx.beginPath();
-      ctx.arc(x - size * 0.22, y - size * 0.18, size * 0.38, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = 'rgba(205,214,137,.3)';
-      ctx.beginPath();
-      ctx.arc(x + size * 0.2, y - size * 0.2, size * 0.2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
   function decorationAt(tx, ty) {
     const key = tx + ',' + ty;
     if (decorationCache.has(key)) return decorationCache.get(key);
 
     const region = regionAt(tx * TILE + TILE / 2, ty * TILE + TILE / 2);
-    const treeChance = {
-      selva: 0.18, floresta: 0.12, taiga: 0.13, savana: 0.05,
-      campos: 0.035, pantano: 0.04, 'terras-altas': 0.035, congeladas: 0.025
-    }[region.id] || 0;
     const flowerChance = {
       campos: 0.16, floresta: 0.08, savana: 0.10, selva: 0.06
     }[region.id] || 0;
     const result = {
       region,
-      tree: random01(tx, ty, region.ring + 71) < treeChance,
       flower: random01(tx, ty, region.ring + 113) < flowerChance
     };
     decorationCache.set(key, result);
@@ -374,33 +327,10 @@
     return result;
   }
 
-  // Retorna os troncos das árvores visíveis nas proximidades do jogador.
-  // A consulta usa a mesma decoração determinística usada pelo renderizador.
-  function getCollisionCircles(x, y, range = 96) {
-    const centerX = Number(x);
-    const centerY = Number(y);
-    if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return [];
-
-    const searchRange = Math.max(0, Math.min(2048, Number(range) || 0)) + TILE;
-    const minX = Math.floor((centerX - searchRange) / TILE);
-    const maxX = Math.floor((centerX + searchRange) / TILE);
-    const minY = Math.floor((centerY - searchRange) / TILE);
-    const maxY = Math.floor((centerY + searchRange) / TILE);
-    const colliders = [];
-
-    for (let ty = minY; ty <= maxY; ty++) {
-      for (let tx = minX; tx <= maxX; tx++) {
-        if (!decorationAt(tx, ty).tree) continue;
-        colliders.push({
-          id: `tree:${tx}:${ty}`,
-          type: 'tree',
-          x: tx * TILE + TILE / 2,
-          y: ty * TILE + TILE / 2 + 13,
-          radius: 7
-        });
-      }
-    }
-    return colliders;
+  // O mapa não possui árvores nem obstáculos ambientais desse tipo.
+  // Mantém a API para os módulos de movimento sem criar colisores invisíveis.
+  function getCollisionCircles() {
+    return [];
   }
 
   function drawDecorations(ctx, left, top, width, height, tileSize) {
@@ -418,33 +348,6 @@
         const season = region.biome.season;
         const drawX = wx - left;
         const drawY = wy - top;
-
-        if (decoration.tree) {
-          drawTreeShadow(ctx, drawX, drawY + 13, 18, 7);
-          const seasonName = season === 'winter_ice' ? 'winter' : (season || 'summer');
-          const sheet = assets.get('trees_' + seasonName + '.png');
-          let drewSheet = false;
-          if (sheet && sheet.complete && sheet.naturalWidth >= 480 && sheet.naturalHeight >= 576) {
-            const pine = region.id === 'taiga' || region.id === 'congeladas';
-            const sx = pine ? 384 : 128;
-            const sy = pine ? 384 : 0;
-            const sw = pine ? 96 : 96;
-            const sh = pine ? 144 : 144;
-            if (sheet.naturalWidth >= sx + sw && sheet.naturalHeight >= sy + sh) {
-              ctx.drawImage(sheet, sx, sy, sw, sh, drawX - 24, drawY - 58, 48, 72);
-              drewSheet = true;
-            }
-          }
-          if (!drewSheet) {
-            const pine = region.id === 'taiga' || region.id === 'congeladas';
-            const tint = region.id === 'selva' ? '#28623c'
-              : region.id === 'savana' ? '#8e9850'
-              : region.id === 'taiga' ? '#416755'
-              : region.id === 'congeladas' ? '#74969a'
-              : '#527947';
-            drawTreeFallback(ctx, drawX, drawY, region.id === 'selva' ? 22 : 18, pine, tint);
-          }
-        }
 
         if (decoration.flower) {
           const flowers = assets.get('wildflowers_' + (season === 'winter_ice' ? 'winter' : (season || 'summer')) + '.png');
