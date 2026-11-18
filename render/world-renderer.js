@@ -20,6 +20,81 @@
     g.drawImage(frameCanvas,12,0,40,40,0,0,portrait.width,portrait.height);
   }
 
+  function drawChatBubble(g,text,x,playerY,opacity=1) {
+    const message=String(text||'').trim();
+    if(!message) return;
+
+    const maxWidth=Math.max(90,Math.min(220,canvas.clientWidth-24));
+    const lineHeight=15;
+    const maxLines=4;
+    g.save();
+    g.font='600 12px system-ui,sans-serif';
+    g.textAlign='center';
+    g.textBaseline='middle';
+
+    const lines=[];
+    let current='';
+    const words=message.split(/\s+/);
+    let wordIndex=0;
+    for(;wordIndex<words.length;wordIndex++) {
+      const candidate=current?current+' '+words[wordIndex]:words[wordIndex];
+      if(current&&g.measureText(candidate).width>maxWidth-18) {
+        lines.push(current);
+        current=words[wordIndex];
+        if(lines.length>=maxLines) break;
+      } else {
+        current=candidate;
+      }
+    }
+    if(current&&lines.length<maxLines) lines.push(current);
+    if(wordIndex<words.length) {
+      const last=lines.length-1;
+      if(last>=0) {
+        let line=lines[last].replace(/[.…]+$/,'');
+        while(line&&g.measureText(line+'…').width>maxWidth-20) line=line.slice(0,-1);
+        lines[last]=(line||'…')+'…';
+      }
+    }
+    if(!lines.length) lines.push(message.slice(0,20));
+
+    const boxWidth=Math.min(maxWidth,Math.max(76,...lines.map(line=>g.measureText(line).width+20)));
+    const boxHeight=lines.length*lineHeight+12;
+    const centerX=Math.max(boxWidth/2+6,Math.min(canvas.clientWidth-boxWidth/2-6,x));
+    const bottom=Math.max(boxHeight+12,playerY-40);
+    const top=bottom-boxHeight;
+
+    g.globalAlpha=Math.max(0,Math.min(1,Number(opacity)||0));
+    g.shadowColor='rgba(0,0,0,.34)';
+    g.shadowBlur=8;
+    g.shadowOffsetY=3;
+    g.fillStyle='rgba(246,242,218,.97)';
+    g.strokeStyle='rgba(44,67,39,.92)';
+    g.lineWidth=1.25;
+
+    g.beginPath();
+    if(typeof g.roundRect==='function') g.roundRect(centerX-boxWidth/2,top,boxWidth,boxHeight,9);
+    else g.rect(centerX-boxWidth/2,top,boxWidth,boxHeight);
+    g.fill();
+    g.stroke();
+
+    g.beginPath();
+    g.moveTo(centerX-6,bottom-1);
+    g.lineTo(centerX,bottom+7);
+    g.lineTo(centerX+6,bottom-1);
+    g.closePath();
+    g.fill();
+    g.stroke();
+
+    g.shadowColor='transparent';
+    g.shadowBlur=0;
+    g.shadowOffsetY=0;
+    g.fillStyle='#1d2b1a';
+    lines.forEach((line,index)=>{
+      g.fillText(line,centerX,top+6+lineHeight*(index+.5),boxWidth-16);
+    });
+    g.restore();
+  }
+
   function drawPreview() {
     pctx.clearRect(0,0,preview.width,preview.height);
     drawIdentityPortrait();
@@ -103,6 +178,7 @@
       const playerWorldY=camera.y*h+player.y;
       let focusedItem=null;
       let focusedItemDistance=NEARBY_INFO_RADIUS;
+      const visibleChatBubbles=[];
       worldItems.forEach(item=>{
         if(item.collected) return;
         const distance=Math.hypot(playerWorldX-item.x,playerWorldY-item.y);
@@ -135,6 +211,11 @@
           let weaponMode=punch.active?(punch.weaponAttack?'attack':'none'):'held';
           if(boomerangProjectile.active&&inventory[selectedInventorySlot]===boomerangProjectile.item) weaponMode='none';
           drawLayeredCharacter(ctx,screenX,screenY-(player.knockbackHeight||0),getPlayerLayers(baseLayers,weaponMode),WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
+          const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
+          if(chatBubble) visibleChatBubbles.push({
+            text:chatBubble.text,opacity:chatBubble.opacity,x:screenX,
+            y:screenY-(player.knockbackHeight||0)
+          });
           return;
         }
         if(entity.type==='enemy' && entity.id==='skeleton-1') {
@@ -169,6 +250,11 @@
           const bodyColumns=Math.max(1,Math.floor(bodyWidth/bodySize));
           drawLayeredCharacter(ctx,screenX,screenY-(entity.knockbackHeight||0),remoteLayers,WORLD_SCALE,remoteDirection,remoteFrame,Boolean(entity.knockback),attackActive?bodyColumns:0);
           drawNearbyEntityStats(ctx,entity,screenX,screenY);
+          const chatBubble=window.KTKChat?.getBubble?.(entity.id);
+          if(chatBubble) visibleChatBubbles.push({
+            text:chatBubble.text,opacity:chatBubble.opacity,x:screenX,
+            y:screenY-(entity.knockbackHeight||0)
+          });
         } else if(entity.type==='remote-projectile') {
           drawRemoteProjectile(ctx,screenX,screenY,entity);
         } else if(entity.type==='boomerang-projectile') {
@@ -180,6 +266,9 @@
         } else if(entity.type==='magic-projectile') {
           drawMagicProjectile(ctx,screenX,screenY);
         }
+      });
+      visibleChatBubbles.forEach(bubble=>{
+        drawChatBubble(ctx,bubble.text,bubble.x,bubble.y,bubble.opacity);
       });
       updateSkeletonStatsPosition(w,h);
 
