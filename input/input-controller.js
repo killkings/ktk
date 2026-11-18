@@ -44,7 +44,7 @@
   });
   canvas.addEventListener('mousedown',event=>{
     if(event.button===0) {
-      startPunch();
+      startPunch(event);
     }
     if(event.button===2) {
       event.preventDefault();
