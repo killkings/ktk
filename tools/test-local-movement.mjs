@@ -259,7 +259,7 @@ assert.doesNotMatch(playerSync, /applyOwnServerPosition|reconcileLocalPosition|i
 assert.match(playerSync, /acceptMovementBroadcast/);
 assert.match(realtime, /event:\s*"player_position"/);
 assert.doesNotMatch(replica, /getLocalIntentTimeline|getLocalControls|motionSnapshots|REMOTE_MOTION_SNAPSHOT|reconcileLocalPosition/);
-assert.match(html, /online\.js\?v=20261118-inventory-expansion-v1/);
+assert.match(html, /online\.js\?v=20261118-ephemeral-player-v1/);
 assert.match(html, /mapa\.js\?v=20261118-trees-removed-v1/);
 assert.match(html, /game-state\.js\?v=20261117-collision-v1/);
 assert.match(rootHtml, /20261118-inventory-numeric-keys-v1/);
