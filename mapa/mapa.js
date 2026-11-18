@@ -457,7 +457,7 @@
     if (ctx.canvas?.dataset) {
       const cssCol = Math.max(0, Math.min(layout[0].length - 1, roomCol + GRID_CENTER));
       const cssRow = Math.max(0, Math.min(layout.length - 1, roomRow + GRID_CENTER));
-      ctx.canvas.dataset.grassRoom = `${cssCol}-${cssRow}`;
+      ctx.canvas.setAttribute('data-grass-room', `${cssCol}-${cssRow}`);
     }
 
     const cacheKey = `${roomCol},${roomRow},${Math.round(width)}x${Math.round(height)}`;
