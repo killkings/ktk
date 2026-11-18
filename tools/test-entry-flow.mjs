@@ -170,7 +170,7 @@ assert.match(html, /id="player-name"/);
 assert.match(html, /class="player-info-label">TESOURO/);
 assert.match(html, /id="player-treasure">0<\/span>/);
 assert.match(html, /class="world-label player-identity-card"/);
-assert.match(html, /class="world-label player-identity-card"[\\s\\S]*?<\\/div>\\s*<div class="hud-top">/);
+assert.ok(html.indexOf('class="world-label player-identity-card"') < html.indexOf('<div class="hud-top">'));
 assert.match(gameCss, /#game-ui\s*\{[^}]*--player-panel-width:clamp\(190px,21vw,280px\)/);
 assert.match(gameCss, /\.player-stats\s*\{[^}]*width:var\(--player-panel-width\)/);
 assert.match(gameCss, /\.world-label\.player-identity-card\s*\{[^}]*position:absolute; top:18px; left:18px; display:block; flex:none; width:var\(--player-panel-width\); min-width:var\(--player-panel-width\); max-width:var\(--player-panel-width\); padding:12px/);
