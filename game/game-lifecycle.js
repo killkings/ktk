@@ -148,6 +148,8 @@ var  leavingGame = false;
       }
 
       const onlinePlayer=onlineResult.player;
+      const playerNameLabel=document.getElementById('player-name');
+      if(playerNameLabel) playerNameLabel.textContent=displayName;
       const isNewCharacter=Boolean(newCharacterRequired);
       const wasAlreadyPlaying=Boolean(gameStarted);
 
