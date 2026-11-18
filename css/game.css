@@ -23,7 +23,7 @@
   .primary:hover { transform:translateY(-2px); box-shadow:0 9px 0 #9fb273; filter:brightness(1.04); }
   .primary:active { transform:translateY(4px); box-shadow:0 3px 0 #9fb273; }
   .small-note { margin-top:22px; color:#91a891; font-size:11px; }
-  #creator { background:radial-gradient(ellipse at 20% 20%,rgba(122,160,93,.16),transparent 38%),linear-gradient(145deg,#10251b,#1b422d 55%,#12291e); overflow:auto; }
+  #creator { background:#000000; overflow:auto; }
   .creator-shell { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(260px,.8fr); width:min(1000px,100%); height:min(820px,calc(100vh - 48px)); max-height:min(820px,calc(100vh - 48px)); min-height:0; border:1px solid rgba(236,244,220,.16); border-radius:26px; overflow:hidden; background:rgba(15,34,24,.88); box-shadow:0 28px 90px rgba(0,0,0,.35); }
   .creator-controls { padding:clamp(16px,3vw,30px); overflow:auto; min-height:0; }
   .creator-controls h2 { margin:7px 0 7px; font-size:32px; letter-spacing:-.045em; }
