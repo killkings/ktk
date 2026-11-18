@@ -13,7 +13,8 @@
   const assetRoot = './mapa/assets/';
   const assetSources = {
     'terrain_summer.png': './mapa/assets/lpc-terrain-summer.png',
-    'wildflowers_summer.png': 'https://raw.githubusercontent.com/ElizaWy/LPC/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/wildflowers_summer.png'
+    'wildflowers_summer.png': 'https://raw.githubusercontent.com/ElizaWy/LPC/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/wildflowers_summer.png',
+    'plants_summer.png': 'https://raw.githubusercontent.com/ElizaWy/LPC/3e8710904ce1fc7ea9d70f6ccd0745b99efd54ec/Terrain/plants_summer.png'
   };
   const tileCache = new Map();
   const decorationCache = new Map();
@@ -167,7 +168,7 @@
     assets.set(file, image);
   }
 
-  ['terrain_summer.png', 'wildflowers_summer.png'].forEach(loadAsset);
+  ['terrain_summer.png', 'wildflowers_summer.png', 'plants_summer.png'].forEach(loadAsset);
 
   function setViewport(width, height) {
     const safeWidth = Math.max(1, Number(width) || 1920);
@@ -399,6 +400,59 @@
         }
       }
     }
+  }
+
+  // Vegetação LPC do ElizaWy: aplicada somente aos Campos Centrais.
+  // Os objetos são decorativos e não criam colisões; a clareira central permanece livre.
+  function drawCentralVegetation(ctx, width, height) {
+    const plants = assets.get('plants_summer.png');
+    if (!plants || !plants.complete || plants.naturalWidth < 384 || plants.naturalHeight < 96) return;
+
+    const scale = Math.min(width / 1920, height / 1080);
+    const sprites = [
+      // Arbustos e moitas em grupos espaçados pelas bordas do campo.
+      { x: .105, y: .18, sx: 0,   sy: 0,  w: 76, h: 72 },
+      { x: .285, y: .29, sx: 32,  sy: 0,  w: 72, h: 70 },
+      { x: .355, y: .76, sx: 64,  sy: 32, w: 78, h: 74 },
+      { x: .685, y: .16, sx: 96,  sy: 0,  w: 76, h: 72 },
+      { x: .86,  y: .48, sx: 0,   sy: 32, w: 80, h: 76 },
+      { x: .885, y: .78, sx: 96,  sy: 32, w: 76, h: 72 },
+      { x: .54,  y: .88, sx: 32,  sy: 64, w: 72, h: 70 },
+      { x: .115, y: .66, sx: 64,  sy: 64, w: 74, h: 72 },
+
+      // Plantas de folhas largas.
+      { x: .24,  y: .53, sx: 128, sy: 0,  w: 64, h: 62 },
+      { x: .74,  y: .55, sx: 128, sy: 32, w: 68, h: 64 },
+      { x: .48,  y: .20, sx: 160, sy: 0,  w: 62, h: 60 },
+      { x: .48,  y: .83, sx: 160, sy: 32, w: 62, h: 60 },
+
+      // Capim alto: variedades diferentes de cada linha do sprite sheet.
+      { x: .17,  y: .30, sx: 256, sy: 0,  w: 54, h: 68 },
+      { x: .39,  y: .16, sx: 288, sy: 32, w: 54, h: 68 },
+      { x: .62,  y: .22, sx: 320, sy: 0,  w: 56, h: 70 },
+      { x: .80,  y: .31, sx: 352, sy: 32, w: 56, h: 70 },
+      { x: .79,  y: .72, sx: 256, sy: 64, w: 54, h: 68 },
+      { x: .38,  y: .88, sx: 288, sy: 64, w: 54, h: 68 },
+      { x: .13,  y: .52, sx: 320, sy: 64, w: 54, h: 68 },
+      { x: .91,  y: .24, sx: 352, sy: 0,  w: 56, h: 70 },
+      { x: .61,  y: .83, sx: 320, sy: 32, w: 56, h: 70 }
+    ];
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    for (const sprite of sprites) {
+      const drawWidth = sprite.w * scale;
+      const drawHeight = sprite.h * scale;
+      const drawX = sprite.x * width - drawWidth / 2;
+      const drawY = sprite.y * height - drawHeight / 2;
+      ctx.drawImage(
+        plants,
+        sprite.sx, sprite.sy, 32, 32,
+        Math.round(drawX), Math.round(drawY),
+        Math.round(drawWidth), Math.round(drawHeight)
+      );
+    }
+    ctx.restore();
   }
 
   function drawTile(tx, ty) {
@@ -939,6 +993,7 @@
     }
 
     drawDecorations(roomCtx, left, top, width, height, size);
+    if (roomCol === 0 && roomRow === 0) drawCentralVegetation(roomCtx, width, height);
     drawOuterLake(roomCtx, roomCol, roomRow, width, height);
     drawOuterRoad(roomCtx, roomCol, roomRow, width, height);
     return roomCanvas;
