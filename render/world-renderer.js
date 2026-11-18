@@ -1,8 +1,28 @@
 /* Renderização do mundo, câmera, terreno e loop visual. */
 'use strict';
 
+  function drawIdentityPortrait() {
+    const portrait=document.getElementById('identity-portrait');
+    if(!portrait) return;
+    const g=portrait.getContext('2d');
+    if(!g) return;
+    g.clearRect(0,0,portrait.width,portrait.height);
+    if(!currentLayers.length) return;
+
+    const frameCanvas=document.createElement('canvas');
+    frameCanvas.width=FRAME_SIZE;
+    frameCanvas.height=FRAME_SIZE;
+    const frameContext=frameCanvas.getContext('2d');
+    if(!frameContext) return;
+
+    drawLayeredCharacter(frameContext,FRAME_SIZE/2,FRAME_SIZE/2,currentLayers,1,2,0);
+    g.imageSmoothingEnabled=false;
+    g.drawImage(frameCanvas,12,0,40,40,0,0,portrait.width,portrait.height);
+  }
+
   function drawPreview() {
     pctx.clearRect(0,0,preview.width,preview.height);
+    drawIdentityPortrait();
     if (!previewLayers.length) {
       pctx.fillStyle = 'rgba(255,255,255,.8)';
       pctx.font = '13px system-ui';

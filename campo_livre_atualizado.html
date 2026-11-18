@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#183d2b">
 <title>Kill the King — Protótipo</title>
-<link rel="stylesheet" href="./css/game.css?v=20261118-player-identity-fixed-width-v6">
+<link rel="stylesheet" href="./css/game.css?v=20261118-character-head-portrait-v1">
 </head>
 <body>
 <div id="app">
@@ -137,7 +137,7 @@
     </aside>
     <div class="world-label player-identity-card" aria-label="Informações do jogador">
       <div class="identity-heading">
-        <span class="identity-mark" aria-hidden="true">♛</span>
+        <span class="identity-mark" aria-hidden="true"><canvas id="identity-portrait" width="64" height="64"></canvas></span>
         <div class="world-label-content">
           <strong>KILL THE KING</strong>
           <span class="identity-caption">IDENTIDADE DO JOGADOR</span>
@@ -184,7 +184,7 @@
 <script src="./render/character-renderer.js?v=v1-modular-001"></script>
 <script src="./render/projectile-renderer.js?v=v1-modular-001"></script>
 <script src="./mapa/fallback/grass-renderer.js?v=20261117-grass-fallback-001"></script>
-<script src="./render/world-renderer.js?v=20261117-combat-v1"></script>
+<script src="./render/world-renderer.js?v=20261118-character-head-portrait-v1"></script>
 <script src="./world/world-entities.js?v=20261118-ctrl-impact-v2"></script>
 <script src="./inventory/inventory-ui.js?v=20261118-inventory-interaction-v1"></script>
 <script src="./inventory/inventory-state.js?v=20261118-wearables-separated-v1"></script>

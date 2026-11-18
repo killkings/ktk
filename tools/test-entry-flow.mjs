@@ -7,6 +7,7 @@ const lifecycle = await readFile(new URL("../game/game-lifecycle.js", import.met
 const onlineModule = await readFile(new URL("../js/online.js", import.meta.url), "utf8");
 const html = await readFile(new URL("../campo_livre_atualizado.html", import.meta.url), "utf8");
 const gameCss = await readFile(new URL("../css/game.css", import.meta.url), "utf8");
+const worldRenderer = await readFile(new URL("../render/world-renderer.js", import.meta.url), "utf8");
 
 const elements = new Map();
 function element(id) {
@@ -165,11 +166,17 @@ assert.equal(element("toast").textContent,
 
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
 assert.match(html, /id="enter-world"/);
-assert.match(html, /game\.css\?v=20261118-player-identity-fixed-width-v6/);
+assert.match(html, /game\.css\?v=20261118-character-head-portrait-v1/);
 assert.match(html, /id="player-name"/);
 assert.match(html, /class="player-info-label">TESOURO/);
 assert.match(html, /id="player-treasure">0<\/span>/);
 assert.match(html, /class="world-label player-identity-card"/);
+assert.match(html, /id="identity-portrait"[^>]*width="64"[^>]*height="64"/);
+assert.doesNotMatch(html, /♛/);
+assert.match(html, /world-renderer\\.js\\?v=20261118-character-head-portrait-v1/);
+assert.match(worldRenderer, /function drawIdentityPortrait\\(\\)/);
+assert.match(worldRenderer, /drawLayeredCharacter\\(frameContext,FRAME_SIZE\\/2,FRAME_SIZE\\/2,currentLayers,1,2,0\\)/);
+assert.match(worldRenderer, /drawIdentityPortrait\\(\\);/);
 assert.doesNotMatch(html, /<div class="hud-top">/);
 assert.match(gameCss, /#world\s*\{[^}]*width:min\(calc\(100vw - 280px - 54px\),177\.7778vh\)/);
 assert.match(gameCss, /#game-ui\s*\{[^}]*--player-panel-width:280px/);
