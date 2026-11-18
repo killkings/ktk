@@ -1,8 +1,6 @@
 /* Controles de teclado, mouse e inicialização do ciclo de jogo. */
 'use strict';
 
-  const MOVEMENT_KEYS = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
-
   function refreshLocalMovementInput() {
     let dx=0,dy=0;
     if(keys.has('w')||keys.has('arrowup')) dy-=1;
@@ -61,7 +59,6 @@
       rightMouseHeld=false;
       shieldStaminaExhausted=false;
       window.KTKPlayerStats.render();
-      sendImmediateMovementIntent();
     }
   });
   document.querySelectorAll('.inventory-slot:not(.is-locked)').forEach(slot=>{
@@ -127,7 +124,6 @@
       shieldStaminaExhausted=false;
       window.KTKPlayerStats.render();
     }
-    if(hadMovementIntent) sendImmediateMovementIntent();
   });
 
   document.addEventListener('visibilitychange',()=>{
