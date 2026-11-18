@@ -580,32 +580,63 @@
     g.lineCap = 'round';
     g.lineJoin = 'round';
 
-    // Filetes de luz deslizam lentamente pela superfície da água.
-    for (let i = 0; i < 8; i++) {
-      const phase = timeSeconds * .62 + lake.phase + i * 1.13;
-      const x = centerX + Math.sin(phase * .73) * radiusX * .48;
-      const y = centerY + Math.cos(phase * .81 + i * .47) * radiusY * .43;
-      const length = (7 + (i % 3) * 3) * scale;
-      const wave = Math.sin(phase * 1.7) * 1.8 * scale;
-      const opacity = .15 + (.13 * (.5 + .5 * Math.sin(phase * 1.2)));
+    // Uma faixa de luz atravessa a água continuamente, tornando o movimento
+    // perceptível mesmo quando o jogador está parado.
+    for (let i = 0; i < 7; i++) {
+      const speed = 34 + (i % 3) * 11;
+      const travel = radiusX * 2.05 + 90 * scale;
+      const offset = ((timeSeconds * speed + i * travel / 7) % travel) - travel / 2;
+      const x = centerX + offset;
+      const y = centerY + Math.sin(timeSeconds * .72 + i * 1.7 + lake.phase) * radiusY * .38;
+      const length = (22 + (i % 3) * 13) * scale;
+      const curve = Math.sin(timeSeconds * 1.35 + i + lake.phase) * 4.5 * scale;
+      const opacity = .24 + .18 * (.5 + .5 * Math.sin(timeSeconds * 1.1 + i));
 
-      g.strokeStyle = `rgba(205,235,224,${opacity.toFixed(3)})`;
-      g.lineWidth = Math.max(.8, 1.35 * scale);
+      g.strokeStyle = `rgba(211,240,229,${opacity.toFixed(3)})`;
+      g.lineWidth = Math.max(1.5, 2.5 * scale);
       g.beginPath();
       g.moveTo(x - length, y);
-      g.quadraticCurveTo(x, y + wave, x + length, y - wave * .35);
+      g.quadraticCurveTo(x, y + curve, x + length, y - curve * .45);
       g.stroke();
     }
 
-    // Brilhos curtos aparecem e desaparecem suavemente.
-    for (let i = 0; i < 3; i++) {
-      const phase = timeSeconds * .48 + lake.phase * 1.7 + i * 2.1;
-      const x = centerX + Math.sin(phase + i) * radiusX * .36;
-      const y = centerY + Math.cos(phase * .9 + i * 1.4) * radiusY * .30;
-      const opacity = .10 + .16 * (.5 + .5 * Math.sin(phase * 2));
-      g.fillStyle = `rgba(224,243,228,${opacity.toFixed(3)})`;
+    // Dois conjuntos de ondas se expandem e recomeçam em ciclos independentes.
+    const rippleOrigins = [
+      { x: centerX - radiusX * .18, y: centerY - radiusY * .10, offset: .0 },
+      { x: centerX + radiusX * .22, y: centerY + radiusY * .16, offset: .52 }
+    ];
+    rippleOrigins.forEach(origin => {
+      const progress = ((timeSeconds / 3.4 + origin.offset + lake.phase * .08) % 1);
+      const rippleRadius = .10 + progress * .88;
+      const opacity = .46 * (1 - progress);
+      g.strokeStyle = `rgba(193,231,221,${opacity.toFixed(3)})`;
+      g.lineWidth = Math.max(1.3, 2.2 * scale);
       g.beginPath();
-      g.ellipse(x, y, 2.2 * scale, .9 * scale, Math.sin(phase) * .15, 0, Math.PI * 2);
+      g.ellipse(
+        origin.x,
+        origin.y,
+        radiusX * .46 * rippleRadius,
+        radiusY * .43 * rippleRadius,
+        0, 0, Math.PI * 2
+      );
+      g.stroke();
+    });
+
+    // Reflexos pequenos deslizam em diagonal sobre as ondulações maiores.
+    for (let i = 0; i < 5; i++) {
+      const phase = timeSeconds * .95 + lake.phase + i * 1.26;
+      const x = centerX + Math.sin(phase) * radiusX * .52;
+      const y = centerY + Math.cos(phase * .83 + i) * radiusY * .39;
+      const opacity = .25 + .22 * (.5 + .5 * Math.sin(phase * 1.8));
+      g.fillStyle = `rgba(231,246,231,${opacity.toFixed(3)})`;
+      g.beginPath();
+      g.ellipse(
+        x, y,
+        (4.5 + (i % 2) * 2) * scale,
+        1.6 * scale,
+        Math.sin(phase) * .22,
+        0, Math.PI * 2
+      );
       g.fill();
     }
 
