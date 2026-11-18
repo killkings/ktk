@@ -10,7 +10,7 @@ const [combatSource, movementSource, actionSource, stateSource, html, index, mig
   read("../js/game-state.js"),
   read("../campo_livre_atualizado.html"),
   read("../index.html"),
-  read("../supabase/migrations/20261118004500_fix_combat_pipeline.sql"),
+  read("../supabase/migrations/20261118005653_fix_combat_pipeline.sql"),
   read("../world/world-entities.js"),
   read("../render/world-renderer.js"),
   read("../multiplayer/player-replica.js")
