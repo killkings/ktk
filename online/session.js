@@ -1,13 +1,13 @@
 /* Autenticação, entrada/saída e ciclo de vida da sessão. */
-import { state } from "./state.js?v=20261117-remote-snapshot-007";
+import { state } from "./state.js?v=20261117-walk-v1";
 import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
-} from "./supabase-client.js?v=20261117-remote-snapshot-007";
-import { sendPosition } from "./movement.js?v=20261117-movement-reconcile-001";
-import { subscribeWorld } from "./realtime.js?v=20261117-remote-snapshot-007";
-import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-remote-snapshot-007";
-import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-remote-snapshot-007";
-import { withTimeout } from "./request-timeout.js?v=20261117-remote-snapshot-007";
+} from "./supabase-client.js?v=20261117-walk-v1";
+import { resetMovementNetwork } from "./movement.js?v=20261117-walk-v1";
+import { subscribeWorld } from "./realtime.js?v=20261117-walk-v1";
+import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261117-walk-v1";
+import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-walk-v1";
+import { withTimeout } from "./request-timeout.js?v=20261117-walk-v1";
 
 export function setStatus(message, connected = false) {
   let el = document.getElementById("ktk-online-status");
@@ -30,7 +30,8 @@ export async function enter(options = {}) {
   if (state.connecting) return { ok: false, error: "A conexão já está sendo iniciada." };
   state.connecting = true;
   state.sessionId = window.crypto?.randomUUID?.() || (String(Date.now()) + "-" + Math.random().toString(36).slice(2));
-  state.lastPosition = null;
+  resetMovementNetwork();
+
   try {
     const displayName = String(options.displayName || "").trim().slice(0, 24);
     if (displayName.length < 2) throw new Error("Escolha um nome com pelo menos 2 caracteres.");
@@ -111,12 +112,12 @@ export async function enter(options = {}) {
     await subscribeWorld(message => reportEntryProgress(options, message));
     setStatus("● Online · mundo principal", true);
     state.joined = true;
-    state.lastInputSignature = "";
-    state.lastCheckpoint = 0;
-    state.stepInFlight = false;
-    state.stepController = null;
-    state.activeStepId = 0;
-    state.stepSequence++;
+
+
+
+
+
+
     void setPlayerVisibility(document.visibilityState === "visible");
     return { ok: true, player };
   } catch (error) {
@@ -130,14 +131,14 @@ export async function enter(options = {}) {
     state.online = false;
     state.joined = false;
     resetPlayerSyncState();
-    state.lastPosition = null;
-    state.lastIntentSignature = "";
-    state.lastInputSignature = "";
-    state.stepController?.abort();
-    state.stepController = null;
-    state.stepSequence++;
-    state.activeStepId = 0;
-    state.stepInFlight = false;
+
+
+
+
+
+
+
+
     updateRemotes();
     const code = error?.code || error?.error_code || "";
     const message = String(error?.message || "");
@@ -170,13 +171,13 @@ export async function getPlayerState(signal) {
 export async function clearLocalSession(statusMessage) {
   state.leaving = true;
   state.worldStateRequestId++;
-  state.intentInFlight = false;
+
   state.connecting = false;
-  state.stepSequence++;
-  state.activeStepId = 0;
-  state.stepInFlight = false;
-  state.stepController?.abort();
-  state.stepController = null;
+
+
+
+
+
 
   const channel = state.channel;
   state.channel = null;
@@ -192,14 +193,15 @@ export async function clearLocalSession(statusMessage) {
   state.displayName = "";
   const nameInput = document.getElementById("ktk-display-name");
   if (nameInput) nameInput.value = "";
-  state.lastPosition = null;
-  state.lastIntentSignature = "";
-  state.lastInputSignature = "";
-  state.lastCheckpoint = 0;
-  state.lastDbHeartbeat = 0;
-  state.lastTrack = 0;
+
+
+
+
+
+
   resetPlayerSyncState();
   state.sessionId = "";
+  resetMovementNetwork();
 
   try {
     const { error } = await supabase.auth.signOut({ scope: "local" });
@@ -231,11 +233,11 @@ export async function leaveWorld() {
   if (!state.user) return { ok: false, error: "Não há uma sessão de jogador ativa para encerrar." };
 
   state.leaving = true;
-  state.stepSequence++;
-  state.activeStepId = 0;
-  state.stepInFlight = false;
-  state.stepController?.abort();
-  state.stepController = null;
+
+
+
+
+
   try {
     const { data, error } = await supabase.rpc("ktk_leave_world");
     if (error) throw error;
