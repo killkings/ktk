@@ -2,7 +2,7 @@
 import { state } from "./state.js?v=20261117-remote-snapshot-007";
 import { supabase, TOPIC } from "./supabase-client.js?v=20261117-remote-snapshot-007";
 import {
-  acceptDatabaseChange, acceptWorldEntityChange, loadExistingPlayers
+  acceptDatabaseChange, acceptMovementBroadcast, acceptWorldEntityChange, loadExistingPlayers
 } from "./player-sync.js?v=20261117-remote-snapshot-007";
 import { withTimeout } from "./request-timeout.js?v=20261117-remote-snapshot-007";
 
@@ -52,6 +52,7 @@ export async function subscribeWorld(onProgress = () => {}) {
     }
   });
   state.channel
+    .on("broadcast", { event: "player_position" }, ({ payload }) => acceptMovementBroadcast(payload))
     .on("broadcast", { event: "INSERT" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => acceptWorldEntityChange(payload))
