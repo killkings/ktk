@@ -53,13 +53,50 @@
     if(event.button===0) {
       leftMouseHeld=true;
       const selectedItem=inventory[selectedInventorySlot];
-      const isFishingRod=selectedItem?.id==='equipment-rod'||selectedItem?.id==='rod';
-      if(isFishingRod) {
-        // Segurar a vara é uma pose de pescaria, não um ataque normal.
+      if(isFishingRodItem(selectedItem)) {
+        // Segurar a vara é uma pose de pescaria, nunca um ataque.
         punch.active=false;
+        punch.elapsed=0;
         punch.hitApplied=true;
         punch.weaponAttack=false;
         punch.weaponItem=null;
+      } else if(!selectedItem) {
+        // Se o espaço selecionado está vazio e há uma vara ao alcance,
+        // o clique a recolhe em vez de iniciar um soco desarmado.
+        const worldX=camera.x*canvas.clientWidth+player.x;
+        const worldY=camera.y*canvas.clientHeight+player.y;
+        let nearbyRod=null;
+        let nearbyRodDistance=64;
+        worldItems.forEach(item=>{
+          if(item.collected||!isFishingRodItem(item)) return;
+          const distance=Math.hypot(worldX-item.x,worldY-item.y);
+          if(distance<=nearbyRodDistance) {
+            nearbyRod=item;
+            nearbyRodDistance=distance;
+          }
+        });
+        if(nearbyRod) {
+          punch.active=false;
+          punch.elapsed=0;
+          punch.hitApplied=true;
+          punch.weaponAttack=false;
+          punch.weaponItem=null;
+          void (async()=>{
+            try {
+              const result=await window.KTKOnline?.gameAction?.('pickup',{entity_id:nearbyRod.entityId});
+              if(result?.ok===true) {
+                removeCollectedWorldItem(nearbyRod);
+                toast('Vara recolhida. Segure o botão esquerdo para manter a pose de pescaria.');
+              } else {
+                toast(result?.error||'O servidor não confirmou a coleta da vara.');
+              }
+            } catch(error) {
+              toast(error?.message||'Não foi possível recolher a vara.');
+            }
+          })();
+        } else {
+          startPunch(event);
+        }
       } else {
         startPunch(event);
       }
