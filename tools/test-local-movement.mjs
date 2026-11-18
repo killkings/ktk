@@ -133,21 +133,11 @@ vm.createContext(mapContext);
 vm.runInContext(mapSource, mapContext);
 const worldMap = mapContext.window.KTKWorldMap;
 assert.equal(typeof worldMap.getCollisionCircles, "function",
-  "O mapa deve expor os troncos das árvores como colisores.");
-const nearbyTrees = worldMap.getCollisionCircles(0, 0, 640);
-assert.ok(nearbyTrees.length > 0,
-  "O gerador procedural deve produzir árvores com colisão.");
-assert.equal(
-  JSON.stringify(nearbyTrees),
-  JSON.stringify(worldMap.getCollisionCircles(0, 0, 640)),
-  "As colisões ambientais devem ser determinísticas entre quadros."
-);
-const tree = nearbyTrees[0];
-const blockedByTree = makeLocalContext({ worldMap });
-blockedByTree.setLocalPlayerPosition(tree.x - 30, tree.y, 2);
-for (let frame = 0; frame < 40; frame++) blockedByTree.updateLocalPlayerVisual(1 / 60);
-assert.ok(tree.x - blockedByTree.player.x >= 25 - 0.01,
-  "O personagem deve parar no tronco, sem atravessar a árvore.");
+  "O mapa deve manter a API de colisores para o módulo de movimento.");
+assert.deepEqual(worldMap.getCollisionCircles(0, 0, 640), [],
+  "O mapa não deve gerar árvores nem colisores de troncos.");
+assert.doesNotMatch(mapSource, /drawTreeShadow|drawTreeFallback|trees_summer\.png|treeChance|decoration\.tree/,
+  "A geração e a renderização de árvores devem estar removidas.");
 
 const monotonic = makeLocalContext();
 let previousX = monotonic.player.x;
