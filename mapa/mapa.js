@@ -443,13 +443,13 @@
       { x: .66, y: .84, sx: 160, sy: 64, sw: 96, sh: 64, phase: 4.9, amplitude: .007 },
 
       // Capim baixo.
-      { x: .19, y: .34, sx: 256, sy: 32, sw: 32, sh: 32, phase: .4, amplitude: .022 },
-      { x: .40, y: .22, sx: 288, sy: 32, sw: 32, sh: 32, phase: 1.8, amplitude: .020 },
-      { x: .73, y: .29, sx: 320, sy: 32, sw: 32, sh: 32, phase: 2.7, amplitude: .022 },
-      { x: .88, y: .52, sx: 256, sy: 32, sw: 32, sh: 32, phase: 4.1, amplitude: .020 },
-      { x: .78, y: .72, sx: 288, sy: 32, sw: 32, sh: 32, phase: 5.0, amplitude: .023 },
-      { x: .31, y: .84, sx: 320, sy: 32, sw: 32, sh: 32, phase: 3.4, amplitude: .021 },
-      { x: .12, y: .58, sx: 256, sy: 32, sw: 32, sh: 32, phase: 2.1, amplitude: .022 },
+      { x: .19, y: .34, sx: 256, sy: 0, sw: 32, sh: 64, phase: .4, amplitude: .022 },
+      { x: .40, y: .22, sx: 288, sy: 0, sw: 32, sh: 64, phase: 1.8, amplitude: .020 },
+      { x: .73, y: .29, sx: 320, sy: 0, sw: 32, sh: 64, phase: 2.7, amplitude: .022 },
+      { x: .88, y: .52, sx: 256, sy: 0, sw: 32, sh: 64, phase: 4.1, amplitude: .020 },
+      { x: .78, y: .72, sx: 288, sy: 0, sw: 32, sh: 64, phase: 5.0, amplitude: .023 },
+      { x: .31, y: .84, sx: 320, sy: 0, sw: 32, sh: 64, phase: 3.4, amplitude: .021 },
+      { x: .12, y: .58, sx: 256, sy: 0, sw: 32, sh: 64, phase: 2.1, amplitude: .022 },
 
       // Touceiras de capim alto e juncos.
       { x: .22, y: .48, sx: 256, sy: 64, sw: 32, sh: 64, phase: .9, amplitude: .035 },
