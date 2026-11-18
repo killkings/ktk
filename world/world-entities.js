@@ -60,16 +60,25 @@
     if(row.entity_type==='projectile') {
       const previous=serverWorldEntities.get(entityId);
       const x=Number(row.x)||0, y=Number(row.y)||0;
+      const vectorX=Number(worldState.vector_x)||0;
+      const vectorY=Number(worldState.vector_y)||0;
+      const serverDistance=Math.max(0,Number(worldState.distance)||0);
+      const distance=Math.max(Number(previous?.distance)||0,serverDistance);
+      const originX=Number.isFinite(previous?.originX)?previous.originX:x-vectorX*serverDistance;
+      const originY=Number.isFinite(previous?.originY)?previous.originY:y-vectorY*serverDistance;
       serverWorldEntities.set(entityId,{
         type:'remote-projectile',id:entityId,entityId,
         x:previous?.x??x,y:previous?.y??y,targetX:x,targetY:y,
+        originX,originY,distance,serverDistance,
         revision:incomingRevision,
-        weaponId:String(worldState.weapon_id||''),
-        projectileType:String(worldState.projectile_type||'arrow'),
-        vectorX:Number(worldState.vector_x)||0,vectorY:Number(worldState.vector_y)||0,
+        weaponId:String(worldState.weapon_id||previous?.weaponId||''),
+        projectileType:String(worldState.projectile_type||previous?.projectileType||'arrow'),
+        vectorX,vectorY,
         direction:Number.isFinite(Number(worldState.direction))?Number(worldState.direction):2,
-        speed:Number(worldState.speed)||600,maxDistance:Number(worldState.max_distance)||160,
-        elapsed:previous?.elapsed||0,phase:String(worldState.phase||'outbound')
+        speed:Number(worldState.speed)||previous?.speed||600,
+        maxDistance:Number(worldState.max_distance)||previous?.maxDistance||160,
+        elapsed:previous?.elapsed||0,phase:String(worldState.phase||'outbound'),
+        predicted:true
       });
       return true;
     }
