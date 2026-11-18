@@ -1,10 +1,10 @@
 # Mapa do mundo
 
-`mapa.js` gera e desenha o terreno em salas. O HTML principal o carrega como um arquivo separado. As oito salas externas usam uma amostra de grama LPC retirada de `ElizaWy/LPC/Terrain/terrain_summer.png`, armazenada localmente em `mapa/assets/lpc-terrain-summer.png`; a textura é exclusiva dessas salas e não altera os Campos Centrais. Os outros tiles sazonais de `LPC-main/Terrain/` continuam opcionais. Os sprites de personagens, cabelos, esqueletos, armas e equipamentos vêm do repositório oficial Universal LPC por URL fixa, sem cópia dos PNGs no KTK.
+`mapa.js` gera e desenha o terreno em salas. O HTML principal o carrega como um arquivo separado. As oito salas externas usam quatro quadrantes do interior da área verde do tileset LPC `ElizaWy/LPC/Terrain/terrain_summer.png`, armazenado localmente em `mapa/assets/lpc-terrain-summer.png`. O renderizador escolhe uma das quatro amostras por coordenada do mapa e pode espelhá-la para reduzir a repetição; os Campos Centrais não são alterados. Os outros tiles sazonais de `LPC-main/Terrain/` continuam opcionais. Os sprites de personagens, cabelos, esqueletos, armas e equipamentos vêm do repositório oficial Universal LPC por URL fixa, sem cópia dos PNGs no KTK.
 
 ## Organização
 
-O mundo começa em uma matriz 3×3 de salas independentes, todas com as mesmas dimensões e proporção 16:9. Os Campos Centrais permanecem intactos na posição central. As oito salas ao redor exibem um piso de grama texturizado com arte LPC, sem vegetação alta, recursos ou obstáculos. A expansão futura poderá preencher cada uma sem alterar o tamanho das salas nem a posição do mapa central.
+O mundo começa em uma matriz 3×3 de salas independentes, todas com as mesmas dimensões e proporção 16:9. Os Campos Centrais permanecem intactos na posição central. As oito salas ao redor usam amostras verdes reais do tileset LPC para formar o piso, sem vegetação alta, flores, recursos ou obstáculos. A expansão futura poderá preencher cada uma sem alterar o tamanho das salas nem a posição do mapa central.
 
 Cada tela usa câmera fixa. Ao cruzar uma borda, a câmera muda para a sala vizinha e o personagem reaparece no lado oposto. As coordenadas transmitidas ao servidor e aos outros jogadores são globais, de modo que todos compartilham a mesma posição no mundo mesmo quando estão em salas diferentes. O limite externo da matriz bloqueia a saída do mundo. Os tiles são desenhados em coordenadas globais e usam cache local.
 
