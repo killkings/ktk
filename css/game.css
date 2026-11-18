@@ -257,3 +257,5 @@
     #game-ui .player-sidebar > .world-label.player-identity-card { padding:10px; }
     #game-ui .player-sidebar > .player-stats { padding:12px; }
   }
+
+  .stat-row.mana-hidden { visibility:hidden; }
