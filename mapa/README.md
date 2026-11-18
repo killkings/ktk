@@ -1,22 +1,17 @@
 # Mapa do mundo
 
-`mapa.js` gera e desenha o terreno em salas. O HTML principal o carrega como um arquivo separado. As oito salas externas usam quatro quadrantes do interior da área verde do tileset LPC `ElizaWy/LPC/Terrain/terrain_summer.png`, armazenado localmente em `mapa/assets/lpc-terrain-summer.png`. O renderizador escolhe uma das quatro amostras por coordenada do mapa e pode espelhá-la para reduzir a repetição; os Campos Centrais não são alterados. Os outros tiles sazonais de `LPC-main/Terrain/` continuam opcionais. Os sprites de personagens, cabelos, esqueletos, armas e equipamentos vêm do repositório oficial Universal LPC por URL fixa, sem cópia dos PNGs no KTK.
+`mapa.js` desenha o mundo em salas independentes 16:9. O **mapa central (Campos Centrais)** usa o terreno de verão de Eliza Wyatt (DeathsDarling) e Lanea Zimmerman (Sharm), armazenado localmente em `mapa/assets/lpc-terrain-summer.png`. As flores de chão usam `wildflowers_summer.png` da mesma revisão LPC, carregada de uma URL fixa do repositório original. O renderizador aplica o terreno LPC às células centrais, mantém variação de capim e distribui flores em posições determinísticas.
 
-## Organização
-
-O mundo começa em uma matriz 3×3 de salas independentes, todas com as mesmas dimensões e proporção 16:9. Os Campos Centrais permanecem intactos na posição central. As oito salas ao redor usam amostras verdes reais do tileset LPC para formar o piso, sem vegetação alta, flores, recursos ou obstáculos. A expansão futura poderá preencher cada uma sem alterar o tamanho das salas nem a posição do mapa central.
-
-Cada tela usa câmera fixa. Ao cruzar uma borda, a câmera muda para a sala vizinha e o personagem reaparece no lado oposto. As coordenadas transmitidas ao servidor e aos outros jogadores são globais, de modo que todos compartilham a mesma posição no mundo mesmo quando estão em salas diferentes. O limite externo da matriz bloqueia a saída do mundo. Os tiles são desenhados em coordenadas globais e usam cache local.
+As oito salas externas ficam fora do escopo desta alteração e serão tratadas separadamente. Esta mudança não altera o layout do mundo, as dimensões das salas, a movimentação, as colisões nem os Campos Centrais em relação à posição no mapa.
 
 ## Integração
 
-O módulo expõe `window.KTKWorldMap.draw(...)`, `regionAt(x, y)`, `bounds` e metadados dos biomas. O HTML desenha a sala atual, muda as coordenadas ao cruzar suas bordas e atualiza o bioma no HUD. Persistência online de objetos/recursos e sincronização entre jogadores continuam como trabalho futuro.
+O HTML principal carrega `mapa/mapa.js`. O módulo expõe `window.KTKWorldMap.draw(...)`, `regionAt(x, y)`, `bounds` e metadados dos biomas. Quando os arquivos LPC são carregados, o módulo limpa os caches de tiles e salas para reconstruir o mapa com a arte.
 
+## Créditos do terreno central
 
-## Crédito da grama LPC
+- Terreno: [terrain_summer.png](https://github.com/ElizaWy/LPC/blob/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/terrain_summer.png).
+- Autoria: grama, terra e águas rasas originais por Lanea Zimmerman (Sharm); edição, animação e recoloração por Eliza Wyatt (DeathsDarling).
+- Flores: [wildflowers_summer.png](https://github.com/ElizaWy/LPC/blob/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/wildflowers_summer.png), flores originais por Lanea Zimmerman; reconfiguradas e recoloridas por Eliza Wyatt.
+- Licença: OGA-BY 3.0. Consulte [Terrain/Credits.txt](https://github.com/ElizaWy/LPC/blob/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/Credits.txt).
 
-- Arquivo de origem: [terrain_summer.png](https://github.com/ElizaWy/LPC/blob/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/terrain_summer.png)
-- Autoria: grama original de Lanea Zimmerman (Sharm); edição, animação e recoloração por Eliza Wyatt (DeathsDarling).
-- Licença: OGA-BY 3.0.
-- Arte de origem: [Liberated Pixel Cup LPC Base Assets — Sprites & Map Tiles](https://opengameart.org/content/liberated-pixel-cup-lpc-base-assets-sprites-map-tiles).
-- Créditos detalhados: [Terrain/Credits.txt](https://github.com/ElizaWy/LPC/blob/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/Credits.txt).
