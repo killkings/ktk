@@ -1,14 +1,14 @@
 /* Animações de combate e solicitação de ações validadas pelo servidor. */
 'use strict';
 
-  function startPunch() {
+  function startPunch(event=null) {
     if(!gameStarted || !screens.game.classList.contains('active') || punch.cooldown>0) return;
     const selectedItem=inventory[selectedInventorySlot];
     const selectableWeaponClasses=new Set(['melee','ranged','magic','tool']);
     const selectedWeapon=selectedItem&&!selectedItem.wearSlot&&selectableWeaponClasses.has(selectedItem.equipmentClass)
       &&selectedItem.itemType!=='ammo'?selectedItem:null;
     const magicLevel=window.KTKPlayerStats.stats.magicLevel.value;
-    const innateMagic=magicLevel>=6&&!isMagicWeapon(selectedWeapon);
+    const innateMagic=Boolean(event?.altKey)&&magicLevel>=6&&!isMagicWeapon(selectedWeapon);
     const magicProfile=innateMagic?getInnateMagicProfile(magicLevel):null;
     let weapon=innateMagic?{
       id:'level-six-innate-magic',
