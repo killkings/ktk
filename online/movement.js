@@ -13,6 +13,7 @@ let lastBroadcastX = NaN;
 let lastBroadcastY = NaN;
 let sequence = 0;
 let checkpointInFlight = false;
+let checkpointPromise = null;
 let pendingCheckpoint = null;
 
 function readLocalPosition() {
@@ -43,15 +44,8 @@ function readLocalPosition() {
   };
 }
 
-function persistPosition(snapshot) {
-  if (checkpointInFlight) {
-    pendingCheckpoint = snapshot;
-    return;
-  }
-
-  checkpointInFlight = true;
-  state.lastPositionCheckpointAt = performance.now();
-  const args = {
+function checkpointArguments(snapshot) {
+  return {
     p_x: snapshot.x,
     p_y: snapshot.y,
     p_direction: snapshot.direction,
@@ -61,20 +55,86 @@ function persistPosition(snapshot) {
     p_input_x: snapshot.input_x,
     p_input_y: snapshot.input_y
   };
+}
 
-  void supabase.rpc("ktk_checkpoint_position", args)
+function persistPosition(snapshot) {
+  if (checkpointInFlight) {
+    pendingCheckpoint = snapshot;
+    return checkpointPromise || Promise.resolve(false);
+  }
+
+  checkpointInFlight = true;
+  state.lastPositionCheckpointAt = performance.now();
+  const request = supabase.rpc("ktk_checkpoint_position", checkpointArguments(snapshot))
     .then(({ error }) => {
-      if (error) console.warn("KTK position checkpoint:", error.message);
+      if (error) {
+        console.warn("KTK position checkpoint:", error.message);
+        return false;
+      }
+      return true;
     })
-    .catch(error => console.warn("KTK position checkpoint:", error?.message || error))
+    .catch(error => {
+      console.warn("KTK position checkpoint:", error?.message || error);
+      return false;
+    })
     .finally(() => {
       checkpointInFlight = false;
       const pending = pendingCheckpoint;
       pendingCheckpoint = null;
       if (pending && state.online && state.joined && !state.leaving) {
-        persistPosition(pending);
+        void persistPosition(pending);
+      } else {
+        checkpointPromise = null;
       }
     });
+
+  checkpointPromise = request;
+  return request;
+}
+
+async function flushPositionCheckpoint(snapshot) {
+  let success = await persistPosition(snapshot);
+  // Um checkpoint que já estava em voo pode ter sido seguido por este snapshot
+  // na fila. Aguarda também esse segundo write para não atacar com coordenadas antigas.
+  while (checkpointInFlight || pendingCheckpoint) {
+    const current = checkpointPromise;
+    if (!current) {
+      if (pendingCheckpoint) {
+        const pending = pendingCheckpoint;
+        pendingCheckpoint = null;
+        success = (await persistPosition(pending)) && success;
+        continue;
+      }
+      break;
+    }
+    const result = await current;
+    success = result && success;
+  }
+  return Boolean(success);
+}
+
+function broadcastPosition(snapshot) {
+  if (!state.channel || !state.online || !state.joined || state.leaving) return false;
+  const now = performance.now();
+  const stateSignature = [
+    snapshot.direction, snapshot.input_x, snapshot.input_y,
+    snapshot.moving, snapshot.running, snapshot.guarding
+  ].join(":");
+  sequence += 1;
+  const payload = { ...snapshot, sequence, sent_at: Date.now() };
+  lastBroadcastAt = now;
+  lastBroadcastState = stateSignature;
+  lastBroadcastX = snapshot.x;
+  lastBroadcastY = snapshot.y;
+
+  void state.channel.send({
+    type: "broadcast",
+    event: "player_position",
+    payload
+  }).then(status => {
+    if (status !== "ok") console.warn("KTK position broadcast:", status);
+  }).catch(error => console.warn("KTK position broadcast:", error?.message || error));
+  return true;
 }
 
 export function sendPosition(force = false) {
@@ -96,32 +156,36 @@ export function sendPosition(force = false) {
     : IDLE_BROADCAST_INTERVAL;
 
   if (force || stateChanged || (moved && elapsed >= broadcastInterval) || elapsed >= IDLE_BROADCAST_INTERVAL) {
-    sequence += 1;
-    const payload = {
-      ...snapshot,
-      sequence,
-      sent_at: Date.now()
-    };
-    lastBroadcastAt = now;
-    lastBroadcastState = stateSignature;
-    lastBroadcastX = snapshot.x;
-    lastBroadcastY = snapshot.y;
-
-    void state.channel.send({
-      type: "broadcast",
-      event: "player_position",
-      payload
-    }).then(status => {
-      if (status !== "ok") console.warn("KTK position broadcast:", status);
-    }).catch(error => console.warn("KTK position broadcast:", error?.message || error));
+    broadcastPosition(snapshot);
   }
 
   const checkpointInterval = snapshot.moving
     ? MOVING_CHECKPOINT_INTERVAL
     : IDLE_CHECKPOINT_INTERVAL;
-  if (force || now - (Number(state.lastPositionCheckpointAt) || 0) >= checkpointInterval) {
-    persistPosition(snapshot, force);
+  // Mudanças de estado de movimento também são registradas logo no início/fim
+  // do deslocamento; a física local e a velocidade da Caminhada Perfeita não mudam.
+  if (force || stateChanged || now - (Number(state.lastPositionCheckpointAt) || 0) >= checkpointInterval) {
+    void persistPosition(snapshot);
   }
+}
+
+export async function syncPositionForAction() {
+  if (state.leaving || !state.online || !state.channel || !state.joined) {
+    throw new Error("A sessão do personagem não está ativa.");
+  }
+  const snapshot = readLocalPosition();
+  if (!snapshot || !snapshot.user_id) {
+    throw new Error("Não foi possível ler a posição atual do personagem.");
+  }
+
+  // Envia primeiro a posição aos outros clientes e só libera o ataque após
+  // o mesmo ponto ter sido confirmado no banco.
+  broadcastPosition(snapshot);
+  const saved = await flushPositionCheckpoint(snapshot);
+  if (!saved) {
+    throw new Error("Não foi possível sincronizar sua posição antes do combate. Tente novamente.");
+  }
+  return snapshot;
 }
 
 export function resetMovementNetwork() {

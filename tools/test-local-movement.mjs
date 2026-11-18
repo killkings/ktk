@@ -199,7 +199,8 @@ assert.equal(remote.moving, true);
 // Network module: only small position broadcasts and periodic checkpoints remain.
 const executableMovement = movementSource
   .replace(/^import .*;\s*$/gm, "")
-  .replace(/^export function /gm, "function ");
+  .replace(/^export function /gm, "function ")
+  .replace(/^export async function /gm, "async function ");
 const sent = [];
 const rpcCalls = [];
 let networkClock = 10000;
@@ -268,10 +269,10 @@ assert.doesNotMatch(playerSync, /applyOwnServerPosition|reconcileLocalPosition|i
 assert.match(playerSync, /acceptMovementBroadcast/);
 assert.match(realtime, /event:\s*"player_position"/);
 assert.doesNotMatch(replica, /getLocalIntentTimeline|getLocalControls|motionSnapshots|REMOTE_MOTION_SNAPSHOT|reconcileLocalPosition/);
-assert.match(html, /online\.js\?v=20261117-walk-v1/);
+assert.match(html, /online\.js\?v=20261117-combat-v1/);
 assert.match(html, /mapa\.js\?v=20261117-collision-v1/);
 assert.match(html, /game-state\.js\?v=20261117-collision-v1/);
-assert.match(rootHtml, /20261117-collision-v1/);
+assert.match(rootHtml, /20261117-combat-v1/);
 assert.match(mapSource, /getCollisionCircles/);
 assert.match(migration, /ktk_checkpoint_position/);
 assert.match(migration, /drop function if exists public\.ktk_step_player/);

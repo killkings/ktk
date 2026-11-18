@@ -209,8 +209,34 @@
     for(const id of remotePlayers.keys()) if(!incoming.has(id)) remotePlayers.delete(id);
     updateKingStatus();
   }
+  function predictProjectile(spec={}) {
+    const id=String(spec.id||'');
+    if(!id) return false;
+    const direction=Math.max(0,Math.min(3,Math.trunc(Number(spec.direction)||0)));
+    const vectorX=direction===1?-1:direction===3?1:0;
+    const vectorY=direction===0?-1:direction===2?1:0;
+    const worldX=camera.x*canvas.clientWidth+player.x;
+    const worldY=camera.y*canvas.clientHeight+player.y;
+    const originX=worldX+vectorX*18;
+    const originY=worldY+vectorY*18;
+    const previous=serverWorldEntities.get(id);
+    serverWorldEntities.set(id,{
+      ...previous,
+      type:'remote-projectile',id,entityId:id,
+      x:originX,y:originY,targetX:originX,targetY:originY,
+      originX,originY,distance:0,serverDistance:0,
+      weaponId:String(spec.weaponId||''),
+      projectileType:String(spec.projectileType||'magic'),
+      vectorX,vectorY,direction,
+      speed:Math.max(1,Number(spec.speed)||620),
+      maxDistance:Math.max(1,Number(spec.maxDistance)||160),
+      elapsed:0,phase:'outbound',predicted:true
+    });
+    return true;
+  }
+
   window.KTKWorldEntities={
-    setRemotePlayers,entities:getWorldEntities,applyServerState,
+    setRemotePlayers,entities:getWorldEntities,applyServerState,predictProjectile,
     applyServerKnockback:(event,x,y,direction)=>{
       if(playerDead) return false;
       if(Number.isFinite(Number(x))&&Number.isFinite(Number(y))) {

@@ -5,6 +5,7 @@ on:
     paths:
       - "campo_livre_atualizado.html"
       - "game/game-lifecycle.js"
+      - "combat/**"
       - "js/online.js"
       - "online/**"
       - "equipment/catalog-sync.js"
@@ -19,17 +20,20 @@ on:
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
       - "tools/test-local-movement.mjs"
+      - "tools/test-combat-flow.mjs"
       - "supabase/migrations/**"
       - "input/input-controller.js"
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
       - "tools/test-local-movement.mjs"
+      - "tools/test-combat-flow.mjs"
       - ".github/workflows/game-module-checks.yml"
   push:
     branches: [main]
     paths:
       - "campo_livre_atualizado.html"
       - "game/game-lifecycle.js"
+      - "combat/**"
       - "js/online.js"
       - "online/**"
       - "equipment/catalog-sync.js"
@@ -44,11 +48,13 @@ on:
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
       - "tools/test-local-movement.mjs"
+      - "tools/test-combat-flow.mjs"
       - "supabase/migrations/**"
       - "input/input-controller.js"
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
       - "tools/test-local-movement.mjs"
+      - "tools/test-combat-flow.mjs"
       - ".github/workflows/game-module-checks.yml"
 
 jobs:
@@ -66,10 +72,12 @@ jobs:
           node --check mapa/fallback/grass-renderer.js
           node --check mapa/mapa.js
           node --check render/world-renderer.js
+          node --check combat/combat-controller.js
           node --check input/input-controller.js
           node --check multiplayer/player-replica.js
           node --check js/game-state.js
           node --input-type=module --check < online/movement.js
+          node --input-type=module --check < online/actions.js
           node --check game/game-lifecycle.js
           node --input-type=module --check < js/online.js
           node --input-type=module --check < online/request-timeout.js
@@ -85,6 +93,8 @@ jobs:
         run: node tools/test-realtime-entry.mjs
       - name: Check immediate local movement prediction
         run: node tools/test-local-movement.mjs
+      - name: Check combat and position synchronization
+        run: node tools/test-combat-flow.mjs
       - name: Check module boundaries and script order
         run: |
           node <<'NODE'
