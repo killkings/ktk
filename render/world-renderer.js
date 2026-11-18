@@ -269,10 +269,10 @@
           if(fishingRodHeld) weaponMode='attack';
           if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
           let playerLayers=getPlayerLayers(baseLayers,weaponMode,fishingRodHeld?selectedItem:null);
-          const fishingRodForegroundImage=selectedItem.attackImage?.naturalWidth
+          const fishingRodForegroundImage=selectedItem?.attackImage?.naturalWidth
             ? selectedItem.attackImage
-            : selectedItem.image;
-          const fishingRodBackgroundImage=selectedItem.attackBackgroundImage||selectedItem.heldBackgroundImage;
+            : selectedItem?.image;
+          const fishingRodBackgroundImage=selectedItem?.attackBackgroundImage||selectedItem?.heldBackgroundImage;
           const fishingRodOriginalImages=fishingRodHeld
             ? [fishingRodForegroundImage,fishingRodBackgroundImage].filter(Boolean)
             : [];
