@@ -119,11 +119,11 @@ assert.ok(input.includes("if(key==='n'&&!event.repeat) { event.preventDefault();
 // Atalhos numéricos: 1–9 selecionam os slots correspondentes e 0 seleciona o décimo.
 // O teste usa o seletor real para garantir que espaços ainda bloqueados não façam RPC.
 const selectStart=inventoryUi.indexOf("  function selectInventorySlot(index) {");
-const selectEnd=inventoryUi.indexOf("\\n  async function expandInventorySlot()",selectStart);
+const selectEnd=inventoryUi.indexOf("\n  async function expandInventorySlot()",selectStart);
 assert.ok(selectStart>=0&&selectEnd>selectStart);
 const selectCode=inventoryUi.slice(selectStart,selectEnd);
 const keydownStart=input.indexOf("  window.addEventListener('keydown',event=>{");
-const keydownEnd=input.indexOf("\\n  window.addEventListener('keyup'",keydownStart);
+const keydownEnd=input.indexOf("\n  window.addEventListener('keyup'",keydownStart);
 assert.ok(keydownStart>=0&&keydownEnd>keydownStart);
 const keydownCode=input.slice(keydownStart,keydownEnd);
 const numericSelectionCalls=[];
@@ -145,7 +145,7 @@ const keyboardContext={
   }
 };
 vm.createContext(keyboardContext);
-vm.runInContext(selectCode+"\\n"+keydownCode,keyboardContext);
+vm.runInContext(selectCode+"\n"+keydownCode,keyboardContext);
 const pressDigit=(key,repeat=false)=>{
   keyboardContext.keys.clear();
   keyboardContext.window.keydownHandler({key,repeat,preventDefault(){}});
