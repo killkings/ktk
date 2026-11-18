@@ -104,7 +104,7 @@ assert.match(actions,/supabase\.rpc\("ktk_swap_inventory_item"/);
 assert.match(actions,/await syncPositionForAction\(\)/);
 assert.match(online,/swapInventoryItem/);
 assert.match(html,/inventory-ui\.js\?v=20261118-inventory-expansion-v1/);
-assert.match(html,/online\.js\?v=20261118-inventory-expansion-v1/);
+assert.match(html,/online\.js\?v=20261118-ephemeral-player-v1/);
 
 assert.match(swapMigration,/FOR UPDATE/);
 assert.match(swapMigration,/sqrt\(power\(v_player\.x-v_ground\.x, 2\) \+ power\(v_player\.y-v_ground\.y, 2\)\) > 64/);
