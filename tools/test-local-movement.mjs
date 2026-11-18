@@ -272,7 +272,7 @@ assert.doesNotMatch(replica, /getLocalIntentTimeline|getLocalControls|motionSnap
 assert.match(html, /online\.js\?v=20261118-remote-hit-v1/);
 assert.match(html, /mapa\.js\?v=20261117-collision-v1/);
 assert.match(html, /game-state\.js\?v=20261117-collision-v1/);
-assert.match(rootHtml, /20261118-world-item-removal-v1/);
+assert.match(rootHtml, /20261118-inventory-interaction-v1/);
 assert.match(mapSource, /getCollisionCircles/);
 assert.match(migration, /ktk_checkpoint_position/);
 assert.match(migration, /drop function if exists public\.ktk_step_player/);
