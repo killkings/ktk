@@ -207,7 +207,7 @@
         const inLakeWater=characterEntity&&Boolean(
           window.KTKWorldMap?.isInWater?.(characterWorldX,characterWorldY)
         );
-        if(characterEntity&&!inLakeWater) drawGroundShadow(ctx,screenX,screenY+16.5,8.5,3.5,.34);
+        if(characterEntity&&!inLakeWater) drawGroundShadow(ctx,screenX,screenY+33,17,7,.34);
         else if(entity.type==='enemy') drawGroundShadow(ctx,screenX,screenY+33,18,7,.36);
         else if(entity.type==='item') drawGroundShadow(ctx,screenX,screenY+15,14,5,.28);
         if(entity.type==='local-player') {
