@@ -18,8 +18,12 @@ const [combatSource, movementSource, actionSource, stateSource, html, index, mig
 
 const combatStart = combatSource.indexOf("  function startPunch() {");
 const combatEnd = combatSource.indexOf("  function getEntityWorldPosition(", combatStart);
+const applyHitStart = combatSource.indexOf("  function applyCombatHit(");
+const applyHitEnd = combatSource.indexOf("  function startKnockback(", applyHitStart);
 assert.ok(combatStart >= 0 && combatEnd > combatStart, "Combat functions must remain in the expected module.");
+assert.ok(applyHitStart >= 0 && applyHitEnd > applyHitStart, "The real server hit dispatcher must remain in the combat module.");
 const combatExecutable = combatSource.slice(combatStart, combatEnd) +
+  combatSource.slice(applyHitStart, applyHitEnd) +
   "\nglobalThis.combatApi={startPunch,updatePunch,resolvePunchHit,requestServerProjectile,applyCombatHit,isMagicWeapon};";
 
 function makeCombatContext({ inventory, magicLevel = 0, response } = {}) {
