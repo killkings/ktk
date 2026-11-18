@@ -90,12 +90,20 @@
   const biomeById = new Map(biomes.map(biome => [biome.id, biome]));
   const biomeOrder = new Map(biomes.map((biome, index) => [biome.id, index]));
 
-  // Norte em cima; os Campos Centrais ocupam a sala central (0, 0).
-  const layout = [
-    ['vazio', 'vazio', 'vazio'],
-    ['vazio', 'campos', 'vazio'],
-    ['vazio', 'vazio', 'vazio']
-  ];
+  // Mapa padrão permanente do KTK: nove áreas de campo em uma grade 3×3.
+  // A sala central é a área inicial; as oito salas externas preservam a grama CSS
+  // própria de cada posição e permanecem abertas para futuras expansões.
+  const DEFAULT_MAP = Object.freeze({
+    id: 'campos-centrais-3x3',
+    name: 'Campos Centrais',
+    grassStyle: 'css-nine-variants',
+    layout: Object.freeze([
+      Object.freeze(['vazio', 'vazio', 'vazio']),
+      Object.freeze(['vazio', 'campos', 'vazio']),
+      Object.freeze(['vazio', 'vazio', 'vazio'])
+    ])
+  });
+  const layout = DEFAULT_MAP.layout.map(row => row.slice());
   const GRID_CENTER = 1;
 
   function getRoomLimits() {
@@ -485,6 +493,7 @@
   }
 
   window.KTKWorldMap = {
+    defaultMap: DEFAULT_MAP,
     draw,
     getCollisionCircles,
     regionAt,
