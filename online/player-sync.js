@@ -1,6 +1,6 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
-import { state } from "./state.js?v=20261117-remote-snapshot-007";
-import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-remote-snapshot-007";
+import { state } from "./state.js?v=20261117-walk-v1";
+import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-walk-v1";
 
 function mergeRemoteAppearance(current, incoming, options = {}) {
   const contract = window.KTKRemoteAppearance;
