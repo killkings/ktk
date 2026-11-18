@@ -105,7 +105,7 @@ jobs:
         run: node tools/test-combat-flow.mjs
       - name: Check wearable separation
         run: node tools/test-wearable-separation.mjs
-      - name: Check inventory E drop and swap
+      - name: Check selected inventory drop and swap through E
         run: node tools/test-inventory-interaction.mjs
       - name: Check module boundaries and script order
         run: |
