@@ -5,6 +5,7 @@ on:
     paths:
       - "campo_livre_atualizado.html"
       - "game/game-lifecycle.js"
+      - "combat/**"
       - "js/online.js"
       - "online/**"
       - "equipment/catalog-sync.js"
@@ -32,6 +33,7 @@ on:
     paths:
       - "campo_livre_atualizado.html"
       - "game/game-lifecycle.js"
+      - "combat/**"
       - "js/online.js"
       - "online/**"
       - "equipment/catalog-sync.js"
@@ -70,6 +72,7 @@ jobs:
           node --check mapa/fallback/grass-renderer.js
           node --check mapa/mapa.js
           node --check render/world-renderer.js
+          node --check combat/combat-controller.js
           node --check input/input-controller.js
           node --check multiplayer/player-replica.js
           node --check js/game-state.js
