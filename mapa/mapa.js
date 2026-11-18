@@ -475,6 +475,82 @@
     return {x:coords[0][0],y:coords[0][1],tangentX:1,tangentY:0};
   }
 
+  function distanceToSegmentSquared(px, py, ax, ay, bx, by) {
+    const dx = bx - ax;
+    const dy = by - ay;
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared > 0
+      ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSquared))
+      : 0;
+    const nearestX = ax + dx * t;
+    const nearestY = ay + dy * t;
+    const distanceX = px - nearestX;
+    const distanceY = py - nearestY;
+    return distanceX * distanceX + distanceY * distanceY;
+  }
+
+  // Usa o mesmo caminho curvo desenhado pela estrada para detectar o terreno
+  // sob o jogador. As coordenadas recebidas são globais, como as da rede.
+  function isOnRoad(worldX, worldY) {
+    const x = Number(worldX);
+    const y = Number(worldY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+    const room = roomAt(x, y);
+    const roomCol = room.col - GRID_CENTER;
+    const roomRow = room.row - GRID_CENTER;
+    const route = outerRoadRoutes[`${roomCol},${roomRow}`];
+    if (!route) return false;
+
+    const localX = x - roomCol * viewWidth + viewWidth / 2;
+    const localY = y - roomRow * viewHeight + viewHeight / 2;
+    const scale = Math.min(viewWidth / 1920, viewHeight / 1080);
+    const detectionRadius = Math.max(22, 76 * scale) / 2 + 5 * scale;
+    const detectionRadiusSquared = detectionRadius * detectionRadius;
+    let nearestDistanceSquared = Infinity;
+
+    const considerSegment = (ax, ay, bx, by) => {
+      nearestDistanceSquared = Math.min(
+        nearestDistanceSquared,
+        distanceToSegmentSquared(localX, localY, ax, ay, bx, by)
+      );
+    };
+
+    let startX = route[0][0] * viewWidth;
+    let startY = route[0][1] * viewHeight;
+
+    // Amostra as curvas quadráticas com a mesma sequência de pontos usada
+    // em traceRoadPath, sem consultar pixels nem depender da resolução.
+    for (let i = 1; i < route.length - 1; i++) {
+      const controlX = route[i][0] * viewWidth;
+      const controlY = route[i][1] * viewHeight;
+      const next = route[i + 1];
+      const endX = (route[i][0] + next[0]) * viewWidth / 2;
+      const endY = (route[i][1] + next[1]) * viewHeight / 2;
+      let previousX = startX;
+      let previousY = startY;
+
+      for (let step = 1; step <= 12; step++) {
+        const t = step / 12;
+        const inverse = 1 - t;
+        const currentX = inverse * inverse * startX +
+          2 * inverse * t * controlX + t * t * endX;
+        const currentY = inverse * inverse * startY +
+          2 * inverse * t * controlY + t * t * endY;
+        considerSegment(previousX, previousY, currentX, currentY);
+        previousX = currentX;
+        previousY = currentY;
+      }
+
+      startX = endX;
+      startY = endY;
+    }
+
+    const last = route[route.length - 1];
+    considerSegment(startX, startY, last[0] * viewWidth, last[1] * viewHeight);
+    return nearestDistanceSquared <= detectionRadiusSquared;
+  }
+
   function drawOuterRoad(g, roomCol, roomRow, width, height) {
     const route = outerRoadRoutes[`${roomCol},${roomRow}`];
     if (!route) return;
@@ -614,6 +690,7 @@
     defaultMap: DEFAULT_MAP,
     draw,
     getCollisionCircles,
+    isOnRoad,
     regionAt,
     getBiomeAt,
     biomes,
