@@ -404,53 +404,113 @@
 
   // Vegetação LPC do ElizaWy: aplicada somente aos Campos Centrais.
   // Os objetos são decorativos e não criam colisões; a clareira central permanece livre.
+  // Vegetação do ElizaWy/LPC. O atlas usa uma grade de 32px, mas os objetos
+  // ocupam footprints diferentes: 32x32, 32x64, 64x64 e 96x64.
+  // Nunca recortar todos como quadrados de 32x32: isso corta arbustos e samambaias.
   function drawCentralVegetation(ctx, width, height) {
     const plants = assets.get('plants_summer.png');
-    if (!plants || !plants.complete || plants.naturalWidth < 384 || plants.naturalHeight < 96) return;
+    if (!plants || !plants.complete || plants.naturalWidth < 512 || plants.naturalHeight < 160) return;
 
-    const scale = Math.min(width / 1920, height / 1080);
+    const baseScale = Math.min(width / 1920, height / 1080) * 1.58;
     const sprites = [
-      // Arbustos e moitas em grupos espaçados pelas bordas do campo.
-      { x: .105, y: .18, sx: 0,   sy: 0,  w: 76, h: 72 },
-      { x: .285, y: .29, sx: 32,  sy: 0,  w: 72, h: 70 },
-      { x: .355, y: .76, sx: 64,  sy: 32, w: 78, h: 74 },
-      { x: .685, y: .16, sx: 96,  sy: 0,  w: 76, h: 72 },
-      { x: .86,  y: .48, sx: 0,   sy: 32, w: 80, h: 76 },
-      { x: .885, y: .78, sx: 96,  sy: 32, w: 76, h: 72 },
-      { x: .54,  y: .88, sx: 32,  sy: 64, w: 72, h: 70 },
-      { x: .115, y: .66, sx: 64,  sy: 64, w: 74, h: 72 },
+      // Arbustos pequenos, rosetas e plantas de folhas largas (footprint 1x1).
+      { x: .12, y: .25, sx: 0,   sy: 0,  sw: 32, sh: 32 },
+      { x: .28, y: .17, sx: 32,  sy: 0,  sw: 32, sh: 32 },
+      { x: .76, y: .19, sx: 64,  sy: 0,  sw: 32, sh: 32 },
+      { x: .89, y: .42, sx: 96,  sy: 0,  sw: 32, sh: 32 },
+      { x: .84, y: .78, sx: 128, sy: 0,  sw: 32, sh: 32 },
+      { x: .68, y: .89, sx: 160, sy: 0,  sw: 32, sh: 32 },
+      { x: .27, y: .88, sx: 192, sy: 0,  sw: 32, sh: 32 },
+      { x: .09, y: .69, sx: 224, sy: 0,  sw: 32, sh: 32 },
 
-      // Plantas de folhas largas.
-      { x: .24,  y: .53, sx: 128, sy: 0,  w: 64, h: 62 },
-      { x: .74,  y: .55, sx: 128, sy: 32, w: 68, h: 64 },
-      { x: .48,  y: .20, sx: 160, sy: 0,  w: 62, h: 60 },
-      { x: .48,  y: .83, sx: 160, sy: 32, w: 62, h: 60 },
+      // Variações espelhadas/alternativas presentes na segunda linha do atlas.
+      { x: .34, y: .35, sx: 0,   sy: 32, sw: 32, sh: 32 },
+      { x: .70, y: .34, sx: 32,  sy: 32, sw: 32, sh: 32 },
+      { x: .17, y: .51, sx: 64,  sy: 32, sw: 32, sh: 32 },
+      { x: .82, y: .57, sx: 96,  sy: 32, sw: 32, sh: 32 },
+      { x: .30, y: .69, sx: 128, sy: 32, sw: 32, sh: 32 },
+      { x: .73, y: .70, sx: 160, sy: 32, sw: 32, sh: 32 },
 
-      // Capim alto: variedades diferentes de cada linha do sprite sheet.
-      { x: .17,  y: .30, sx: 256, sy: 0,  w: 54, h: 68 },
-      { x: .39,  y: .16, sx: 288, sy: 32, w: 54, h: 68 },
-      { x: .62,  y: .22, sx: 320, sy: 0,  w: 56, h: 70 },
-      { x: .80,  y: .31, sx: 352, sy: 32, w: 56, h: 70 },
-      { x: .79,  y: .72, sx: 256, sy: 64, w: 54, h: 68 },
-      { x: .38,  y: .88, sx: 288, sy: 64, w: 54, h: 68 },
-      { x: .13,  y: .52, sx: 320, sy: 64, w: 54, h: 68 },
-      { x: .91,  y: .24, sx: 352, sy: 0,  w: 56, h: 70 },
-      { x: .61,  y: .83, sx: 320, sy: 32, w: 56, h: 70 }
+      // Arbustos altos: três sprites de uma célula de largura por duas de altura.
+      { x: .14, y: .43, sx: 0,  sy: 64, sw: 32, sh: 64 },
+      { x: .87, y: .67, sx: 32, sy: 64, sw: 32, sh: 64 },
+      { x: .49, y: .17, sx: 64, sy: 64, sw: 32, sh: 64 },
+
+      // Samambaia (2x2 células) e samambaia larga (3x2 células).
+      { x: .36, y: .80, sx: 96,  sy: 64, sw: 64, sh: 64 },
+      { x: .66, y: .84, sx: 160, sy: 64, sw: 96, sh: 64 }
     ];
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     for (const sprite of sprites) {
-      const drawWidth = sprite.w * scale;
-      const drawHeight = sprite.h * scale;
-      const drawX = sprite.x * width - drawWidth / 2;
-      const drawY = sprite.y * height - drawHeight / 2;
+      const drawWidth = sprite.sw * baseScale;
+      const drawHeight = sprite.sh * baseScale;
+      const baseX = sprite.x * width;
+      const baseY = sprite.y * height;
       ctx.drawImage(
         plants,
-        sprite.sx, sprite.sy, 32, 32,
-        Math.round(drawX), Math.round(drawY),
-        Math.round(drawWidth), Math.round(drawHeight)
+        sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+        Math.round(baseX - drawWidth / 2),
+        Math.round(baseY - drawHeight),
+        Math.round(drawWidth),
+        Math.round(drawHeight)
       );
+    }
+    ctx.restore();
+  }
+
+  // O atlas contém variações e footprints de plantas, não uma faixa de frames
+  // universais. O capim alto recebe uma oscilação de vento leve no próprio jogo.
+  // Arbustos e samambaias permanecem imóveis, como os sprites originais.
+  function drawCentralVegetationAnimation(ctx, width, height, timeSeconds) {
+    const plants = assets.get('plants_summer.png');
+    if (!plants || !plants.complete || plants.naturalWidth < 512 || plants.naturalHeight < 160) return;
+
+    const baseScale = Math.min(width / 1920, height / 1080) * 1.58;
+    const grass = [
+      // Capim baixo: três variações de 32x32.
+      { x: .19, y: .34, sx: 256, sy: 32, sw: 32, sh: 32, phase: .4, amplitude: .022 },
+      { x: .40, y: .22, sx: 288, sy: 32, sw: 32, sh: 32, phase: 1.8, amplitude: .020 },
+      { x: .73, y: .29, sx: 320, sy: 32, sw: 32, sh: 32, phase: 2.7, amplitude: .022 },
+      { x: .88, y: .52, sx: 256, sy: 32, sw: 32, sh: 32, phase: 4.1, amplitude: .020 },
+      { x: .78, y: .72, sx: 288, sy: 32, sw: 32, sh: 32, phase: 5.0, amplitude: .023 },
+      { x: .31, y: .84, sx: 320, sy: 32, sw: 32, sh: 32, phase: 3.4, amplitude: .021 },
+      { x: .12, y: .58, sx: 256, sy: 32, sw: 32, sh: 32, phase: 2.1, amplitude: .022 },
+
+      // Touceiras de capim alto (1x2 células), em três formas.
+      { x: .22, y: .48, sx: 256, sy: 64, sw: 32, sh: 64, phase: .9, amplitude: .035 },
+      { x: .66, y: .24, sx: 288, sy: 64, sw: 32, sh: 64, phase: 2.4, amplitude: .038 },
+      { x: .90, y: .64, sx: 320, sy: 64, sw: 32, sh: 64, phase: 3.7, amplitude: .036 },
+      { x: .39, y: .88, sx: 256, sy: 64, sw: 32, sh: 64, phase: 4.9, amplitude: .034 },
+      { x: .70, y: .91, sx: 320, sy: 64, sw: 32, sh: 64, phase: 5.7, amplitude: .037 },
+
+      // Reeds altos (1x2 células) junto aos agrupamentos de vegetação.
+      { x: .12, y: .30, sx: 352, sy: 0, sw: 32, sh: 64, phase: 1.3, amplitude: .032 },
+      { x: .91, y: .33, sx: 384, sy: 0, sw: 32, sh: 64, phase: 3.1, amplitude: .034 },
+      { x: .55, y: .91, sx: 416, sy: 0, sw: 32, sh: 64, phase: 5.1, amplitude: .033 }
+    ];
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    for (const sprite of grass) {
+      const drawWidth = sprite.sw * baseScale;
+      const drawHeight = sprite.sh * baseScale;
+      const baseX = sprite.x * width;
+      const baseY = sprite.y * height;
+      const sway = Math.sin(timeSeconds * 1.35 + sprite.phase) * sprite.amplitude;
+
+      // A rotação parte da base do capim, não do centro, evitando que a planta deslize.
+      ctx.save();
+      ctx.translate(baseX, baseY);
+      ctx.rotate(sway);
+      ctx.drawImage(
+        plants,
+        sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+        -drawWidth / 2, -drawHeight,
+        drawWidth, drawHeight
+      );
+      ctx.restore();
     }
     ctx.restore();
   }
@@ -1031,6 +1091,7 @@
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(roomCanvas, 0, 0, width, height);
     const animationTime = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+    if (roomCol === 0 && roomRow === 0) drawCentralVegetationAnimation(ctx, width, height, animationTime);
     drawOuterLakeAnimation(ctx, roomCol, roomRow, width, height, animationTime);
     ctx.restore();
   }
