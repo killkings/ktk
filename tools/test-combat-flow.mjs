@@ -3,14 +3,17 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [combatSource, movementSource, actionSource, stateSource, html, index, migration] = await Promise.all([
+const [combatSource, movementSource, actionSource, stateSource, html, index, migration, worldEntities, worldRenderer, replicaSource] = await Promise.all([
   read("../combat/combat-controller.js"),
   read("../online/movement.js"),
   read("../online/actions.js"),
   read("../js/game-state.js"),
   read("../campo_livre_atualizado.html"),
   read("../index.html"),
-  read("../supabase/migrations/20261118004500_fix_combat_pipeline.sql")
+  read("../supabase/migrations/20261118004500_fix_combat_pipeline.sql"),
+  read("../world/world-entities.js"),
+  read("../render/world-renderer.js"),
+  read("../multiplayer/player-replica.js")
 ]);
 
 const combatStart = combatSource.indexOf("  function startPunch() {");
@@ -22,6 +25,7 @@ const combatExecutable = combatSource.slice(combatStart, combatEnd) +
 function makeCombatContext({ inventory, magicLevel = 0, response } = {}) {
   const calls = [];
   const toasts = [];
+  const predicted = [];
   const localPlayer = { direction: 3, x: 10, y: 20 };
   const context = {
     console,
@@ -47,6 +51,9 @@ function makeCombatContext({ inventory, magicLevel = 0, response } = {}) {
           calls.push({action,payload});
           return response || {ok:true,hit:false};
         }
+      },
+      KTKWorldEntities: {
+        predictProjectile(spec) { predicted.push(spec); return true; }
       }
     },
     toast(message) { toasts.push(String(message)); },
@@ -59,7 +66,7 @@ function makeCombatContext({ inventory, magicLevel = 0, response } = {}) {
   };
   vm.createContext(context);
   vm.runInContext(combatExecutable, context);
-  return { ...context, context, calls, toasts };
+  return { ...context, context, calls, toasts, predicted };
 }
 
 // 1) Unarmed mouse attack reaches the authoritative RPC with an explicit JSON null weapon.
@@ -88,6 +95,10 @@ assert.equal(wand.calls.length,1);
 assert.equal(wand.calls[0].action,"launch_projectile");
 assert.equal(wand.calls[0].payload.weapon_id,"equipment-wand");
 assert.ok(wand.toasts.includes("Feitiço lançado."));
+assert.equal(wand.predicted.length,1);
+assert.equal(wand.predicted[0].projectileType,"magic");
+assert.equal(wand.predicted[0].speed,620);
+assert.equal(wand.predicted[0].direction,3);
 
 // 3) Level-six innate magic must also use the projectile action with the server item id.
 const innate = makeCombatContext({magicLevel:6,response:{ok:true,projectile_id:"projectile-innate"}});
@@ -172,7 +183,11 @@ assert.match(stateSource,/function updateLocalPlayerVisual\(deltaSeconds\)/);
 assert.match(movementSource,/MOVING_CHECKPOINT_INTERVAL\s*=\s*500/);
 assert.match(html,/combat-controller\.js\?v=20261117-combat-v1/);
 assert.match(html,/online\.js\?v=20261117-combat-v1/);
+assert.match(html,/world\/world-entities\.js\?v=20261117-combat-v1/);
+assert.match(html,/world-renderer\.js\?v=20261117-combat-v1/);
 assert.match(index,/20261117-combat-v1/);
+assert.match(replicaSource,/function predictProjectile\(/);
+assert.match(worldRenderer,/entity\.type==='remote-projectile'&&entity\.phase==='outbound'/);
 
 // 7) The database migration must address the SQL NULL bug and moving-target positions.
 assert.match(migration,/coalesce\(to_jsonb\(v_item_id\),'null'::jsonb\)/);
