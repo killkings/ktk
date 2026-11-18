@@ -132,7 +132,7 @@ assert.equal(innate.calls[0].payload.weapon_id,"level-six-innate-magic");
 assert.match(inputSource,/startPunch\(event\)/,
   "The mouse modifier must reach the combat controller.");
 
-// A server-confirmed skeleton health reduction must refresh the health bar and show impact.
+// The initial world snapshot loads existing health without replaying an old impact.
 const worldEntityStart=worldEntities.indexOf("  function applyWorldEntity(");
 const worldEntityEnd=worldEntities.indexOf("  function applyWorldState(",worldEntityStart);
 assert.ok(worldEntityStart>=0&&worldEntityEnd>worldEntityStart);
@@ -152,23 +152,51 @@ const worldEntityContext={
 vm.createContext(worldEntityContext);
 vm.runInContext(worldEntityCode,worldEntityContext);
 worldEntityContext.worldEntityApi.applyWorldEntity({
-  entity_id:"skeleton-1",entity_type:"enemy",x:118,y:100,revision:2,
+  entity_id:"skeleton-1",entity_type:"enemy",x:118,y:100,revision:1,
   state:{health:82,max_health:100,defeated:false}
+},"snapshot");
+assert.equal(skeleton.health,82,"The initial snapshot must load authoritative enemy health.");
+assert.equal(skeleton.knockback,undefined,
+  "The first snapshot must not replay an old impact from before joining.");
+
+// Realtime damage must refresh health and visibly knock the enemy back.
+worldEntityContext.worldEntityApi.applyWorldEntity({
+  entity_id:"skeleton-1",entity_type:"enemy",x:136,y:100,revision:2,
+  state:{health:64,max_health:100,defeated:false}
 },"realtime");
-assert.equal(skeleton.health,82,"The server-confirmed magic damage must update local enemy health.");
-assert.equal(skeletonStatsRefreshes,1,"The enemy health display must refresh after the hit.");
+assert.equal(skeleton.health,64,"The server-confirmed magic damage must update local enemy health.");
+assert.equal(skeletonStatsRefreshes,2,"The enemy health display must refresh after the hit.");
 assert.deepEqual({...skeleton.knockback},{x:1,y:0,progress:0},
   "A server-confirmed hit must replay its displacement as a visible impact.");
 assert.equal(skeleton.attacking,false,"A confirmed hit interrupts the enemy attack animation.");
 
-// Snapshots update health but do not replay an old hit animation on world entry.
+// A snapshot of the same revision must not restart an impact already shown.
 const previousKnockback=skeleton.knockback;
 worldEntityContext.worldEntityApi.applyWorldEntity({
-  entity_id:"skeleton-1",entity_type:"enemy",x:136,y:100,revision:3,
+  entity_id:"skeleton-1",entity_type:"enemy",x:136,y:100,revision:2,
   state:{health:64,max_health:100,defeated:false}
 },"snapshot");
 assert.equal(skeleton.knockback,previousKnockback,
-  "A stale world snapshot must not replay a past impact.");
+  "A snapshot that repeats an already applied hit must not replay it.");
+
+// A later snapshot may be the first delivery of a new confirmed hit: show it.
+worldEntityContext.worldEntityApi.applyWorldEntity({
+  entity_id:"skeleton-1",entity_type:"enemy",x:154,y:100,revision:3,
+  state:{health:46,max_health:100,defeated:false}
+},"snapshot");
+assert.notEqual(skeleton.knockback,previousKnockback,
+  "A new health reduction arriving by snapshot must also show its impact.");
+assert.deepEqual({...skeleton.knockback},{x:1,y:0,progress:0});
+
+// Older snapshots cannot roll the enemy state back or replay damage.
+const latestKnockback=skeleton.knockback;
+const acceptedStaleSnapshot=worldEntityContext.worldEntityApi.applyWorldEntity({
+  entity_id:"skeleton-1",entity_type:"enemy",x:172,y:100,revision:2,
+  state:{health:20,max_health:100,defeated:false}
+},"snapshot");
+assert.equal(acceptedStaleSnapshot,false);
+assert.equal(skeleton.health,46);
+assert.equal(skeleton.knockback,latestKnockback);
 
 // The database retains responsibility for computing and applying the projectile's damage and push.
 assert.ok(pvpRuleMigration.includes("'damage',greatest(1,round("));

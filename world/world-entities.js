@@ -143,13 +143,14 @@
       const nextHealth=Number.isFinite(Number(worldState.health))
         ? Number(worldState.health) : skeleton.health;
       const tookDamage=Number.isFinite(previousHealth)&&Number(nextHealth)<previousHealth;
+      const hadServerState=Number(skeleton.lastServerRevision)>0;
       skeleton.lastServerRevision=incomingRevision;
       skeleton.x=nextX;
       skeleton.y=nextY;
       skeleton.health=nextHealth;
       skeleton.maxHealth=Number.isFinite(Number(worldState.max_health))?Number(worldState.max_health):skeleton.maxHealth;
       skeleton.defeated=Boolean(worldState.defeated);
-      if(tookDamage&&source!=='snapshot') {
+      if(tookDamage&&(source!=='snapshot'||hadServerState)) {
         // O servidor já aplicou o dano e o deslocamento; reproduzimos o impacto
         // confirmado na tela sem calcular dano nem mover o inimigo localmente.
         startKnockback(skeleton,{
