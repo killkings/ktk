@@ -139,34 +139,6 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
 
-  function drawFrozenFishingRodLayer(g,item,image,x,y,scale,direction,frame) {
-    const imageWidth=Number(image?.naturalWidth||image?.width)||0;
-    const imageHeight=Number(image?.naturalHeight||image?.height)||0;
-    if(!image||imageWidth<=0||imageHeight<=0) return;
-
-    const frameSize=Math.max(1,Number(item.attackFrameSize)||Number(item.heldFrameSize)||128);
-    const columns=Math.max(1,Math.floor(imageWidth/frameSize));
-    const rows=Math.max(1,Math.floor(imageHeight/frameSize));
-    const configuredFrames=Math.max(1,Number(item.attackFrameCount)||columns);
-    const spriteFrame=Math.min(columns-1,Math.max(0,Math.trunc(Number(frame)||0)));
-    const row=((Math.trunc(Number(direction)||0)%rows)+rows)%rows;
-    const displaySize=Math.max(1,Number(item.attackDisplaySize)||frameSize);
-
-    // Desenha sempre o mesmo retângulo da folha. Nenhum índice de animação,
-    // frame do corpo ou sincronização pode alterar este recorte enquanto segura.
-    g.save();
-    g.imageSmoothingEnabled=false;
-    g.drawImage(
-      image,
-      spriteFrame*frameSize,row*frameSize,frameSize,frameSize,
-      x-(displaySize/2)*scale,
-      y-(displaySize/2)*scale,
-      displaySize*scale,
-      displaySize*scale
-    );
-    g.restore();
-  }
-
   function getHeadOnlyLayers(layers, extraImages=[]) {
     const headLayerNames = new Set(['cabeca','rosto','cabelo','barba','bigode']);
     const keepImages = new Set((Array.isArray(extraImages)?extraImages:[]).filter(Boolean));
@@ -253,10 +225,9 @@
           const bodyFrameColumns=Math.max(1,Math.floor(bodyImageWidth/bodyFrameSize));
           const direction=punch.active?punch.direction:(playerMoving?playerVisual.direction:player.direction);
           const selectedItem=inventory[selectedInventorySlot];
-          const fishingRodHeld=isFishingRodItem(selectedItem)&&leftMouseHeld;
-          let weaponMode=fishingRodHeld
-            ? 'none'
-            : punch.active?(punch.weaponAttack?'attack':'none'):'held';
+          let weaponMode=punch.active
+            ? (punch.weaponAttack?'attack':'none')
+            : 'held';
           if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
           const playerLayers=getPlayerLayers(baseLayers,weaponMode);
           const visiblePlayerLayers=inLakeWater
@@ -264,30 +235,7 @@
             : playerLayers;
           const drawY=screenY-(player.knockbackHeight||0);
 
-          // A vara executa a animação completa ao pressionar e mantém o último quadro
-          // até o botão ser solto. O mesmo índice é aplicado ao fundo e à frente.
-          const rodFrameCount=Math.max(1,Number(selectedItem?.attackFrameCount)||13);
-          const rodAnimationProgress=rodAnimationStartedAt>0
-            ? Math.max(0,(performance.now()-rodAnimationStartedAt)/PUNCH_ANIMATION_SECONDS)
-            : 1;
-          const rodAnimationFrame=Math.min(rodFrameCount-1,Math.floor(rodAnimationProgress*rodFrameCount));
-          if(fishingRodHeld) {
-            const rodBackground=selectedItem.attackBackgroundImage||selectedItem.heldBackgroundImage;
-            if(rodBackground?.naturalWidth) {
-              drawFrozenFishingRodLayer(ctx,selectedItem,rodBackground,screenX,drawY,PLAYER_WORLD_SCALE,direction,rodAnimationFrame);
-            }
-          }
-
           drawLayeredCharacter(ctx,screenX,drawY,visiblePlayerLayers,PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
-
-          if(fishingRodHeld) {
-            const rodForeground=selectedItem.attackImage?.naturalWidth
-              ? selectedItem.attackImage
-              : selectedItem.image;
-            if(rodForeground?.naturalWidth) {
-              drawFrozenFishingRodLayer(ctx,selectedItem,rodForeground,screenX,drawY,PLAYER_WORLD_SCALE,direction,rodAnimationFrame);
-            }
-          }
           const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
           if(chatBubble) visibleChatBubbles.push({
             text:chatBubble.text,opacity:chatBubble.opacity,x:screenX,
