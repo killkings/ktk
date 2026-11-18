@@ -5,7 +5,7 @@ import vm from "node:vm";
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
 const [
   gameState, replica, movementSource, input, session, playerSync,
-  realtime, online, html, rootHtml, migration
+  realtime, online, html, rootHtml, migration, mapSource
 ] = await Promise.all([
   read("../js/game-state.js"),
   read("../multiplayer/player-replica.js"),
@@ -17,7 +17,8 @@ const [
   read("../js/online.js"),
   read("../campo_livre_atualizado.html"),
   read("../index.html"),
-  read("../supabase/migrations/20261118000803_simplify_player_walking.sql")
+  read("../supabase/migrations/20261118000803_simplify_player_walking.sql"),
+  read("../mapa/mapa.js")
 ]);
 
 // The browser owns exactly one local position. Each frame advances that position;
@@ -28,7 +29,8 @@ const movementStart = gameState.indexOf(
 const movementEnd = gameState.indexOf("var  TILE = 72;", movementStart);
 assert.ok(movementStart >= 0 && movementEnd > movementStart);
 
-function makeLocalContext() {
+function makeLocalContext({ collisionCircles = [], serverEntities = [], skeleton = null, worldMap = null } = {}) {
+  const enemy = skeleton || { x: 10000, y: 10000, defeated: false, collision_radius: 18 };
   const context = {
     playerDead: false,
     playerMoving: true,
@@ -42,10 +44,10 @@ function makeLocalContext() {
     equippedWearables: { head: null, chest: null },
     remotePlayers: new Map(),
     window: {
-      KTKEnemySkeleton: {
-        entity: { x: 10000, y: 10000, defeated: false, collision_radius: 18 }
-      }
+      KTKEnemySkeleton: { entity: enemy },
+      KTKWorldMap: worldMap || { getCollisionCircles: () => collisionCircles }
     },
+    serverWorldEntities: new Map(serverEntities.map((entity, index) => [String(index), entity])),
     SPEED: 225,
     COLLISION_RADIUS: 18
   };
@@ -97,6 +99,46 @@ blocked.remotePlayers.set("other", { x: 130, y: 120, targetX: 130, targetY: 120 
 blocked.updateLocalPlayerVisual(1 / 60);
 assert.equal(blocked.player.x, 100,
   "A colisão com outro jogador deve impedir aproximação através do raio de colisão.");
+
+const blockedBySkeleton = makeLocalContext({
+  skeleton: { x: 130, y: 120, defeated: false, radius: 18 }
+});
+for (let frame = 0; frame < 20; frame++) blockedBySkeleton.updateLocalPlayerVisual(1 / 60);
+assert.ok(blockedBySkeleton.player.x <= 104,
+  "O personagem não pode atravessar o esqueleto.");
+
+const blockedByResource = makeLocalContext({
+  serverEntities: [{ type: "resource", status: "ready", x: 130, y: 120, radius: 8 }]
+});
+for (let frame = 0; frame < 20; frame++) blockedByResource.updateLocalPlayerVisual(1 / 60);
+assert.ok(blockedByResource.player.x <= 104,
+  "Nós de recursos ativos devem bloquear a passagem.");
+
+const mapContext = {
+  window: {},
+  Image: class {
+    set src(value) { this._src = value; }
+  }
+};
+vm.createContext(mapContext);
+vm.runInContext(mapSource, mapContext);
+const worldMap = mapContext.window.KTKWorldMap;
+assert.equal(typeof worldMap.getCollisionCircles, "function",
+  "O mapa deve expor os troncos das árvores como colisores.");
+const nearbyTrees = worldMap.getCollisionCircles(0, 0, 640);
+assert.ok(nearbyTrees.length > 0,
+  "O gerador procedural deve produzir árvores com colisão.");
+assert.equal(
+  JSON.stringify(nearbyTrees),
+  JSON.stringify(worldMap.getCollisionCircles(0, 0, 640)),
+  "As colisões ambientais devem ser determinísticas entre quadros."
+);
+const tree = nearbyTrees[0];
+const blockedByTree = makeLocalContext({ worldMap });
+blockedByTree.setLocalPlayerPosition(tree.x - 30, tree.y, 2);
+for (let frame = 0; frame < 40; frame++) blockedByTree.updateLocalPlayerVisual(1 / 60);
+assert.ok(tree.x - blockedByTree.player.x >= 25 - 0.01,
+  "O personagem deve parar no tronco, sem atravessar a árvore.");
 
 const monotonic = makeLocalContext();
 let previousX = monotonic.player.x;
@@ -218,7 +260,10 @@ assert.match(playerSync, /acceptMovementBroadcast/);
 assert.match(realtime, /event:\s*"player_position"/);
 assert.doesNotMatch(replica, /getLocalIntentTimeline|getLocalControls|motionSnapshots|REMOTE_MOTION_SNAPSHOT|reconcileLocalPosition/);
 assert.match(html, /online\.js\?v=20261117-walk-v1/);
-assert.match(rootHtml, /20261117-walk-v1/);
+assert.match(html, /mapa\.js\?v=20261117-collision-v1/);
+assert.match(html, /game-state\.js\?v=20261117-collision-v1/);
+assert.match(rootHtml, /20261117-collision-v1/);
+assert.match(mapSource, /getCollisionCircles/);
 assert.match(migration, /ktk_checkpoint_position/);
 assert.match(migration, /drop function if exists public\.ktk_step_player/);
 assert.match(migration, /drop function if exists ktk_private\.step_player_unlocked_v2/);
