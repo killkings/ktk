@@ -60,7 +60,7 @@
     const boxWidth=Math.min(maxWidth,Math.max(76,...lines.map(line=>g.measureText(line).width+20)));
     const boxHeight=lines.length*lineHeight+12;
     const centerX=Math.max(boxWidth/2+6,Math.min(canvas.clientWidth-boxWidth/2-6,x));
-    const bottom=Math.max(boxHeight+12,playerY-40);
+    const bottom=Math.max(boxHeight+12,playerY-52);
     const top=bottom-boxHeight;
 
     g.globalAlpha=Math.max(0,Math.min(1,Number(opacity)||0));
