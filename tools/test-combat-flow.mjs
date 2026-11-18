@@ -1,0 +1,183 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import vm from "node:vm";
+
+const read = path => readFile(new URL(path, import.meta.url), "utf8");
+const [combatSource, movementSource, actionSource, stateSource, html, index, migration] = await Promise.all([
+  read("../combat/combat-controller.js"),
+  read("../online/movement.js"),
+  read("../online/actions.js"),
+  read("../js/game-state.js"),
+  read("../campo_livre_atualizado.html"),
+  read("../index.html"),
+  read("../supabase/migrations/20261118004500_fix_combat_pipeline.sql")
+]);
+
+const combatStart = combatSource.indexOf("  function startPunch() {");
+const combatEnd = combatSource.indexOf("  function getEntityWorldPosition(", combatStart);
+assert.ok(combatStart >= 0 && combatEnd > combatStart, "Combat functions must remain in the expected module.");
+const combatExecutable = combatSource.slice(combatStart, combatEnd) +
+  "\nglobalThis.combatApi={startPunch,updatePunch,resolvePunchHit,requestServerProjectile,applyCombatHit,isMagicWeapon};";
+
+function makeCombatContext({ inventory, magicLevel = 0, response } = {}) {
+  const calls = [];
+  const toasts = [];
+  const localPlayer = { direction: 3, x: 10, y: 20 };
+  const context = {
+    console,
+    performance: { now: () => 1000 },
+    gameStarted: true,
+    screens: { game: { classList: { contains: () => true } } },
+    player: localPlayer,
+    punch: {
+      active:false,elapsed:0,cooldown:0,direction:2,hitApplied:false,
+      weaponAttack:false,weaponItem:null,range:0.8,attackBonus:0,damageMultiplier:1
+    },
+    inventory: inventory || [null,null],
+    selectedInventorySlot: 0,
+    PUNCH_RANGE:0.8,
+    PUNCH_COOLDOWN_SECONDS:0.5,
+    PUNCH_IMPACT_SECONDS:0.2,
+    PUNCH_ANIMATION_SECONDS:0.42,
+    PUNCH_STAMINA_COST:3,
+    window: {
+      KTKPlayerStats: { stats: { magicLevel: { value: magicLevel } } },
+      KTKOnline: {
+        async gameAction(action,payload) {
+          calls.push({action,payload});
+          return response || {ok:true,hit:false};
+        }
+      }
+    },
+    toast(message) { toasts.push(String(message)); },
+    applyServerState() {},
+    getInnateMagicProfile() {
+      return {attackBonus:6,range:3.5,attackType:"slash",attackFrameCount:6,
+        manaCost:10,staminaCost:1.5,damageMultiplier:2};
+    },
+    startKnockback() {}
+  };
+  vm.createContext(context);
+  vm.runInContext(combatExecutable, context);
+  return { ...context, context, calls, toasts };
+}
+
+// 1) Unarmed mouse attack reaches the authoritative RPC with an explicit JSON null weapon.
+const fist = makeCombatContext({
+  response:{ok:true,hit:true,target_type:"player",damage:6,target_health:94}
+});
+fist.context.combatApi.startPunch();
+fist.context.combatApi.updatePunch(0.21);
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(fist.calls.length,1);
+assert.equal(fist.calls[0].action,"attack");
+assert.equal(fist.calls[0].payload.direction,3);
+assert.equal(fist.calls[0].payload.weapon_id,null);
+assert.ok(fist.toasts.some(message=>message.includes("6 de dano")),
+  "A player hit must give the attacker feedback about dealt damage.");
+
+// 2) A selected magic weapon takes the projectile route, not the unarmed/melee route.
+const wand = makeCombatContext({
+  inventory:[{id:"equipment-wand",equipmentClass:"magic",itemType:"equipment",range:7,attackInterval:0.7},null],
+  response:{ok:true,projectile_id:"projectile-test-1"}
+});
+wand.context.combatApi.startPunch();
+wand.context.combatApi.updatePunch(0.21);
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(wand.calls.length,1);
+assert.equal(wand.calls[0].action,"launch_projectile");
+assert.equal(wand.calls[0].payload.weapon_id,"equipment-wand");
+assert.ok(wand.toasts.includes("Feitiço lançado."));
+
+// 3) Level-six innate magic must also use the projectile action with the server item id.
+const innate = makeCombatContext({magicLevel:6,response:{ok:true,projectile_id:"projectile-innate"}});
+innate.context.combatApi.startPunch();
+innate.context.combatApi.updatePunch(0.21);
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(innate.calls[0].action,"launch_projectile");
+assert.equal(innate.calls[0].payload.weapon_id,"level-six-innate-magic");
+
+// 4) The position action flush broadcasts first and persists the exact local point before returning.
+const movementCode = movementSource
+  .replace(/^import .*;\s*$/gm,"")
+  .replace(/^export function /gm,"function ")
+  .replace(/^export async function /gm,"async function ");
+const sequence = [];
+const movementState = {
+  user:{id:"attacker"},sessionId:"session-1",displayName:"Teste",
+  online:true,joined:true,leaving:false,lastPositionCheckpointAt:0,
+  channel:{send(message){sequence.push({kind:"broadcast",message});return Promise.resolve("ok");}}
+};
+const movementWindow = {
+  player:{x:123.5,y:456.25,direction:3},
+  playerInputX:1,playerInputY:0,playerMoving:true,playerRunning:false,
+  rightMouseHeld:false,shieldStaminaExhausted:false,getBlockingShield:()=>null
+};
+const movementContext = {
+  state:movementState,window:movementWindow,performance:{now:()=>5000},
+  Date,console,
+  supabase:{rpc(name,args){sequence.push({kind:"rpc",name,args});return Promise.resolve({error:null});}}
+};
+vm.createContext(movementContext);
+vm.runInContext(movementCode+";globalThis.movementApi={sendPosition,syncPositionForAction,resetMovementNetwork};",movementContext);
+await movementContext.movementApi.syncPositionForAction();
+assert.deepEqual(sequence.map(entry=>entry.kind),["broadcast","rpc"]);
+assert.equal(sequence[1].name,"ktk_checkpoint_position");
+assert.equal(sequence[1].args.p_x,123.5);
+assert.equal(sequence[1].args.p_y,456.25);
+assert.equal(sequence[1].args.p_direction,3);
+assert.equal(sequence[1].args.p_input_x,1);
+
+// 5) gameAction must flush position before attack/projectile RPCs, but not unrelated actions.
+const actionCode = actionSource
+  .replace(/^import .*;\s*$/gm,"")
+  .replace(/^export async function /gm,"async function ");
+const actionEvents = [];
+const actionState = {user:{id:"attacker"},sessionId:"session-1",online:true,joined:true,leaving:false};
+const actionContext = {
+  state:actionState,
+  supabase:{rpc:async(name,args)=>{
+    actionEvents.push({kind:"rpc",name,args});
+    return {data:{ok:true,hit:false,state:{health:90}},error:null};
+  }},
+  syncPositionForAction:async()=>{actionEvents.push({kind:"position"});},
+  loadWorldState:()=>new Promise(()=>{}),
+  window:{KTKWorldEntities:{applyServerState:()=>actionEvents.push({kind:"apply"})}},
+  console
+};
+vm.createContext(actionContext);
+vm.runInContext(actionCode+";globalThis.actionApi={gameAction};",actionContext);
+const attackResult=await actionContext.actionApi.gameAction("attack",{direction:3,weapon_id:null});
+assert.equal(attackResult.ok,true);
+assert.deepEqual(actionEvents.slice(0,3).map(event=>event.kind),["position","rpc","apply"]);
+assert.equal(actionEvents[1].args.p_action,"attack");
+assert.equal(actionEvents[1].args.p_payload.weapon_id,null);
+
+actionEvents.length=0;
+const launchResult=await actionContext.actionApi.gameAction("launch_projectile",{direction:3,weapon_id:"equipment-wand"});
+assert.equal(launchResult.ok,true);
+assert.deepEqual(actionEvents.slice(0,3).map(event=>event.kind),["position","rpc","apply"]);
+assert.equal(actionEvents[1].args.p_action,"launch_projectile");
+
+actionEvents.length=0;
+actionContext.loadWorldState=async()=>{actionEvents.push({kind:"snapshot"});};
+await actionContext.actionApi.gameAction("magic_level",{});
+assert.equal(actionEvents.some(event=>event.kind==="position"),false,
+  "Magic-level changes are not position-sensitive combat actions.");
+assert.equal(actionEvents.some(event=>event.kind==="rpc"),true);
+
+// 6) Combat changes must not rewrite the walking physics constants or its motion function.
+assert.match(stateSource,/var\s+SPEED\s*=\s*225/);
+assert.match(stateSource,/function updateLocalPlayerVisual\(deltaSeconds\)/);
+assert.match(movementSource,/MOVING_CHECKPOINT_INTERVAL\s*=\s*500/);
+assert.match(html,/combat-controller\.js\?v=20261117-combat-v1/);
+assert.match(html,/online\.js\?v=20261117-combat-v1/);
+assert.match(index,/20261117-combat-v1/);
+
+// 7) The database migration must address the SQL NULL bug and moving-target positions.
+assert.match(migration,/coalesce\(to_jsonb\(v_item_id\),'null'::jsonb\)/);
+assert.match(migration,/estimate_player_position/);
+assert.match(migration,/last_attack_weapon_id/);
+assert.match(migration,/p_position_updated_at/);
+
+console.log("Combat flow passed: unarmed punch RPC, magic projectile RPC, innate magic, pre-action position sync, response feedback, and preserved walking physics.");
