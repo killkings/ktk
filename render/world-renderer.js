@@ -139,7 +139,7 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
 
-  function drawFrozenFishingRodLayer(g,item,image,x,y,scale,direction) {
+  function drawFrozenFishingRodLayer(g,item,image,x,y,scale,direction,frame) {
     const imageWidth=Number(image?.naturalWidth||image?.width)||0;
     const imageHeight=Number(image?.naturalHeight||image?.height)||0;
     if(!image||imageWidth<=0||imageHeight<=0) return;
@@ -148,7 +148,7 @@
     const columns=Math.max(1,Math.floor(imageWidth/frameSize));
     const rows=Math.max(1,Math.floor(imageHeight/frameSize));
     const configuredFrames=Math.max(1,Number(item.attackFrameCount)||columns);
-    const frame=Math.min(columns-1,Math.max(0,configuredFrames-2));
+    const spriteFrame=Math.min(columns-1,Math.max(0,Math.trunc(Number(frame)||0)));
     const row=((Math.trunc(Number(direction)||0)%rows)+rows)%rows;
     const displaySize=Math.max(1,Number(item.attackDisplaySize)||frameSize);
 
@@ -158,7 +158,7 @@
     g.imageSmoothingEnabled=false;
     g.drawImage(
       image,
-      frame*frameSize,row*frameSize,frameSize,frameSize,
+      spriteFrame*frameSize,row*frameSize,frameSize,frameSize,
       x-(displaySize/2)*scale,
       y-(displaySize/2)*scale,
       displaySize*scale,
@@ -264,12 +264,17 @@
             : playerLayers;
           const drawY=screenY-(player.knockbackHeight||0);
 
-          // A vara é desenhada à parte, usando sempre um único quadro fixo.
-          // Assim o loop de animação do personagem não consegue avançar a vara.
+          // A vara executa a animação completa ao pressionar e mantém o último quadro
+          // até o botão ser solto. O mesmo índice é aplicado ao fundo e à frente.
+          const rodFrameCount=Math.max(1,Number(selectedItem?.attackFrameCount)||13);
+          const rodAnimationProgress=rodAnimationStartedAt>0
+            ? Math.max(0,(performance.now()-rodAnimationStartedAt)/PUNCH_ANIMATION_SECONDS)
+            : 1;
+          const rodAnimationFrame=Math.min(rodFrameCount-1,Math.floor(rodAnimationProgress*rodFrameCount));
           if(fishingRodHeld) {
             const rodBackground=selectedItem.attackBackgroundImage||selectedItem.heldBackgroundImage;
             if(rodBackground?.naturalWidth) {
-              drawFrozenFishingRodLayer(ctx,selectedItem,rodBackground,screenX,drawY,PLAYER_WORLD_SCALE,direction);
+              drawFrozenFishingRodLayer(ctx,selectedItem,rodBackground,screenX,drawY,PLAYER_WORLD_SCALE,direction,rodAnimationFrame);
             }
           }
 
@@ -280,7 +285,7 @@
               ? selectedItem.attackImage
               : selectedItem.image;
             if(rodForeground?.naturalWidth) {
-              drawFrozenFishingRodLayer(ctx,selectedItem,rodForeground,screenX,drawY,PLAYER_WORLD_SCALE,direction);
+              drawFrozenFishingRodLayer(ctx,selectedItem,rodForeground,screenX,drawY,PLAYER_WORLD_SCALE,direction,rodAnimationFrame);
             }
           }
           const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
