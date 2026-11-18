@@ -6,6 +6,7 @@ const root = process.cwd();
 const lifecycle = await readFile(new URL("../game/game-lifecycle.js", import.meta.url), "utf8");
 const onlineModule = await readFile(new URL("../js/online.js", import.meta.url), "utf8");
 const html = await readFile(new URL("../campo_livre_atualizado.html", import.meta.url), "utf8");
+const gameCss = await readFile(new URL("../css/game.css", import.meta.url), "utf8");
 
 const elements = new Map();
 function element(id) {
@@ -164,11 +165,15 @@ assert.equal(element("toast").textContent,
 
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
 assert.match(html, /id="enter-world"/);
-assert.match(html, /game\.css\?v=20261118-player-hud-compact-v1/);
+assert.match(html, /game\.css\?v=20261118-player-identity-width-v1/);
 assert.match(html, /id="player-name"/);
 assert.match(html, /class="player-info-label">TESOURO/);
 assert.match(html, /id="player-treasure">0<\/span>/);
 assert.match(html, /class="world-label player-identity-card"/);
+assert.match(gameCss, /\.player-stats\s*\{[^}]*width:clamp\(190px,21vw,280px\)/);
+assert.match(gameCss, /\.world-label\.player-identity-card\s*\{[^}]*width:clamp\(190px,21vw,280px\)/);
+assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.player-stats\s*\{[^}]*width:min\(190px,46vw\)/);
+assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.world-label\.player-identity-card\s*\{[^}]*width:min\(190px,46vw\)/);
 assert.doesNotMatch(html, /mundo aberto · campo 01/);
 assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
 assert.match(html, /game-lifecycle\.js\?v=20261118-player-hud-v1/);
