@@ -52,8 +52,12 @@ console.log("Online entry phase deadlines, abort signals and progress checks pas
 assert.match(session, /supabase\\.rpc\\([\"']ktk_heartbeat[\"']\\)/);
 assert.match(session, /window\\.setInterval[\\s\\S]*?20000/);
 assert.match(session, /ktk_discard_unused_identity/);
-assert.match(session, /supabase\\.rpc\\([\"']ktk_leave_world[\"']\\)/);
-assert.match(lifecycleMigration, /last_seen_at < v_now - interval '2 minutes'/);
-assert.match(lifecycleMigration, /delete from public\\.ktk_profiles/);
-assert.match(lifecycleMigration, /delete from auth\\.users[\\s\\S]*?is_anonymous is true/);
-assert.match(lifecycleMigration, /perform ktk_private\\.delete_player_identity\\(v_player\\.user_id\\)/);
+assert.ok(session.includes('supabase.rpc("ktk_heartbeat")'));
+assert.match(session, /window\.setInterval[\s\S]*?20000/);
+assert.ok(session.includes('supabase.rpc("ktk_discard_unused_identity")'));
+assert.ok(session.includes('supabase.rpc("ktk_leave_world")'));
+assert.ok(lifecycleMigration.includes("last_seen_at < v_now - interval '2 minutes'"));
+assert.ok(lifecycleMigration.includes("delete from public.ktk_profiles"));
+assert.ok(lifecycleMigration.includes("delete from auth.users"));
+assert.ok(lifecycleMigration.includes("is_anonymous is true"));
+assert.ok(lifecycleMigration.includes("perform ktk_private.delete_player_identity(v_player.user_id)"));
