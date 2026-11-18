@@ -164,6 +164,7 @@ assert.equal(element("toast").textContent,
 
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
 assert.match(html, /id="enter-world"/);
+assert.match(html, /game\.css\?v=20261118-player-hud-compact-v1/);
 assert.match(html, /id="player-name"/);
 assert.match(html, /class="player-info-label">TESOURO/);
 assert.match(html, /id="player-treasure">0<\/span>/);
