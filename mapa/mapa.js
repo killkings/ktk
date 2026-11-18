@@ -14,7 +14,7 @@
   const assetSources = {
     'terrain_summer.png': './mapa/assets/lpc-terrain-summer.png',
     'wildflowers_summer.png': 'https://raw.githubusercontent.com/ElizaWy/LPC/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/wildflowers_summer.png',
-    'plants_summer.png': 'https://raw.githubusercontent.com/ElizaWy/LPC/3e8710904ce1fc7ea9d70f6ccd0745b99efd54ec/Terrain/plants_summer.png'
+    'plants_summer.png': './mapa/assets/lpc-plants-summer.png'
   };
   const tileCache = new Map();
   const decorationCache = new Map();
