@@ -97,14 +97,16 @@
 
   window.addEventListener('keydown', event => {
     const target = event.target;
+    const key = String(event.key || '').toLowerCase();
+    if (!key) return;
     const insideChat = Boolean(target?.closest?.('#chat-composer'));
-    if (event.key === 'Escape' && insideChat) {
+    if (key === 'escape' && insideChat) {
       event.preventDefault();
       input.blur();
       return;
     }
     const gameUi = document.getElementById('game-ui');
-    if (event.key.toLowerCase() === 't' && !event.repeat && !insideChat &&
+    if (key === 't' && !event.repeat && !insideChat &&
         gameUi?.classList.contains('active')) {
       event.preventDefault();
       input.focus();
