@@ -259,7 +259,7 @@
 
     const resolved = [];
     const componentOwners = new Map();
-    for (const sprite of completeSprites) {
+    for (const sprite of sprites) {
       const hint = { x: sprite.sx, y: sprite.sy, w: sprite.sw, h: sprite.sh };
       const hintKey = [hint.x, hint.y, hint.w, hint.h].join(',');
       let best = null;
@@ -622,7 +622,7 @@
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    for (const sprite of sprites) {
+    for (const sprite of completeSprites) {
       const drawWidth = sprite.sw * baseScale;
       const drawHeight = sprite.sh * baseScale;
       const baseX = sprite.x * width;
