@@ -21,7 +21,6 @@
   const roomCanvasCache = new Map();
   const assets = new Map();
   const assetStatus = new Map();
-  let plantComponents = null;
 
   const biomes = [
     {
@@ -153,167 +152,11 @@
     };
   }
 
-  // Detecta os limites reais de cada desenho no PNG pela transparência.
-  // Assim, uma planta que ultrapassa a célula de 32px não perde suas pontas.
-  function detectPlantComponents(image) {
-    const width = image.naturalWidth;
-    const height = image.naturalHeight;
-    const surface = document.createElement('canvas');
-    surface.width = width;
-    surface.height = height;
-    const surfaceCtx = surface.getContext('2d', { willReadFrequently: true });
-    surfaceCtx.drawImage(image, 0, 0);
-    const pixels = surfaceCtx.getImageData(0, 0, width, height).data;
-    const total = width * height;
-    const visited = new Uint8Array(total);
-    const queue = new Int32Array(total);
-    const components = [];
-    const alphaThreshold = 12;
-
-    for (let start = 0; start < total; start++) {
-      if (visited[start] || pixels[start * 4 + 3] <= alphaThreshold) continue;
-
-      let head = 0;
-      let tail = 0;
-      queue[tail++] = start;
-      visited[start] = 1;
-      let minX = width;
-      let minY = height;
-      let maxX = -1;
-      let maxY = -1;
-      let area = 0;
-
-      while (head < tail) {
-        const index = queue[head++];
-        const x = index % width;
-        const y = Math.floor(index / width);
-        area++;
-        minX = Math.min(minX, x);
-        minY = Math.min(minY, y);
-        maxX = Math.max(maxX, x);
-        maxY = Math.max(maxY, y);
-
-        for (let oy = -1; oy <= 1; oy++) {
-          for (let ox = -1; ox <= 1; ox++) {
-            if (ox === 0 && oy === 0) continue;
-            const nx = x + ox;
-            const ny = y + oy;
-            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
-            const next = ny * width + nx;
-            if (visited[next] || pixels[next * 4 + 3] <= alphaThreshold) continue;
-            visited[next] = 1;
-            queue[tail++] = next;
-          }
-        }
-      }
-
-      if (area >= 4) {
-        components.push({
-          x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1,
-          area
-        });
-      }
-    }
-
-    // Une partes desconectadas por poucos pixels (folhas, hastes e sombras)
-    // sem unir plantas vizinhas que estão separadas no atlas.
-    let merged = true;
-    while (merged) {
-      merged = false;
-      outer: for (let i = 0; i < components.length; i++) {
-        for (let j = i + 1; j < components.length; j++) {
-          const a = components[i];
-          const b = components[j];
-          const gapX = Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w));
-          const gapY = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
-          if (gapX > 3 || gapY > 3 || Math.hypot(gapX, gapY) > 4) continue;
-
-          const left = Math.min(a.x, b.x);
-          const top = Math.min(a.y, b.y);
-          const right = Math.max(a.x + a.w, b.x + b.w);
-          const bottom = Math.max(a.y + a.h, b.y + b.h);
-          a.x = left;
-          a.y = top;
-          a.w = right - left;
-          a.h = bottom - top;
-          a.area += b.area;
-          components.splice(j, 1);
-          merged = true;
-          break outer;
-        }
-      }
-    }
-
-    return components.map(component => {
-      const padding = 2;
-      const x = Math.max(0, component.x - padding);
-      const y = Math.max(0, component.y - padding);
-      const right = Math.min(width, component.x + component.w + padding);
-      const bottom = Math.min(height, component.y + component.h + padding);
-      return { sx: x, sy: y, sw: right - x, sh: bottom - y, area: component.area };
-    });
-  }
-
-  function resolvePlantSprites(sprites) {
-    if (!plantComponents?.length) return sprites;
-
-    const resolved = [];
-    const componentOwners = new Map();
-    for (const sprite of sprites) {
-      const hint = { x: sprite.sx, y: sprite.sy, w: sprite.sw, h: sprite.sh };
-      const hintKey = [hint.x, hint.y, hint.w, hint.h].join(',');
-      let best = null;
-      let bestScore = -Infinity;
-
-      for (let index = 0; index < plantComponents.length; index++) {
-        const component = plantComponents[index];
-        const overlapW = Math.max(0, Math.min(hint.x + hint.w, component.sx + component.sw) - Math.max(hint.x, component.sx));
-        const overlapH = Math.max(0, Math.min(hint.y + hint.h, component.sy + component.sh) - Math.max(hint.y, component.sy));
-        const overlap = overlapW * overlapH;
-        if (!overlap) continue;
-
-        const componentCenterX = component.sx + component.sw / 2;
-        const componentCenterY = component.sy + component.sh / 2;
-        const hintCenterX = hint.x + hint.w / 2;
-        const hintCenterY = hint.y + hint.h / 2;
-        const distance = Math.hypot(componentCenterX - hintCenterX, componentCenterY - hintCenterY);
-        const score = overlap * 4 - distance;
-        if (score > bestScore) {
-          bestScore = score;
-          best = { index, component };
-        }
-      }
-
-      if (!best) {
-        resolved.push(sprite);
-        continue;
-      }
-
-      const previousHint = componentOwners.get(best.index);
-      // Recortes diferentes que apontam para a mesma planta eram partes
-      // duplicadas do mesmo desenho. Só repetimos quando o recorte é idêntico.
-      if (previousHint && previousHint !== hintKey) continue;
-      componentOwners.set(best.index, hintKey);
-      resolved.push({
-        ...sprite,
-        sx: best.component.sx,
-        sy: best.component.sy,
-        sw: best.component.sw,
-        sh: best.component.sh
-      });
-    }
-    return resolved;
-  }
-
   function loadAsset(file) {
     if (assets.has(file)) return;
     const image = new Image();
     image.onload = () => {
       assetStatus.set(file, 'loaded');
-      if (file === 'plants_summer.png') {
-        try { plantComponents = detectPlantComponents(image); }
-        catch (error) { plantComponents = null; console.warn('Não foi possível analisar os recortes das plantas LPC:', error); }
-      }
       tileCache.clear();
       roomCanvasCache.clear();
     };
@@ -569,34 +412,30 @@
 
     const baseScale = Math.min(width / 1920, height / 1080) * 1.58;
     const sprites = [
-      // Plantas pequenas, rosetas e folhas largas: movimento discreto.
-      { x: .12, y: .25, sx: 0,   sy: 0,  sw: 32, sh: 32, phase: .2, amplitude: .010 },
-      { x: .28, y: .17, sx: 32,  sy: 0,  sw: 32, sh: 32, phase: 1.1, amplitude: .009 },
-      { x: .76, y: .19, sx: 64,  sy: 0,  sw: 32, sh: 32, phase: 2.2, amplitude: .011 },
-      { x: .89, y: .42, sx: 96,  sy: 0,  sw: 32, sh: 32, phase: 3.0, amplitude: .010 },
-      { x: .84, y: .78, sx: 128, sy: 0,  sw: 32, sh: 32, phase: 4.0, amplitude: .009 },
-      { x: .68, y: .89, sx: 160, sy: 0,  sw: 32, sh: 32, phase: 5.1, amplitude: .010 },
-      { x: .27, y: .88, sx: 192, sy: 0,  sw: 32, sh: 32, phase: 2.8, amplitude: .011 },
-      { x: .09, y: .69, sx: 224, sy: 0,  sw: 32, sh: 32, phase: 4.8, amplitude: .009 },
+      // Sete plantas do atlas com dois quadros cada.
+      // A primeira linha (y=0) e a segunda (y=32) são frames da MESMA planta,
+      // não objetos separados. Alternamos os quadros no mesmo ponto do mapa.
+      { x: .12, y: .25, sx: 0,   sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 0.0, amplitude: 0 },
+      { x: .28, y: .17, sx: 32,  sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 0.4, amplitude: 0 },
+      { x: .76, y: .19, sx: 64,  sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 0.8, amplitude: 0 },
+      { x: .89, y: .42, sx: 96,  sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 1.2, amplitude: 0 },
+      { x: .84, y: .78, sx: 128, sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 1.6, amplitude: 0 },
+      { x: .68, y: .89, sx: 160, sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 2.0, amplitude: 0 },
+      { x: .27, y: .88, sx: 192, sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 2.4, amplitude: 0 },
 
-      // Variações da segunda linha do atlas.
-      { x: .34, y: .35, sx: 0,   sy: 32, sw: 32, sh: 32, phase: 1.7, amplitude: .010 },
-      { x: .70, y: .34, sx: 32,  sy: 32, sw: 32, sh: 32, phase: 3.7, amplitude: .009 },
-      { x: .17, y: .51, sx: 64,  sy: 32, sw: 32, sh: 32, phase: 5.6, amplitude: .011 },
-      { x: .82, y: .57, sx: 96,  sy: 32, sw: 32, sh: 32, phase: .8, amplitude: .010 },
-      { x: .30, y: .69, sx: 128, sy: 32, sw: 32, sh: 32, phase: 2.5, amplitude: .009 },
-      { x: .73, y: .70, sx: 160, sy: 32, sw: 32, sh: 32, phase: 4.4, amplitude: .010 },
+      // A oitava imagem da primeira linha não tem par correspondente neste grupo.
+      { x: .09, y: .69, sx: 224, sy: 0, sw: 32, sh: 32, phase: 2.1, amplitude: .009 },
 
-      // Arbustos altos: oscilação um pouco maior no topo, ancorada na base.
+      // Arbustos altos: tamanho original 32×64.
       { x: .14, y: .43, sx: 0,  sy: 64, sw: 32, sh: 64, phase: .6, amplitude: .014 },
       { x: .87, y: .67, sx: 32, sy: 64, sw: 32, sh: 64, phase: 2.9, amplitude: .013 },
       { x: .49, y: .17, sx: 64, sy: 64, sw: 32, sh: 64, phase: 5.3, amplitude: .014 },
 
-      // Samambaias e folhagens largas: balanço lento e muito leve.
+      // Samambaias e folhagens largas.
       { x: .36, y: .80, sx: 96,  sy: 64, sw: 64, sh: 64, phase: 1.9, amplitude: .008 },
       { x: .66, y: .84, sx: 160, sy: 64, sw: 96, sh: 64, phase: 4.9, amplitude: .007 },
 
-      // Capim baixo.
+      // Capim baixo: oscilação suave no próprio eixo da planta.
       { x: .19, y: .34, sx: 256, sy: 32, sw: 32, sh: 32, phase: .4, amplitude: .022 },
       { x: .40, y: .22, sx: 288, sy: 32, sw: 32, sh: 32, phase: 1.8, amplitude: .020 },
       { x: .73, y: .29, sx: 320, sy: 32, sw: 32, sh: 32, phase: 2.7, amplitude: .022 },
@@ -605,29 +444,27 @@
       { x: .31, y: .84, sx: 320, sy: 32, sw: 32, sh: 32, phase: 3.4, amplitude: .021 },
       { x: .12, y: .58, sx: 256, sy: 32, sw: 32, sh: 32, phase: 2.1, amplitude: .022 },
 
-      // Touceiras de capim alto.
+      // Touceiras de capim alto e juncos.
       { x: .22, y: .48, sx: 256, sy: 64, sw: 32, sh: 64, phase: .9, amplitude: .035 },
       { x: .66, y: .24, sx: 288, sy: 64, sw: 32, sh: 64, phase: 2.4, amplitude: .038 },
       { x: .90, y: .64, sx: 320, sy: 64, sw: 32, sh: 64, phase: 3.7, amplitude: .036 },
       { x: .39, y: .88, sx: 256, sy: 64, sw: 32, sh: 64, phase: 4.9, amplitude: .034 },
       { x: .70, y: .91, sx: 320, sy: 64, sw: 32, sh: 64, phase: 5.7, amplitude: .037 },
-
-      // Juncos altos.
       { x: .12, y: .30, sx: 352, sy: 0, sw: 32, sh: 64, phase: 1.3, amplitude: .032 },
       { x: .91, y: .33, sx: 384, sy: 0, sw: 32, sh: 64, phase: 3.1, amplitude: .034 },
       { x: .55, y: .91, sx: 416, sy: 0, sw: 32, sh: 64, phase: 5.1, amplitude: .033 }
     ];
-
-    const completeSprites = resolvePlantSprites(sprites);
-
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    for (const sprite of completeSprites) {
+    for (const sprite of sprites) {
       const drawWidth = sprite.sw * baseScale;
       const drawHeight = sprite.sh * baseScale;
       const baseX = sprite.x * width;
       const baseY = sprite.y * height;
       const sway = Math.sin(timeSeconds * 1.35 + sprite.phase) * sprite.amplitude;
+      const animationFrame = sprite.frameSy === undefined
+        ? sprite.sy
+        : (Math.floor(timeSeconds / 0.42 + sprite.phase) % 2 === 0 ? sprite.sy : sprite.frameSy);
 
       // O eixo fica na base de cada planta para ela não deslizar pelo chão.
       ctx.save();
@@ -635,7 +472,7 @@
       ctx.rotate(sway);
       ctx.drawImage(
         plants,
-        sprite.sx, sprite.sy, sprite.sw, sprite.sh,
+        sprite.sx, animationFrame, sprite.sw, sprite.sh,
         -drawWidth / 2, -drawHeight,
         drawWidth, drawHeight
       );
