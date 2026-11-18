@@ -1,9 +1,34 @@
 /* Animações de combate e solicitação de ações validadas pelo servidor. */
 'use strict';
 
+  function isFishingRodItem(item) {
+    if(!item || typeof item!=='object') return false;
+    const id=String(item.id||item.item_id||item.itemId||'').toLowerCase();
+    const name=String(item.displayName||item.display_name||'').toLowerCase();
+    const spriteSources=[
+      item.image?.src,
+      item.attackImage?.src,
+      item.attackBackgroundImage?.src,
+      item.heldBackgroundImage?.src
+    ].filter(Boolean).join(' ').toLowerCase();
+    return id==='rod'||id==='equipment-rod'||id.endsWith('-fishing-rod')||
+      /fishing rod|vara de pesca/.test(name)||
+      spriteSources.includes('tools/fishing_rod/fg.png')||
+      spriteSources.includes('tools/fishing_rod/bg.png');
+  }
+
   function startPunch(event=null) {
-    if(!gameStarted || !screens.game.classList.contains('active') || punch.cooldown>0) return;
+    if(!gameStarted || !screens.game.classList.contains('active')) return;
     const selectedItem=inventory[selectedInventorySlot];
+    if(isFishingRodItem(selectedItem)) {
+      punch.active=false;
+      punch.elapsed=0;
+      punch.hitApplied=true;
+      punch.weaponAttack=false;
+      punch.weaponItem=null;
+      return;
+    }
+    if(punch.cooldown>0) return;
     const selectableWeaponClasses=new Set(['melee','ranged','magic','tool']);
     const selectedWeapon=selectedItem&&!selectedItem.wearSlot&&selectableWeaponClasses.has(selectedItem.equipmentClass)
       &&selectedItem.itemType!=='ammo'?selectedItem:null;
