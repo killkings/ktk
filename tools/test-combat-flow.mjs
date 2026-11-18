@@ -208,7 +208,7 @@ assert.match(html,/combat-controller\.js\?v=20261117-combat-v1/);
 assert.match(html,/online\.js\?v=20261117-combat-v1/);
 assert.match(html,/world\/world-entities\.js\?v=20261117-combat-v1/);
 assert.match(html,/world-renderer\.js\?v=20261117-combat-v1/);
-assert.match(index,/20261117-combat-v1/);
+assert.match(index,/20261118-punch-v1/);
 assert.match(replicaSource,/function predictProjectile\(/);
 assert.match(worldRenderer,/entity\.type==='remote-projectile'&&entity\.phase==='outbound'/);
 
