@@ -53,6 +53,7 @@ export async function subscribeWorld(onProgress = () => {}) {
   });
   state.channel
     .on("broadcast", { event: "player_position" }, ({ payload }) => acceptMovementBroadcast(payload))
+    .on("broadcast", { event: "chat_message" }, ({ payload }) => window.KTKChat?.receive(payload))
     .on("broadcast", { event: "INSERT" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => acceptWorldEntityChange(payload))
