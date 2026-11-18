@@ -10,7 +10,7 @@
   #world { position:absolute; display:block; width:min(calc(100vw - 280px - 54px),177.7778vh); height:min(100vh,56.25vw); right:0; top:50%; transform:translateY(-50%); image-rendering:auto; }
   .screen { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px; }
   .screen.active { display:flex; }
-  #welcome { background:#000000; }
+  #welcome { background:radial-gradient(ellipse at 50% 42%,rgba(112,151,83,.28),transparent 44%),#000000; }
   .welcome-card { width:min(680px,100%); text-align:center; padding:clamp(28px,6vw,64px); border:1px solid rgba(236,244,220,.18); border-radius:30px; background:rgba(0,0,0,.88); box-shadow:0 30px 100px rgba(0,0,0,.3); backdrop-filter:blur(12px); }
   #death { background:radial-gradient(ellipse at 50% 42%,rgba(143,62,48,.25),transparent 46%),linear-gradient(145deg,#241713,#351d1b 55%,#171a16); }
   .death-card { width:min(560px,100%); padding:clamp(28px,6vw,58px); text-align:center; border:1px solid rgba(241,193,165,.2); border-radius:26px; background:rgba(24,20,18,.88); box-shadow:0 28px 90px rgba(0,0,0,.4); }
@@ -23,7 +23,7 @@
   .primary:hover { transform:translateY(-2px); box-shadow:0 9px 0 #9fb273; filter:brightness(1.04); }
   .primary:active { transform:translateY(4px); box-shadow:0 3px 0 #9fb273; }
   .small-note { margin-top:22px; color:#91a891; font-size:11px; }
-  #creator { background:#000000; overflow:auto; }
+  #creator { background:radial-gradient(ellipse at 20% 20%,rgba(122,160,93,.16),transparent 38%),#000000; overflow:auto; }
   .creator-shell { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(260px,.8fr); width:min(1000px,100%); height:min(820px,calc(100vh - 48px)); max-height:min(820px,calc(100vh - 48px)); min-height:0; border:1px solid rgba(236,244,220,.16); border-radius:26px; overflow:hidden; background:rgba(0,0,0,.94); box-shadow:0 28px 90px rgba(0,0,0,.35); }
   .creator-controls { padding:clamp(16px,3vw,30px); overflow:auto; min-height:0; }
   .creator-controls h2 { margin:7px 0 7px; font-size:32px; letter-spacing:-.045em; }
@@ -46,12 +46,12 @@
   .style-btn[data-style="long"] .hair-icon::before { content:''; position:absolute; inset:9px -4px -6px; background:inherit; border-radius:3px 3px 8px 8px; }
   .style-btn[data-style="curly"] .hair-icon::after { width:24px; height:13px; left:-1px; top:-4px; border-radius:50%; box-shadow:-3px 4px 0 -1px currentColor,3px 4px 0 -1px currentColor; }
   .style-btn[data-style="ponytail"] .hair-icon::before { content:''; position:absolute; width:7px; height:17px; right:-5px; top:8px; border-radius:4px 7px 8px 4px; background:inherit; }
-  .style-btn.selected { color:#f0f5e7; background:#000000; border-color:#cbdc9a; box-shadow:inset 0 0 0 1px rgba(203,220,154,.18); }
+  .style-btn.selected { color:#f0f5e7; background:#38543a; border-color:#cbdc9a; box-shadow:inset 0 0 0 1px rgba(203,220,154,.18); }
   .creator-actions { display:flex; gap:10px; margin-top:26px; }
   .creator-actions { position:sticky; bottom:0; z-index:3; padding:12px 0 4px; background:#000000; }
   .secondary { border:1px solid rgba(237,245,224,.19); color:#dce6d6; background:transparent; border-radius:999px; padding:12px 17px; font-weight:750; }
   .secondary:hover { background:rgba(255,255,255,.06); }
-  .creator-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:340px; padding:28px; background:#000000; border-left:1px solid rgba(255,255,255,.08); }
+  .creator-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:340px; padding:28px; background:radial-gradient(ellipse at 50% 43%,rgba(145,181,105,.2),transparent 52%),#000000; border-left:1px solid rgba(255,255,255,.08); }
   .preview-stage { display:grid; place-items:center; width:min(100%,330px); aspect-ratio:1/1; border-radius:24px; background-color:#6e9a55; background-image:radial-gradient(rgba(230,242,190,.12) 1px,transparent 1px),radial-gradient(rgba(26,75,36,.12) 1px,transparent 1px); background-position:0 0,9px 12px; background-size:22px 22px,29px 29px; box-shadow:inset 0 0 50px rgba(20,61,31,.28); }
   #preview { width:100%; height:100%; image-rendering:pixelated; }
   .preview-caption { margin-top:19px; text-align:center; }
