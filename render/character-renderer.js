@@ -149,9 +149,9 @@
     return tinted;
   }
 
-  function getPlayerLayers(baseLayers, weaponMode='held') {
+  function getPlayerLayers(baseLayers, weaponMode='held', weaponOverride=null) {
     const selectedItem=weaponMode==='attack'
-      ? (punch.weaponItem||inventory[selectedInventorySlot])
+      ? (weaponOverride||punch.weaponItem||inventory[selectedInventorySlot])
       : inventory[selectedInventorySlot];
     const mainHandItem=selectedItem?.equipmentClass==='shield'||selectedItem?.wearSlot?null:selectedItem;
     const reverseBodyFrames=weaponMode==='attack'&&Boolean(mainHandItem?.attackReverseBodyFrames);
