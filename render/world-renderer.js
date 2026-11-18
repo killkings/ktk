@@ -58,6 +58,7 @@
     try {
       update(dt,w,h);
       updateLocalPlayerVisual(dt);
+      window.KTKOnline?.sendPosition?.();
       updateRemotePlayerMotion(dt);
       if(window.KTKWorldMap) window.KTKWorldMap.setViewport(w,h);
 
