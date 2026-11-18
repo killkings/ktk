@@ -61,29 +61,12 @@
       window.KTKPlayerStats.render();
     }
   });
+  // A mochila não fornece roupas aos espaços de equipamento.
+  // Vestimentas só entram nesses espaços quando são coletadas no mapa.
   document.querySelectorAll('.inventory-slot:not(.is-locked)').forEach(slot=>{
     slot.tabIndex=0;
     slot.setAttribute('role','button');
     slot.addEventListener('click',()=>selectInventorySlot(Number(slot.dataset.slot)));
-    slot.addEventListener('dragstart',event=>{
-      const index=Number(slot.dataset.slot);
-      const item=inventory[index];
-      if(event.button!==0||!item?.wearSlot) {
-        event.preventDefault();
-        return;
-      }
-      draggedWearableIndex=index;
-      slot.classList.add('is-dragging');
-      if(event.dataTransfer) {
-        event.dataTransfer.effectAllowed='move';
-        event.dataTransfer.setData('text/plain',String(index));
-      }
-    });
-    slot.addEventListener('dragend',()=>{
-      draggedWearableIndex=-1;
-      slot.classList.remove('is-dragging');
-      document.querySelectorAll('.wearable-slot').forEach(target=>target.classList.remove('is-drop-target'));
-    });
     slot.addEventListener('keydown',event=>{
       if(event.key==='Enter'||event.key===' ') {
         event.preventDefault();
@@ -91,29 +74,9 @@
       }
     });
   });
+  // Clicar em uma peça vestida retira-a para o mapa; não existe retorno à mochila.
   document.querySelectorAll('.wearable-slot').forEach(slot=>{
-    slot.addEventListener('dragover',event=>{
-      if(draggedWearableIndex<0) return;
-      event.preventDefault();
-      const item=inventory[draggedWearableIndex];
-      slot.classList.toggle('is-drop-target',item?.wearSlot===slot.dataset.wearSlot);
-      if(event.dataTransfer) event.dataTransfer.dropEffect='move';
-    });
-    slot.addEventListener('dragleave',()=>slot.classList.remove('is-drop-target'));
-    slot.addEventListener('drop',event=>{
-      event.preventDefault();
-      if(draggedWearableIndex>=0) {
-        suppressWearSlotClick=true;
-        setTimeout(()=>{suppressWearSlotClick=false;},0);
-        equipWearableFromInventory(draggedWearableIndex,slot.dataset.wearSlot);
-      }
-      draggedWearableIndex=-1;
-      slot.classList.remove('is-drop-target');
-    });
-    slot.addEventListener('click',()=>{
-      if(suppressWearSlotClick) return;
-      unequipWearable(slot.dataset.wearSlot);
-    });
+    slot.addEventListener('click',()=>unequipWearable(slot.dataset.wearSlot));
   });
   window.addEventListener('blur',()=>{
     keys.clear();
