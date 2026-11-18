@@ -191,21 +191,24 @@ function updateLocalPlayerVisual(deltaSeconds) {
     : (inputY>0?2:0);
   player.direction=playerVisual.direction;
 
+  const roomWidth=Math.max(1,Number(canvas?.clientWidth)||Number(window.KTKWorldMap?.regionSize?.width)||1920);
+  const roomHeight=Math.max(1,Number(canvas?.clientHeight)||Number(window.KTKWorldMap?.regionSize?.height)||1080);
+  window.KTKWorldMap?.setViewport?.(roomWidth,roomHeight);
+  const roomOffsetX=camera.x*roomWidth, roomOffsetY=camera.y*roomHeight;
   const guarding=Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield());
   const movementLevel=(playerRunning?3:2)*(guarding?0.5:1);
   const speedPenalty=wearableSlotOrder.reduce((sum,slot)=>{
     const item=equippedWearables?.[slot];
     return sum+(item?.durability>0?Math.max(0,Number(item.speedPenalty)||0):0);
   },0);
-  const movementSpeed=SPEED*Math.max(1,movementLevel-speedPenalty)/2;
+  const onRoad=Boolean(window.KTKWorldMap?.isOnRoad?.(
+    roomOffsetX+playerVisual.x,roomOffsetY+playerVisual.y
+  ));
+  const roadSpeedMultiplier=onRoad?1.5:1;
+  const movementSpeed=SPEED*Math.max(1,movementLevel-speedPenalty)/2*roadSpeedMultiplier;
   const distance=movementSpeed*dt;
   const wantedX=inputX/inputLength*distance;
   const wantedY=inputY/inputLength*distance;
-
-  const roomWidth=Math.max(1,Number(canvas?.clientWidth)||Number(window.KTKWorldMap?.regionSize?.width)||1920);
-  const roomHeight=Math.max(1,Number(canvas?.clientHeight)||Number(window.KTKWorldMap?.regionSize?.height)||1080);
-  window.KTKWorldMap?.setViewport?.(roomWidth,roomHeight);
-  const roomOffsetX=camera.x*roomWidth, roomOffsetY=camera.y*roomHeight;
 
   const obstacles=[];
 
