@@ -101,6 +101,21 @@
           direction:Number(direction)
         });
         if(!result?.ok) throw new Error(result?.error||'O servidor não confirmou o disparo.');
+        const projectileType=item?.id==='equipment-boomerang'?'boomerang'
+          : item?.id==='equipment-slingshot'?'stone'
+          : item?.equipmentClass==='magic'?'magic':'arrow';
+        const projectileSpeed=projectileType==='arrow'
+          ? (item?.id==='equipment-crossbow'?840:720)
+          : projectileType==='stone'?600
+          : projectileType==='boomerang'?480:620;
+        window.KTKWorldEntities?.predictProjectile?.({
+          id:result.projectile_id,
+          weaponId:item?.id,
+          projectileType,
+          direction:Number(direction),
+          speed:projectileSpeed,
+          maxDistance:(Number(item?.range)||1)*72
+        });
         if(item?.equipmentClass==='magic') toast('Feitiço lançado.');
       } catch(error) {
         toast(combatErrorMessage(error));
