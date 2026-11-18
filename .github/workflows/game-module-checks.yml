@@ -22,6 +22,8 @@ on:
       - "tools/test-local-movement.mjs"
       - "tools/test-combat-flow.mjs"
       - "supabase/migrations/**"
+      - "inventory/**"
+      - "tools/test-wearable-separation.mjs"
       - "input/input-controller.js"
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
@@ -50,6 +52,8 @@ on:
       - "tools/test-local-movement.mjs"
       - "tools/test-combat-flow.mjs"
       - "supabase/migrations/**"
+      - "inventory/**"
+      - "tools/test-wearable-separation.mjs"
       - "input/input-controller.js"
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
@@ -74,6 +78,8 @@ jobs:
           node --check render/world-renderer.js
           node --check combat/combat-controller.js
           node --check input/input-controller.js
+          node --check inventory/inventory-ui.js
+          node --check inventory/inventory-state.js
           node --check multiplayer/player-replica.js
           node --check js/game-state.js
           node --input-type=module --check < online/movement.js
@@ -95,6 +101,8 @@ jobs:
         run: node tools/test-local-movement.mjs
       - name: Check combat and position synchronization
         run: node tools/test-combat-flow.mjs
+      - name: Check wearable separation
+        run: node tools/test-wearable-separation.mjs
       - name: Check module boundaries and script order
         run: |
           node <<'NODE'
