@@ -229,7 +229,7 @@
           let weaponMode=punch.active?(punch.weaponAttack?'attack':'none'):'held';
           if(fishingRodHeld) weaponMode='attack';
           if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
-          let playerLayers=getPlayerLayers(baseLayers,weaponMode);
+          let playerLayers=getPlayerLayers(baseLayers,weaponMode,fishingRodHeld?selectedItem:null);
           const fishingRodImages=fishingRodHeld
             ? [selectedItem.attackBackgroundImage,selectedItem.attackImage].filter(Boolean)
             : [];
