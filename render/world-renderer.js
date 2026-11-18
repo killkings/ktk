@@ -234,9 +234,12 @@
             ? [selectedItem.attackBackgroundImage,selectedItem.attackImage].filter(Boolean)
             : [];
           if(fishingRodHeld) {
-            const castFrame=Math.floor((Math.max(1,Number(selectedItem.attackFrameCount)||13)-1)/2);
+            const foregroundFrameCount=Math.max(1,Number(selectedItem.attackFrameCount)||13);
+            const penultimateForegroundFrame=Math.max(0,foregroundFrameCount-2);
             playerLayers=playerLayers.map(layer=>
-              fishingRodImages.includes(layer.image)?{...layer,staticFrame:castFrame}:layer
+              layer.image===selectedItem.attackImage
+                ? {...layer,staticFrame:penultimateForegroundFrame}
+                : layer
             );
           }
           const visiblePlayerLayers=inLakeWater
