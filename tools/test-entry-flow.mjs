@@ -165,17 +165,22 @@ assert.equal(element("toast").textContent,
 
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
 assert.match(html, /id="enter-world"/);
-assert.match(html, /game\.css\?v=20261118-player-identity-width-v2/);
+assert.match(html, /game\.css\?v=20261118-player-identity-compact-v3/);
 assert.match(html, /id="player-name"/);
 assert.match(html, /class="player-info-label">TESOURO/);
 assert.match(html, /id="player-treasure">0<\/span>/);
 assert.match(html, /class="world-label player-identity-card"/);
 assert.match(gameCss, /#game-ui\s*\{[^}]*--player-panel-width:clamp\(190px,21vw,280px\)/);
 assert.match(gameCss, /\.player-stats\s*\{[^}]*width:var\(--player-panel-width\)/);
-assert.match(gameCss, /\.world-label\.player-identity-card\s*\{[^}]*flex:0 0 var\(--player-panel-width\); width:var\(--player-panel-width\); min-width:var\(--player-panel-width\); max-width:var\(--player-panel-width\)/);
+assert.match(gameCss, /#game-ui\s*\{[^}]*--identity-card-width:clamp\(160px,16vw,210px\)/);
+assert.match(gameCss, /\.world-label\.player-identity-card\s*\{[^}]*flex:0 0 var\(--identity-card-width\); width:var\(--identity-card-width\); min-width:var\(--identity-card-width\); max-width:var\(--identity-card-width\); padding:9px/);
 assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?#game-ui\s*\{[^}]*--player-panel-width:min\(190px,46vw\)/);
 assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.player-stats\s*\{[^}]*width:var\(--player-panel-width\)/);
-assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.world-label\.player-identity-card\s*\{[^}]*flex-basis:var\(--player-panel-width\); width:var\(--player-panel-width\); min-width:var\(--player-panel-width\); max-width:var\(--player-panel-width\)/);
+assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?#game-ui\s*\{[^}]*--identity-card-width:min\(174px,44vw\)/);
+assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.world-label\.player-identity-card\s*\{[^}]*flex-basis:var\(--identity-card-width\); width:var\(--identity-card-width\); min-width:var\(--identity-card-width\); max-width:var\(--identity-card-width\); padding:8px/);
+assert.match(gameCss, /\.identity-mark\s*\{[^}]*width:30px; height:30px/);
+assert.match(gameCss, /\.world-label \.player-info-item\s*\{[^}]*min-height:43px/);
+assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.world-label \.player-info-item\s*\{[^}]*min-height:40px/);
 assert.doesNotMatch(html, /mundo aberto · campo 01/);
 assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
 assert.match(html, /game-lifecycle\.js\?v=20261118-player-hud-v1/);
