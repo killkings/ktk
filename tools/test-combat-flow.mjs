@@ -18,7 +18,7 @@ const [combatSource, movementSource, actionSource, stateSource, html, index, mig
   read("../input/input-controller.js")
 ]);
 
-const combatStart = combatSource.indexOf("  function startPunch() {");
+const combatStart = combatSource.indexOf("  function startPunch(event=null) {");
 const combatEnd = combatSource.indexOf("  function getEntityWorldPosition(", combatStart);
 const applyHitStart = combatSource.indexOf("  function applyCombatHit(");
 const applyHitEnd = combatSource.indexOf("  function startKnockback(", applyHitStart);
