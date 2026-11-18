@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#183d2b">
 <title>Kill the King — Protótipo</title>
-<link rel="stylesheet" href="./css/game.css?v=20261118-inventory-no-scroll-v1">
+<link rel="stylesheet" href="./css/game.css?v=20261118-player-sidebar-stack-v1">
 </head>
 <body>
 <div id="app">
@@ -97,65 +97,67 @@
   </section>
 
   <div id="game-ui">
-    <aside class="player-stats" aria-label="Atributos do jogador">
-      <h2 class="stats-heading">Status do jogador</h2>
-      <dl class="stat-list">
-        <div class="stat-row"><dt>Saúde</dt><dd class="stat-value" data-stat="health"></dd><div class="stat-meter"><i data-meter="health"></i></div></div>
-        <div class="stat-row"><dt>Saciedade</dt><dd class="stat-value" data-stat="satiety"></dd><div class="stat-meter"><i data-meter="satiety"></i></div></div>
-        <div class="stat-row"><dt>Hidratação</dt><dd class="stat-value" data-stat="hydration"></dd><div class="stat-meter"><i data-meter="hydration"></i></div></div>
-        <div class="stat-row"><dt>Estamina</dt><dd class="stat-value" data-stat="stamina"></dd><div class="stat-meter"><i data-meter="stamina"></i></div></div>
-        <div class="stat-row"><dt class="mana-label">Mana <span class="magic-level-value">LVL <span data-stat="magicLevel"></span></span></dt><dd class="stat-value" data-stat="mana"></dd><div class="stat-meter"><i data-meter="mana"></i></div></div>
-        <div class="stat-row"><dt>Ataque</dt><dd class="stat-value" data-stat="attack"></dd></div>
-        <div class="stat-row"><dt>Defesa</dt><dd class="stat-value" data-stat="defense"></dd></div>
-        <div class="stat-row"><dt>Velocidade</dt><dd class="stat-value" data-stat="speed"></dd></div>
-      </dl>
-      <section class="inventory" aria-label="Inventário">
-        <h3 class="inventory-heading">INVENTÁRIO</h3>
-        <div class="inventory-slots">
-          <div class="inventory-slot" data-slot="0" aria-label="Espaço 1"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot" data-slot="1" aria-label="Espaço 2"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot is-locked" data-slot="2" aria-label="Espaço 3 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot is-locked" data-slot="3" aria-label="Espaço 4 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot is-locked" data-slot="4" aria-label="Espaço 5 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot is-locked" data-slot="5" aria-label="Espaço 6 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot is-locked" data-slot="6" aria-label="Espaço 7 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot is-locked" data-slot="7" aria-label="Espaço 8 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot is-locked" data-slot="8" aria-label="Espaço 9 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-          <div class="inventory-slot is-locked" data-slot="9" aria-label="Espaço 10 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
-        </div>
-      </section>
-      <section class="wearable-section" aria-label="Vestindo">
-      <h3 class="inventory-heading wearable-heading">VESTINDO</h3>
-      <div class="wearable-slots" aria-label="Equipamento vestido">
-        <button class="wearable-slot" type="button" data-wear-slot="head" aria-label="Cabeça vazia"><canvas width="64" height="64"></canvas><span>Cabeça</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
-        <button class="wearable-slot" type="button" data-wear-slot="chest" aria-label="Peito vazio"><canvas width="64" height="64"></canvas><span>Peito</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
-        <button class="wearable-slot" type="button" data-wear-slot="waist" aria-label="Costas vazias"><canvas width="64" height="64"></canvas><span>Costas</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
-        <button class="wearable-slot" type="button" data-wear-slot="legs" aria-label="Pernas vazias"><canvas width="64" height="64"></canvas><span>Pernas</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
-        <button class="wearable-slot" type="button" data-wear-slot="feet" aria-label="Pés vazios"><canvas width="64" height="64"></canvas><span>Pés</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
-      </div>
-      </section>
-    </aside>
-    <div class="world-label player-identity-card" aria-label="Informações do jogador">
-      <div class="identity-heading">
-        <span class="identity-mark" aria-hidden="true"><canvas id="identity-portrait" width="64" height="64"></canvas></span>
-        <div class="world-label-content">
-          <strong>KILL THE KING</strong>
-          <span class="identity-caption">IDENTIDADE DO JOGADOR</span>
-        </div>
-        <span class="king-status" id="king-status">Coroa Real livre</span>
-      </div>
-      <div class="player-info" aria-label="Dados do jogador">
-        <div class="player-info-item">
-          <span class="player-info-label">PERSONAGEM</span>
-          <strong class="player-name" id="player-name">—</strong>
-        </div>
-        <div class="player-info-item treasure-info">
-          <span class="player-info-label">TESOURO</span>
-          <strong class="player-treasure"><span class="treasure-coin" aria-hidden="true">◈</span><span id="player-treasure">0</span></strong>
-        </div>
-      </div>
+        <div class="player-sidebar" aria-label="Painel do jogador">
+      <div class="world-label player-identity-card" aria-label="Informações do jogador">
+            <div class="identity-heading">
+              <span class="identity-mark" aria-hidden="true"><canvas id="identity-portrait" width="64" height="64"></canvas></span>
+              <div class="world-label-content">
+                <strong>KILL THE KING</strong>
+                <span class="identity-caption">IDENTIDADE DO JOGADOR</span>
+              </div>
+              <span class="king-status" id="king-status">Coroa Real livre</span>
+            </div>
+            <div class="player-info" aria-label="Dados do jogador">
+              <div class="player-info-item">
+                <span class="player-info-label">PERSONAGEM</span>
+                <strong class="player-name" id="player-name">—</strong>
+              </div>
+              <div class="player-info-item treasure-info">
+                <span class="player-info-label">TESOURO</span>
+                <strong class="player-treasure"><span class="treasure-coin" aria-hidden="true">◈</span><span id="player-treasure">0</span></strong>
+              </div>
+            </div>
+          </div>
+      <aside class="player-stats" aria-label="Atributos do jogador">
+            <h2 class="stats-heading">Status do jogador</h2>
+            <dl class="stat-list">
+              <div class="stat-row"><dt>Saúde</dt><dd class="stat-value" data-stat="health"></dd><div class="stat-meter"><i data-meter="health"></i></div></div>
+              <div class="stat-row"><dt>Saciedade</dt><dd class="stat-value" data-stat="satiety"></dd><div class="stat-meter"><i data-meter="satiety"></i></div></div>
+              <div class="stat-row"><dt>Hidratação</dt><dd class="stat-value" data-stat="hydration"></dd><div class="stat-meter"><i data-meter="hydration"></i></div></div>
+              <div class="stat-row"><dt>Estamina</dt><dd class="stat-value" data-stat="stamina"></dd><div class="stat-meter"><i data-meter="stamina"></i></div></div>
+              <div class="stat-row"><dt class="mana-label">Mana <span class="magic-level-value">LVL <span data-stat="magicLevel"></span></span></dt><dd class="stat-value" data-stat="mana"></dd><div class="stat-meter"><i data-meter="mana"></i></div></div>
+              <div class="stat-row"><dt>Ataque</dt><dd class="stat-value" data-stat="attack"></dd></div>
+              <div class="stat-row"><dt>Defesa</dt><dd class="stat-value" data-stat="defense"></dd></div>
+              <div class="stat-row"><dt>Velocidade</dt><dd class="stat-value" data-stat="speed"></dd></div>
+            </dl>
+            <section class="inventory" aria-label="Inventário">
+              <h3 class="inventory-heading">INVENTÁRIO</h3>
+              <div class="inventory-slots">
+                <div class="inventory-slot" data-slot="0" aria-label="Espaço 1"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot" data-slot="1" aria-label="Espaço 2"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot is-locked" data-slot="2" aria-label="Espaço 3 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot is-locked" data-slot="3" aria-label="Espaço 4 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot is-locked" data-slot="4" aria-label="Espaço 5 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot is-locked" data-slot="5" aria-label="Espaço 6 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot is-locked" data-slot="6" aria-label="Espaço 7 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot is-locked" data-slot="7" aria-label="Espaço 8 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot is-locked" data-slot="8" aria-label="Espaço 9 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+                <div class="inventory-slot is-locked" data-slot="9" aria-label="Espaço 10 bloqueado"><canvas width="64" height="64"></canvas><span class="slot-durability-meter" aria-hidden="true"><i></i></span><span class="inventory-quantity" aria-hidden="true"></span></div>
+              </div>
+            </section>
+            <section class="wearable-section" aria-label="Vestindo">
+            <h3 class="inventory-heading wearable-heading">VESTINDO</h3>
+            <div class="wearable-slots" aria-label="Equipamento vestido">
+              <button class="wearable-slot" type="button" data-wear-slot="head" aria-label="Cabeça vazia"><canvas width="64" height="64"></canvas><span>Cabeça</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
+              <button class="wearable-slot" type="button" data-wear-slot="chest" aria-label="Peito vazio"><canvas width="64" height="64"></canvas><span>Peito</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
+              <button class="wearable-slot" type="button" data-wear-slot="waist" aria-label="Costas vazias"><canvas width="64" height="64"></canvas><span>Costas</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
+              <button class="wearable-slot" type="button" data-wear-slot="legs" aria-label="Pernas vazias"><canvas width="64" height="64"></canvas><span>Pernas</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
+              <button class="wearable-slot" type="button" data-wear-slot="feet" aria-label="Pés vazios"><canvas width="64" height="64"></canvas><span>Pés</span><i class="slot-durability-meter" aria-hidden="true"><i></i></i></button>
+            </div>
+            </section>
+          </aside>
     </div>
-    <div class="coords" id="coords">X 0000 · Y 0000</div>
+<div class="coords" id="coords">X 0000 · Y 0000</div>
     <div class="skeleton-stats" id="skeleton-stats" aria-label="Atributos do esqueleto">
       <div class="skeleton-stat-line"><span>SAÚDE</span><span id="skeleton-health-value">60</span></div>
       <div class="skeleton-health-meter"><i id="skeleton-health-fill"></i></div>
