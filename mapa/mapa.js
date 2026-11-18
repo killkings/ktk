@@ -467,6 +467,82 @@
     g.closePath();
   }
 
+  function getLakeWaterPolygon(centerX, centerY, radiusX, radiusY, phase) {
+    const count = 16;
+    const points = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i / count) - Math.PI / 2;
+      const variation = 1
+        + Math.sin(angle * 3 + phase) * .075
+        + Math.cos(angle * 5 - phase) * .045
+        + Math.sin(angle * 7 + phase * 2) * .022;
+      points.push({
+        x: centerX + Math.cos(angle) * radiusX * variation,
+        y: centerY + Math.sin(angle) * radiusY * variation
+      });
+    }
+
+    const midpoint = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+    const polygon = [];
+    for (let i = 0; i < count; i++) {
+      const previous = points[(i + count - 1) % count];
+      const current = points[i];
+      const next = points[(i + 1) % count];
+      const start = midpoint(previous, current);
+      const end = midpoint(current, next);
+
+      for (let step = 0; step < 8; step++) {
+        const t = step / 8;
+        const inverse = 1 - t;
+        polygon.push({
+          x: inverse * inverse * start.x + 2 * inverse * t * current.x + t * t * end.x,
+          y: inverse * inverse * start.y + 2 * inverse * t * current.y + t * t * end.y
+        });
+      }
+    }
+    return polygon;
+  }
+
+  function isPointInsidePolygon(x, y, polygon) {
+    let inside = false;
+    for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+      const a = polygon[i];
+      const b = polygon[j];
+      const crosses = (a.y > y) !== (b.y > y);
+      if (crosses && x < ((b.x - a.x) * (y - a.y)) / ((b.y - a.y) || 1e-9) + a.x) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  }
+
+  // Coordenadas globais: retorna true apenas sobre a superfície azul do lago,
+  // respeitando a mesma margem irregular usada no desenho.
+  function isInLake(worldX, worldY) {
+    const x = Number(worldX);
+    const y = Number(worldY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+    const room = roomAt(x, y);
+    const roomCol = room.col - GRID_CENTER;
+    const roomRow = room.row - GRID_CENTER;
+    const lake = outerLakeLocations[`${roomCol},${roomRow}`];
+    if (!lake) return false;
+
+    const centerX = lake.x * viewWidth;
+    const centerY = lake.y * viewHeight;
+    const localX = x - roomCol * viewWidth + viewWidth / 2;
+    const localY = y - roomRow * viewHeight + viewHeight / 2;
+    const polygon = getLakeWaterPolygon(
+      centerX,
+      centerY,
+      lake.rx * viewWidth * .79,
+      lake.ry * viewHeight * .79,
+      lake.phase
+    );
+    return isPointInsidePolygon(localX, localY, polygon);
+  }
+
   function drawOuterLake(g, roomCol, roomRow, width, height) {
     const lake = outerLakeLocations[`${roomCol},${roomRow}`];
     if (!lake) return;
@@ -906,6 +982,7 @@
     draw,
     getCollisionCircles,
     isOnRoad,
+    isInLake,
     regionAt,
     getBiomeAt,
     biomes,
