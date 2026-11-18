@@ -139,6 +139,45 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
 
+  const fishingRodSingleFrameCache = new WeakMap();
+
+  function getFishingRodSingleFrame(image, frameSize=128) {
+    if(!image) return null;
+    const imageWidth=Number(image.naturalWidth||image.width)||0;
+    const imageHeight=Number(image.naturalHeight||image.height)||0;
+    const size=Math.max(1,Math.floor(Number(frameSize)||128));
+    if(imageWidth<size||imageHeight<size) return null;
+
+    const columns=Math.max(1,Math.floor(imageWidth/size));
+    const rows=Math.max(1,Math.floor(imageHeight/size));
+    const penultimateFrame=Math.max(0,columns-2);
+    let imageCache=fishingRodSingleFrameCache.get(image);
+    if(!imageCache) {
+      imageCache=new Map();
+      fishingRodSingleFrameCache.set(image,imageCache);
+    }
+    const cacheKey=`${size}:${penultimateFrame}:${rows}`;
+    if(imageCache.has(cacheKey)) return imageCache.get(cacheKey);
+
+    // A folha original tem 13 quadros por direção. Criamos uma nova folha
+    // com somente o penúltimo quadro de cada direção, impossibilitando avanço.
+    const frozen=document.createElement('canvas');
+    frozen.width=size;
+    frozen.height=rows*size;
+    const frozenContext=frozen.getContext('2d');
+    if(!frozenContext) return null;
+    frozenContext.imageSmoothingEnabled=false;
+    for(let row=0;row<rows;row++) {
+      frozenContext.drawImage(
+        image,
+        penultimateFrame*size,row*size,size,size,
+        0,row*size,size,size
+      );
+    }
+    imageCache.set(cacheKey,frozen);
+    return frozen;
+  }
+
   function getHeadOnlyLayers(layers, extraImages=[]) {
     const headLayerNames = new Set(['cabeca','rosto','cabelo','barba','bigode']);
     const keepImages = new Set((Array.isArray(extraImages)?extraImages:[]).filter(Boolean));
@@ -230,33 +269,33 @@
           if(fishingRodHeld) weaponMode='attack';
           if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
           let playerLayers=getPlayerLayers(baseLayers,weaponMode,fishingRodHeld?selectedItem:null);
-          const fishingRodForegroundImages=fishingRodHeld
-            ? [selectedItem.attackImage,selectedItem.image].filter(Boolean)
+          const fishingRodOriginalImages=fishingRodHeld
+            ? [
+                selectedItem.attackImage?.naturalWidth?selectedItem.attackImage:selectedItem.image,
+                selectedItem.attackBackgroundImage||selectedItem.heldBackgroundImage
+              ].filter(Boolean)
             : [];
-          const fishingRodImages=fishingRodHeld
-            ? [...fishingRodForegroundImages,selectedItem.attackBackgroundImage].filter(Boolean)
-            : [];
+          const fishingRodFrozenImages=[];
           if(fishingRodHeld) {
-            // O catálogo cria duas instâncias de Image para a mesma folha FG.
-            // Se a folha de ataque ainda estiver carregando, getPlayerLayers usa
-            // item.image como fallback; ambas precisam receber a mesma trava.
-            const foregroundLayer=playerLayers.find(layer=>
-              fishingRodForegroundImages.includes(layer.image)
-            );
-            if(foregroundLayer) {
-              const frameSize=Math.max(1,Number(foregroundLayer.frameSize)||Number(selectedItem.attackFrameSize)||128);
-              const imageWidth=Number(foregroundLayer.image.naturalWidth||foregroundLayer.image.width)||0;
-              const foregroundFrameCount=Math.max(1,Math.floor(imageWidth/frameSize));
-              const penultimateForegroundFrame=Math.max(0,foregroundFrameCount-2);
-              playerLayers=playerLayers.map(layer=>
-                layer===foregroundLayer
-                  ? {...layer,staticFrame:penultimateForegroundFrame,syncToBody:false,fallbackMotion:false}
-                  : layer
+            playerLayers=playerLayers.map(layer=>{
+              if(!fishingRodOriginalImages.includes(layer.image)) return layer;
+              const frozenImage=getFishingRodSingleFrame(
+                layer.image,
+                layer.frameSize||selectedItem.attackFrameSize||128
               );
-            }
+              if(!frozenImage) return layer;
+              fishingRodFrozenImages.push(frozenImage);
+              return {
+                ...layer,
+                image:frozenImage,
+                staticFrame:0,
+                syncToBody:false,
+                fallbackMotion:false
+              };
+            });
           }
           const visiblePlayerLayers=inLakeWater
-            ? getHeadOnlyLayers(playerLayers,fishingRodImages)
+            ? getHeadOnlyLayers(playerLayers,fishingRodFrozenImages)
             : playerLayers;
           drawLayeredCharacter(ctx,screenX,screenY-(player.knockbackHeight||0),visiblePlayerLayers,PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
           const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
