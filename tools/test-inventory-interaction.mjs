@@ -3,13 +3,18 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [inventoryUi, input, actions, online, html, migration] = await Promise.all([
+const [inventoryUi, input, actions, online, html, swapMigration, capacityMigration, inventoryState, gameState, lifecycle, css] = await Promise.all([
   read("../inventory/inventory-ui.js"),
   read("../input/input-controller.js"),
   read("../online/actions.js"),
   read("../js/online.js"),
   read("../campo_livre_atualizado.html"),
-  read("../supabase/migrations/20261118130352_swap_selected_inventory_item.sql")
+  read("../supabase/migrations/20261118130352_swap_selected_inventory_item.sql"),
+  read("../supabase/migrations/20261118142318_expand_inventory_slots_one_by_one.sql"),
+  read("../inventory/inventory-state.js"),
+  read("../js/game-state.js"),
+  read("../game/game-lifecycle.js"),
+  read("../css/game.css")
 ]);
 
 assert.match(input, /if\(key==='e'&&!event\.repeat\) interactWithSelectedItem\(\)/,
@@ -98,14 +103,36 @@ assert.match(actions,/POSITION_SYNC_ACTIONS = new Set\(\[\.\.\.POSITION_SENSITIV
 assert.match(actions,/supabase\.rpc\("ktk_swap_inventory_item"/);
 assert.match(actions,/await syncPositionForAction\(\)/);
 assert.match(online,/swapInventoryItem/);
-assert.match(html,/inventory-ui\.js\?v=20261118-inventory-interaction-v1/);
-assert.match(html,/online\.js\?v=20261118-inventory-interaction-v1/);
+assert.match(html,/inventory-ui\.js\?v=20261118-inventory-expansion-v1/);
+assert.match(html,/online\.js\?v=20261118-inventory-expansion-v1/);
 
-assert.match(migration,/FOR UPDATE/);
-assert.match(migration,/sqrt\(power\(v_player\.x-v_ground\.x, 2\) \+ power\(v_player\.y-v_ground\.y, 2\)\) > 64/);
-assert.match(migration,/v_old_item \|\| jsonb_build_object\('status', 'ground'\)/);
-assert.match(migration,/DELETE FROM public\.ktk_world_entities/);
-assert.match(migration,/ARRAY\[p_slot::text\]/);
-assert.match(migration,/GRANT EXECUTE ON FUNCTION public\.ktk_swap_inventory_item/);
+assert.match(swapMigration,/FOR UPDATE/);
+assert.match(swapMigration,/sqrt\(power\(v_player\.x-v_ground\.x, 2\) \+ power\(v_player\.y-v_ground\.y, 2\)\) > 64/);
+assert.match(swapMigration,/v_old_item \|\| jsonb_build_object\('status', 'ground'\)/);
+assert.match(swapMigration,/DELETE FROM public\.ktk_world_entities/);
+assert.match(swapMigration,/ARRAY\[p_slot::text\]/);
+assert.match(swapMigration,/GRANT EXECUTE ON FUNCTION public\.ktk_swap_inventory_item/);
 
-console.log("Inventory E interaction passed: selected items drop without x/y, nearby ground items swap into the selected slot, and world entities remain server-authoritative.");
+
+assert.ok(input.includes("if(key==='n'&&!event.repeat) { event.preventDefault(); void expandInventorySlot(); }"));
+assert.ok(inventoryUi.includes("async function expandInventorySlot()"));
+assert.ok(inventoryUi.includes("inventory.length>=MAX_INVENTORY_SLOTS"));
+assert.ok(inventoryUi.includes("window.KTKOnline?.expandInventorySlot"));
+assert.ok(actions.includes('supabase.rpc("ktk_expand_inventory_slot")'));
+assert.ok(online.includes("expandInventorySlot"));
+assert.ok(inventoryState.includes("serverState.inventory.slice(0,MAX_INVENTORY_SLOTS)"));
+assert.ok(gameState.includes("var  MAX_INVENTORY_SLOTS = 10;"));
+assert.ok(lifecycle.includes("inventory.splice(0,inventory.length,null,null)"));
+assert.ok(css.includes(".inventory-slots { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); grid-template-rows:repeat(2,48px); gap:6px; width:100%; }"));
+assert.ok(css.includes(".inventory-slot.is-locked { display:grid;"));
+assert.ok(input.includes("inventorySlots?.addEventListener('click'"));
+assert.equal((html.match(/class="inventory-slot(?:\\s|")/g)||[]).length,10);
+assert.equal((html.match(/class="inventory-quantity"/g)||[]).length,10);
+assert.ok(capacityMigration.includes("PERFORM 1 FROM public.ktk_worlds WHERE id='main' FOR UPDATE"));
+assert.ok(capacityMigration.includes("AND is_alive=true"));
+assert.ok(capacityMigration.includes("FOR UPDATE;"));
+assert.ok(capacityMigration.includes("v_inventory:=v_inventory || jsonb_build_array(NULL)"));
+assert.ok(capacityMigration.includes("v_slot_count>=10"));
+assert.ok(capacityMigration.includes("GRANT EXECUTE ON FUNCTION public.ktk_expand_inventory_slot() TO authenticated"));
+
+console.log("Inventory capacity: the 10-slot grid stays fixed and N unlocks one server-authorized slot per press; E drop/swap remains intact.");

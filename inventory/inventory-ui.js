@@ -10,6 +10,7 @@
       slot.classList.toggle('is-selected',selected);
       slot.setAttribute('aria-pressed',String(selected));
       slot.setAttribute('aria-disabled',String(!unlocked));
+      slot.setAttribute('role',unlocked?'button':'presentation');
       slot.tabIndex=unlocked?0:-1;
       const canvas=slot.querySelector('canvas');
       const g=canvas.getContext('2d');
