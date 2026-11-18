@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [combatSource, movementSource, actionSource, stateSource, html, index, migration, pvpRuleMigration, worldEntities, worldRenderer, replicaSource, inputSource] = await Promise.all([
+const [combatSource, movementSource, actionSource, stateSource, html, index, migration, pvpRuleMigration, worldEntities, worldRenderer, replicaSource, inputSource, playerSyncSource] = await Promise.all([
   read("../combat/combat-controller.js"),
   read("../online/movement.js"),
   read("../online/actions.js"),
@@ -15,7 +15,8 @@ const [combatSource, movementSource, actionSource, stateSource, html, index, mig
   read("../world/world-entities.js"),
   read("../render/world-renderer.js"),
   read("../multiplayer/player-replica.js"),
-  read("../input/input-controller.js")
+  read("../input/input-controller.js"),
+  read("../online/player-sync.js")
 ]);
 
 const combatStart = combatSource.indexOf("  function startPunch(event=null) {");
@@ -205,11 +206,12 @@ assert.match(stateSource,/var\s+SPEED\s*=\s*225/);
 assert.match(stateSource,/function updateLocalPlayerVisual\(deltaSeconds\)/);
 assert.match(movementSource,/MOVING_CHECKPOINT_INTERVAL\s*=\s*500/);
 assert.match(html,/combat-controller\.js\?v=20261118-punch-v1/);
-assert.match(html,/online\.js\?v=20261117-combat-v1/);
+assert.match(html,/online\.js\?v=20261118-remote-hit-v1/);
+assert.match(html,/player-replica\.js\?v=20261118-remote-hit-v1/);
 assert.match(html,/world\/world-entities\.js\?v=20261117-combat-v1/);
 assert.match(html,/world-renderer\.js\?v=20261117-combat-v1/);
 assert.match(html,/input-controller\.js\?v=20261118-punch-v1/);
-assert.match(index,/20261118-punch-v1/);
+assert.match(index,/20261118-remote-hit-v1/);
 assert.match(replicaSource,/function predictProjectile\(/);
 assert.match(worldRenderer,/entity\.type==='remote-projectile'&&entity\.phase==='outbound'/);
 
@@ -229,4 +231,85 @@ assert.match(pvpRuleMigration,/owner_profile\.clan_color=target_profile\.clan_co
 assert.doesNotMatch(pvpRuleMigration,/and not\(a\.clan_color is not null and a\.clan_color=b\.clan_color\)/);
 assert.doesNotMatch(pvpRuleMigration,/and not\(owner_profile\.clan_color is not null and owner_profile\.clan_color=target_profile\.clan_color\)/);
 
-console.log("Combat flow passed: unarmed punch at magic level 10, explicit innate magic modifier, magic projectile RPC, PvP clan/king rules, pre-action position sync, response feedback, and preserved walking physics.");
+
+/* 9) A PvP knockback must reach the attacking client's remote sprite exactly once. */
+const syncExecutable = playerSyncSource
+  .replace(/^import .*;\s*$/gm,"")
+  .replace(/^export async function /gm,"async function ")
+  .replace(/^export function /gm,"function ");
+const syncState = {
+  user:{id:"attacker"},leaving:false,sessionId:"session-1",
+  remote:new Map([["victim",{
+    id:"victim",x:100,y:100,targetX:100,targetY:100,direction:3,
+    display_name:"Victim",displayName:"Victim",character:{},wearables:{},
+    combatStats:{},serverMoving:false,lastServerKnockbackAt:"previous-hit"
+  }]]),
+  profileCache:new Map([["victim",{display_name:"Victim",character:{}}]]),
+  profileLoads:new Map(),profileRetryTimers:new Map(),profileRetryCounts:new Map()
+};
+const remoteSyncUpdates=[];
+const syncContext={
+  state:syncState,supabase:{},WORLD_ID:"main",
+  window:{KTKWorldEntities:{setRemotePlayers(players){remoteSyncUpdates.push(players);}}},
+  performance:{now:()=>1000},console,Date,setTimeout,clearTimeout
+};
+vm.createContext(syncContext);
+vm.runInContext(syncExecutable+";globalThis.syncApi={acceptDatabaseChange};",syncContext);
+syncContext.syncApi.acceptDatabaseChange({
+  user_id:"victim",x:72,y:100,direction:1,is_alive:true,
+  display_name:"Victim",character:{},
+  state:{
+    wearables:{},health:94,max_health:100,
+    last_knockback_at:"new-hit",
+    last_knockback:{x:-1,y:0}
+  }
+});
+const syncedVictim=syncState.remote.get("victim");
+assert.equal(syncedVictim.x,72);
+assert.equal(syncedVictim.targetX,72);
+assert.equal(syncedVictim.direction,3,
+  "The database knockback must not overwrite the victim's facing direction.");
+assert.equal(syncedVictim.lastServerKnockbackAt,"new-hit");
+assert.ok(syncedVictim.knockback);
+assert.equal(remoteSyncUpdates.length,2,
+  "The changed remote hit must be sent to the renderer after acceptRemote.");
+
+const replicaStart=replicaSource.indexOf("  function updateRemotePlayerMotion(");
+const replicaEnd=replicaSource.indexOf("  function predictProjectile(",replicaStart);
+assert.ok(replicaStart>=0&&replicaEnd>replicaStart);
+const replicaExecutable=replicaSource.slice(replicaStart,replicaEnd);
+const previousVisual={
+  id:"victim",type:"player",x:100,y:100,targetX:100,targetY:100,direction:3,
+  radius:12,walkTime:0,layersReady:true,character:{},wearables:{},
+  appearanceSignature:JSON.stringify({characterData:{},wearables:{}}),
+  lastServerKnockbackAt:"previous-hit"
+};
+const replicaContext={
+  remotePlayers:new Map([["victim",previousVisual]]),
+  wearableSlotOrder:[],equipmentCatalog:{items:[]},
+  COLLISION_RADIUS:12,KNOCKBACK_SECONDS:0.2,KNOCKBACK_HEIGHT:12,
+  PUNCH_ANIMATION_SECONDS:0.42,kingCrownClaimedBy:null,
+  window:{KTKEnemySkeleton:{entity:null},loadRemoteCharacterLayers:()=>Promise.resolve()},
+  performance:{now:()=>2000},updateKingStatus(){}
+};
+vm.createContext(replicaContext);
+vm.runInContext(replicaExecutable+";globalThis.replicaApi={setRemotePlayers,updateRemotePlayerMotion};",replicaContext);
+replicaContext.replicaApi.setRemotePlayers([syncedVictim]);
+const victimSprite=replicaContext.remotePlayers.get("victim");
+assert.equal(victimSprite.direction,3,
+  "A knockback displacement must not turn the victim's sprite.");
+assert.equal(victimSprite.targetX,72,
+  "The attacker's client must receive the authoritative pushed-back position.");
+assert.ok(victimSprite.knockback,
+  "The remote player must receive the red damage-flash state.");
+replicaContext.replicaApi.updateRemotePlayerMotion(0.05);
+assert.ok(victimSprite.knockbackHeight>0,
+  "The remote player's jump/knockback elevation must animate.");
+const knockbackProgress=victimSprite.knockback.progress;
+replicaContext.replicaApi.setRemotePlayers([syncedVictim]);
+assert.equal(victimSprite.knockback.progress,knockbackProgress,
+  "Ordinary repeated updates must not restart the same hit animation.");
+assert.match(worldRenderer,/Boolean\(entity\.knockback\)/);
+assert.match(worldRenderer,/screenY-\(entity\.knockbackHeight\|\|0\)/);
+
+console.log("Combat flow passed: unarmed punch, magic projectiles, PvP rules, position sync, remote hit flash/knockback, unchanged facing, deduplication, and preserved walking physics.");

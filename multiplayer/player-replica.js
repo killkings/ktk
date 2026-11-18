@@ -102,13 +102,17 @@
       const id=String(remote.id);
       incoming.add(id);
       const existing=remotePlayers.get(id);
+      const knockbackAt=String(remote.lastServerKnockbackAt||"");
+      const isNewServerKnockback=Boolean(knockbackAt&&knockbackAt!==existing?.lastServerKnockbackAt);
       // A orientação remota é conferida pelo deslocamento entre pacotes.
       // Isso evita que um campo direction atrasado ou incorreto mostre a
       // frente do personagem quando ele está realmente caminhando para cima.
-      let remoteDirection=Number.isFinite(remote.direction)
-        ? Math.max(0,Math.min(3,remote.direction))
-        : (existing?.direction??2);
-      if(existing) {
+      let remoteDirection=existing&&isNewServerKnockback
+        ? existing.direction
+        : (Number.isFinite(remote.direction)
+          ? Math.max(0,Math.min(3,remote.direction))
+          : (existing?.direction??2));
+      if(existing&&!isNewServerKnockback) {
         const previousTargetX=Number.isFinite(existing.targetX)?existing.targetX:existing.x;
         const previousTargetY=Number.isFinite(existing.targetY)?existing.targetY:existing.y;
         const movementX=remote.x-previousTargetX;
@@ -125,6 +129,17 @@
         id,type:'player',x:remote.x,y:remote.y,targetX:remote.x,targetY:remote.y,
         direction:remoteDirection,radius:COLLISION_RADIUS,walkTime:0
       };
+      if(isNewServerKnockback) {
+        entity.lastServerKnockbackAt=knockbackAt;
+        if(remote.knockback&&typeof remote.knockback==="object") {
+          entity.knockback={
+            x:Number(remote.knockback.x)||0,
+            y:Number(remote.knockback.y)||0,
+            progress:0
+          };
+          entity.knockbackHeight=0;
+        }
+      }
       entity.targetX=remote.x;
       entity.targetY=remote.y;
       entity.lastPositionReceivedAt=performance.now();

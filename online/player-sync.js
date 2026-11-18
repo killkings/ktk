@@ -149,12 +149,21 @@ export function acceptDatabaseChange(payload) {
   const changedRemote=state.remote.get(String(row.user_id));
   const knockbackAt=String(serverState.last_knockback_at||"");
   if(changedRemote&&serverState.last_knockback&&knockbackAt&&knockbackAt!==changedRemote.lastServerKnockbackAt) {
+    // Replica nos demais clientes o mesmo impacto confirmado que o atingido recebe.
     changedRemote.lastServerKnockbackAt=knockbackAt;
+    const knockbackX=Number(row.x),knockbackY=Number(row.y);
+    if(Number.isFinite(knockbackX)&&Number.isFinite(knockbackY)) {
+      changedRemote.x=knockbackX;
+      changedRemote.y=knockbackY;
+      changedRemote.targetX=knockbackX;
+      changedRemote.targetY=knockbackY;
+    }
     changedRemote.knockback={
       x:Number(serverState.last_knockback.x)||0,
       y:Number(serverState.last_knockback.y)||0,
       progress:0
     };
+    updateRemotes();
   }
   const attackAt=String(serverState.last_attack_at||"");
   if(changedRemote&&attackAt&&attackAt!==changedRemote.lastServerAttackAt) {
