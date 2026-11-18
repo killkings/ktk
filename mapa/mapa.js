@@ -412,16 +412,23 @@
 
     const baseScale = Math.min(width / 1920, height / 1080) * 1.58;
     const sprites = [
-      // Sete plantas do atlas com dois quadros cada.
-      // A primeira linha (y=0) e a segunda (y=32) são frames da MESMA planta,
-      // não objetos separados. Alternamos os quadros no mesmo ponto do mapa.
-      { x: .12, y: .25, sx: 0,   sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 0.0, amplitude: 0 },
-      { x: .28, y: .17, sx: 32,  sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 0.4, amplitude: 0 },
-      { x: .76, y: .19, sx: 64,  sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 0.8, amplitude: 0 },
-      { x: .89, y: .42, sx: 96,  sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 1.2, amplitude: 0 },
-      { x: .84, y: .78, sx: 128, sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 1.6, amplitude: 0 },
-      { x: .68, y: .89, sx: 160, sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 2.0, amplitude: 0 },
-      { x: .27, y: .88, sx: 192, sy: 0, sw: 32, sh: 32, frameSy: 32, phase: 2.4, amplitude: 0 },
+      // Sete plantas da primeira linha do atlas: cada uma tem posição própria.
+      { x: .12, y: .25, sx: 0,   sy: 0, sw: 32, sh: 32, phase: 0.0, amplitude: .009 },
+      { x: .28, y: .17, sx: 32,  sy: 0, sw: 32, sh: 32, phase: 0.4, amplitude: .009 },
+      { x: .76, y: .19, sx: 64,  sy: 0, sw: 32, sh: 32, phase: 0.8, amplitude: .009 },
+      { x: .89, y: .42, sx: 96,  sy: 0, sw: 32, sh: 32, phase: 1.2, amplitude: .009 },
+      { x: .84, y: .78, sx: 128, sy: 0, sw: 32, sh: 32, phase: 1.6, amplitude: .009 },
+      { x: .68, y: .89, sx: 160, sy: 0, sw: 32, sh: 32, phase: 2.0, amplitude: .009 },
+      { x: .27, y: .88, sx: 192, sy: 0, sw: 32, sh: 32, phase: 2.4, amplitude: .009 },
+
+      // Sete plantas da segunda linha: sprites independentes em outras coordenadas.
+      { x: .52, y: .30, sx: 0,   sy: 32, sw: 32, sh: 32, phase: .3, amplitude: .010 },
+      { x: .51, y: .49, sx: 32,  sy: 32, sw: 32, sh: 32, phase: 1.1, amplitude: .010 },
+      { x: .50, y: .66, sx: 64,  sy: 32, sw: 32, sh: 32, phase: 1.9, amplitude: .010 },
+      { x: .33, y: .57, sx: 96,  sy: 32, sw: 32, sh: 32, phase: 2.7, amplitude: .010 },
+      { x: .74, y: .46, sx: 128, sy: 32, sw: 32, sh: 32, phase: 3.5, amplitude: .010 },
+      { x: .16, y: .83, sx: 160, sy: 32, sw: 32, sh: 32, phase: 4.3, amplitude: .010 },
+      { x: .95, y: .84, sx: 192, sy: 32, sw: 32, sh: 32, phase: 5.1, amplitude: .010 },
 
       // A oitava imagem da primeira linha não tem par correspondente neste grupo.
       { x: .09, y: .69, sx: 224, sy: 0, sw: 32, sh: 32, phase: 2.1, amplitude: .009 },
@@ -435,7 +442,7 @@
       { x: .36, y: .80, sx: 96,  sy: 64, sw: 64, sh: 64, phase: 1.9, amplitude: .008 },
       { x: .66, y: .84, sx: 160, sy: 64, sw: 96, sh: 64, phase: 4.9, amplitude: .007 },
 
-      // Capim baixo: oscilação suave no próprio eixo da planta.
+      // Capim baixo.
       { x: .19, y: .34, sx: 256, sy: 32, sw: 32, sh: 32, phase: .4, amplitude: .022 },
       { x: .40, y: .22, sx: 288, sy: 32, sw: 32, sh: 32, phase: 1.8, amplitude: .020 },
       { x: .73, y: .29, sx: 320, sy: 32, sw: 32, sh: 32, phase: 2.7, amplitude: .022 },
@@ -462,9 +469,7 @@
       const baseX = sprite.x * width;
       const baseY = sprite.y * height;
       const sway = Math.sin(timeSeconds * 1.35 + sprite.phase) * sprite.amplitude;
-      const animationFrame = sprite.frameSy === undefined
-        ? sprite.sy
-        : (Math.floor(timeSeconds / 0.42 + sprite.phase) % 2 === 0 ? sprite.sy : sprite.frameSy);
+      const sourceY = sprite.sy;
 
       // O eixo fica na base de cada planta para ela não deslizar pelo chão.
       ctx.save();
@@ -472,7 +477,7 @@
       ctx.rotate(sway);
       ctx.drawImage(
         plants,
-        sprite.sx, animationFrame, sprite.sw, sprite.sh,
+        sprite.sx, sourceY, sprite.sw, sprite.sh,
         -drawWidth / 2, -drawHeight,
         drawWidth, drawHeight
       );
