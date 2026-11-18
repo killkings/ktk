@@ -139,6 +139,15 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
 
+  function getHeadOnlyLayers(layers) {
+    const headLayerNames = new Set(['cabeca','rosto','cabelo','barba','bigode']);
+    return (Array.isArray(layers) ? layers : []).filter(layer => {
+      const definition = layer?.definition || {};
+      const name = String(definition.name || '').toLowerCase();
+      return headLayerNames.has(name) || definition.wearSlot === 'head';
+    });
+  }
+
   function render(now) {
     // Agenda o próximo frame antes do desenho: uma falha isolada não congela o jogo.
     requestAnimationFrame(render);
@@ -191,7 +200,13 @@
         const localPlayer=entity.type==='local-player';
         const screenX=localPlayer?playerVisual.x+w/2:entity.x-camera.x*w+w/2;
         const screenY=localPlayer?playerVisual.y+h/2:entity.y-camera.y*h+h/2;
-        if(entity.type==='local-player'||entity.type==='player') drawGroundShadow(ctx,screenX,screenY+16.5,8.5,3.5,.34);
+        const characterEntity=localPlayer||entity.type==='player';
+        const characterWorldX=localPlayer?camera.x*w+playerVisual.x:Number(entity.x);
+        const characterWorldY=localPlayer?camera.y*h+playerVisual.y:Number(entity.y);
+        const inLakeWater=characterEntity&&Boolean(
+          window.KTKWorldMap?.isInLake?.(characterWorldX,characterWorldY)
+        );
+        if(characterEntity&&!inLakeWater) drawGroundShadow(ctx,screenX,screenY+16.5,8.5,3.5,.34);
         else if(entity.type==='enemy') drawGroundShadow(ctx,screenX,screenY+33,18,7,.36);
         else if(entity.type==='item') drawGroundShadow(ctx,screenX,screenY+15,14,5,.28);
         if(entity.type==='local-player') {
@@ -210,7 +225,9 @@
           const direction=punch.active?punch.direction:(playerMoving?playerVisual.direction:player.direction);
           let weaponMode=punch.active?(punch.weaponAttack?'attack':'none'):'held';
           if(boomerangProjectile.active&&inventory[selectedInventorySlot]===boomerangProjectile.item) weaponMode='none';
-          drawLayeredCharacter(ctx,screenX,screenY-(player.knockbackHeight||0),getPlayerLayers(baseLayers,weaponMode),PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
+          const playerLayers=getPlayerLayers(baseLayers,weaponMode);
+          const visiblePlayerLayers=inLakeWater?getHeadOnlyLayers(playerLayers):playerLayers;
+          drawLayeredCharacter(ctx,screenX,screenY-(player.knockbackHeight||0),visiblePlayerLayers,PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
           const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
           if(chatBubble) visibleChatBubbles.push({
             text:chatBubble.text,opacity:chatBubble.opacity,x:screenX,
@@ -248,7 +265,8 @@
           const bodySize=bodyLayer?.frameSize||FRAME_SIZE;
           const bodyWidth=bodyLayer?.image?.naturalWidth||bodyLayer?.image?.width||bodySize;
           const bodyColumns=Math.max(1,Math.floor(bodyWidth/bodySize));
-          drawLayeredCharacter(ctx,screenX,screenY-(entity.knockbackHeight||0),remoteLayers,PLAYER_WORLD_SCALE,remoteDirection,remoteFrame,Boolean(entity.knockback),attackActive?bodyColumns:0);
+          const visibleRemoteLayers=inLakeWater?getHeadOnlyLayers(remoteLayers):remoteLayers;
+          drawLayeredCharacter(ctx,screenX,screenY-(entity.knockbackHeight||0),visibleRemoteLayers,PLAYER_WORLD_SCALE,remoteDirection,remoteFrame,Boolean(entity.knockback),attackActive?bodyColumns:0);
           drawNearbyEntityStats(ctx,entity,screenX,screenY);
           const chatBubble=window.KTKChat?.getBubble?.(entity.id);
           if(chatBubble) visibleChatBubbles.push({
