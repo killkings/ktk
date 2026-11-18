@@ -24,7 +24,7 @@
   .primary:active { transform:translateY(4px); box-shadow:0 3px 0 #9fb273; }
   .small-note { margin-top:22px; color:#91a891; font-size:11px; }
   #creator { background:#000000; overflow:auto; }
-  .creator-shell { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(260px,.8fr); width:min(1000px,100%); height:min(820px,calc(100vh - 48px)); max-height:min(820px,calc(100vh - 48px)); min-height:0; border:1px solid rgba(236,244,220,.16); border-radius:26px; overflow:hidden; background:rgba(15,34,24,.88); box-shadow:0 28px 90px rgba(0,0,0,.35); }
+  .creator-shell { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(260px,.8fr); width:min(1000px,100%); height:min(820px,calc(100vh - 48px)); max-height:min(820px,calc(100vh - 48px)); min-height:0; border:1px solid rgba(236,244,220,.16); border-radius:26px; overflow:hidden; background:#000000; box-shadow:0 28px 90px rgba(0,0,0,.35); }
   .creator-controls { padding:clamp(16px,3vw,30px); overflow:auto; min-height:0; }
   .creator-controls h2 { margin:7px 0 7px; font-size:32px; letter-spacing:-.045em; }
   .sub { margin:0 0 24px; color:#aebfad; font-size:13px; line-height:1.55; }
@@ -51,7 +51,7 @@
   .creator-actions { position:sticky; bottom:0; z-index:3; padding:12px 0 4px; background:#172d23; }
   .secondary { border:1px solid rgba(237,245,224,.19); color:#dce6d6; background:transparent; border-radius:999px; padding:12px 17px; font-weight:750; }
   .secondary:hover { background:rgba(255,255,255,.06); }
-  .creator-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:340px; padding:28px; background:radial-gradient(ellipse at 50% 43%,rgba(145,181,105,.2),transparent 52%),linear-gradient(160deg,#284a32,#172f24); border-left:1px solid rgba(255,255,255,.08); }
+  .creator-preview { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:340px; padding:28px; background:#000000; border-left:1px solid rgba(255,255,255,.08); }
   .preview-stage { display:grid; place-items:center; width:min(100%,330px); aspect-ratio:1/1; border-radius:24px; background-color:#6e9a55; background-image:radial-gradient(rgba(230,242,190,.12) 1px,transparent 1px),radial-gradient(rgba(26,75,36,.12) 1px,transparent 1px); background-position:0 0,9px 12px; background-size:22px 22px,29px 29px; box-shadow:inset 0 0 50px rgba(20,61,31,.28); }
   #preview { width:100%; height:100%; image-rendering:pixelated; }
   .preview-caption { margin-top:19px; text-align:center; }
