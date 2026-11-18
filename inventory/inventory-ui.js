@@ -3,13 +3,18 @@
 
   function renderInventory() {
     document.querySelectorAll('.inventory-slot').forEach((slot,index)=>{
-      const selected=index===selectedInventorySlot;
+      const unlocked=index<inventory.length;
+      const selected=unlocked&&index===selectedInventorySlot;
+      slot.classList.toggle('is-locked',!unlocked);
+      slot.classList.toggle('is-unlocked',unlocked);
       slot.classList.toggle('is-selected',selected);
       slot.setAttribute('aria-pressed',String(selected));
+      slot.setAttribute('aria-disabled',String(!unlocked));
+      slot.tabIndex=unlocked?0:-1;
       const canvas=slot.querySelector('canvas');
       const g=canvas.getContext('2d');
       g.clearRect(0,0,canvas.width,canvas.height);
-      const item=inventory[index];
+      const item=unlocked?inventory[index]:null;
       slot.draggable=false;
       const maximum=Math.max(0,Number(item?.maxDurability)||0);
       const remaining=Math.max(0,Number(item?.durability)||0);
@@ -23,6 +28,12 @@
       const quantityBadge=slot.querySelector('.inventory-quantity');
       if(quantityBadge) quantityBadge.textContent=stackCount>1?String(stackCount):'';
       slot.classList.toggle('has-quantity',stackCount>1);
+      if(!unlocked) {
+        slot.draggable=false;
+        slot.title='Bloqueado — pressione N para liberar mais um espaço.';
+        slot.setAttribute('aria-label',`Espaço ${index+1} bloqueado`);
+        return;
+      }
       if(!item) {
         slot.title='Espaço vazio';
         slot.setAttribute('aria-label',`Espaço ${index+1}`);
@@ -80,6 +91,36 @@
     if(!Number.isInteger(index)||index<0||index>=inventory.length) return;
     void window.KTKOnline?.gameAction?.('select_slot',{slot:index})
       .catch(error=>toast(error?.message||'O servidor não confirmou o espaço selecionado.'));
+  }
+
+  async function expandInventorySlot() {
+    if(!gameStarted||playerDead||!screens.game.classList.contains('active')) return;
+    if(inventory.length>=MAX_INVENTORY_SLOTS) {
+      toast('O inventário já tem os 10 espaços disponíveis.');
+      return;
+    }
+    const nextSlot=inventory.length;
+    const expand=window.KTKOnline?.expandInventorySlot;
+    if(typeof expand!=='function') {
+      toast('A conexão com o servidor não está disponível.');
+      return;
+    }
+    try {
+      const result=await expand();
+      if(result?.ok!==true) {
+        toast(result?.error==='INVENTORY_FULL'
+          ? 'O inventário já tem os 10 espaços disponíveis.'
+          : result?.error||'O servidor não liberou o próximo espaço.');
+        return;
+      }
+      renderInventory();
+      const slotNumber=Number.isInteger(Number(result.slot))?Number(result.slot)+1:nextSlot+1;
+      const slotCount=Number(result.slot_count)||inventory.length;
+      toast(`Espaço ${slotNumber} liberado · ${slotCount}/${MAX_INVENTORY_SLOTS}`);
+    } catch(error) {
+      const full=String(error?.message||'').includes('INVENTORY_FULL');
+      toast(full?'O inventário já tem os 10 espaços disponíveis.':error?.message||'Não foi possível liberar o próximo espaço.');
+    }
   }
 
   function findEmptyInventorySlot() {

@@ -55,6 +55,30 @@ export async function gameAction(action, payload = {}) {
   return data;
 }
 
+export async function expandInventorySlot() {
+  const sessionId=state.sessionId;
+  const userId=state.user?.id;
+  if(!userId||!state.online||!state.joined||state.leaving) {
+    return {ok:false,error:"A sessão do personagem não está ativa."};
+  }
+
+  const {data,error}=await supabase.rpc("ktk_expand_inventory_slot");
+  if(error) throw error;
+  if(sessionId!==state.sessionId||userId!==state.user?.id||!state.joined) {
+    return {ok:false,error:"A sessão do personagem foi encerrada."};
+  }
+
+  if(data?.state) window.KTKWorldEntities?.applyServerState?.(data.state);
+  if(data?.ok!==true) return data;
+
+  try {
+    await loadWorldState();
+  } catch(snapshotError) {
+    console.warn("KTK world snapshot after inventory expansion:",snapshotError);
+  }
+  return data;
+}
+
 export async function swapInventoryItem(entityId, slot, direction) {
   const sessionId=state.sessionId;
   const userId=state.user?.id;
