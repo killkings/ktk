@@ -199,7 +199,8 @@ assert.equal(remote.moving, true);
 // Network module: only small position broadcasts and periodic checkpoints remain.
 const executableMovement = movementSource
   .replace(/^import .*;\s*$/gm, "")
-  .replace(/^export function /gm, "function ");
+  .replace(/^export function /gm, "function ")
+  .replace(/^export async function /gm, "async function ");
 const sent = [];
 const rpcCalls = [];
 let networkClock = 10000;
