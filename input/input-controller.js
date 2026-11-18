@@ -14,7 +14,8 @@
 
   window.addEventListener('keydown',event=>{
     if(event.target?.closest?.('#chat-composer')) return;
-    const key=event.key.toLowerCase();
+    const key=String(event.key||'').toLowerCase();
+    if(!key) return;
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) event.preventDefault();
     if(key==='escape'&&!event.repeat&&gameStarted&&screens.game.classList.contains('active')) {
       event.preventDefault();
@@ -43,7 +44,8 @@
     }
   },{passive:false});
   window.addEventListener('keyup',event=>{
-    const key=event.key.toLowerCase();
+    const key=String(event.key||'').toLowerCase();
+    if(!key) return;
     if(!keys.delete(key)) return;
     refreshLocalMovementInput();
   });
