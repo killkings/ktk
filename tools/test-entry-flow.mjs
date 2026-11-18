@@ -184,7 +184,9 @@ assert.match(gameCss, /\.world-label \.player-info-item\s*\{[^}]*min-height:43px
 assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.world-label \.player-info-item\s*\{[^}]*min-height:40px/);
 assert.doesNotMatch(html, /mundo aberto · campo 01/);
 assert.match(html, /id="ktk-display-name"[^>]*aria-required="true"/);
-assert.match(html, /game-lifecycle\.js\?v=20261118-player-hud-v1/);
+assert.match(html, /game-lifecycle\.js\?v=20261118-remove-character-button-v1/);
+assert.doesNotMatch(html, /id="edit-character"|>PERSONAGEM<\/button>/);
+assert.doesNotMatch(lifecycle, /getElementById\('edit-character'\)/);
 assert.match(html, /online\.js\?v=20261118-inventory-interaction-v1/);
 assert.doesNotMatch(lifecycle, /onProgress\s*:/);
 assert.ok(lifecycle.indexOf("showScreen('game')") < lifecycle.indexOf("applyServerState(onlinePlayer.state)"),

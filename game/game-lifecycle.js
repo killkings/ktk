@@ -309,11 +309,6 @@ var  leavingGame = false;
     showScreen('creator');
     updateCreator();
   });
-  document.getElementById('edit-character').addEventListener('click',()=>{
-    document.getElementById('enter-world').textContent='Voltar ao mundo →';
-    showScreen('creator');
-    updateCreator();
-  });
 
   document.querySelectorAll('[data-gender]').forEach(btn=>btn.addEventListener('click',()=>{
     character.gender=btn.dataset.gender;
