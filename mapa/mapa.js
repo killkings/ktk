@@ -418,6 +418,123 @@
     return tile;
   }
 
+  // Estrada em circuito pelos oito mapas externos. Os pontos de entrada e saída
+  // coincidem nas bordas entre salas; o mapa central fica deliberadamente livre.
+  const outerRoadRoutes = {
+    '-1,-1': [[.37,.99],[.32,.78],[.43,.63],[.27,.49],[.49,.40],[.72,.34],[.99,.37]],
+    '0,-1':  [[.01,.37],[.18,.32],[.31,.43],[.45,.30],[.58,.39],[.72,.28],[.84,.42],[.99,.37]],
+    '1,-1':  [[.01,.37],[.18,.31],[.34,.42],[.48,.33],[.62,.52],[.72,.61],[.63,.99]],
+    '1,0':   [[.63,.01],[.69,.18],[.57,.31],[.71,.47],[.55,.63],[.69,.79],[.63,.99]],
+    '1,1':   [[.63,.01],[.72,.18],[.58,.34],[.68,.51],[.42,.66],[.22,.61],[.01,.63]],
+    '0,1':   [[.99,.63],[.82,.70],[.67,.58],[.52,.72],[.35,.59],[.18,.69],[.01,.63]],
+    '-1,1':  [[.99,.63],[.82,.70],[.67,.57],[.52,.67],[.38,.51],[.27,.31],[.37,.01]],
+    '-1,0':  [[.37,.99],[.29,.82],[.43,.67],[.28,.51],[.42,.36],[.29,.18],[.37,.01]]
+  };
+
+  function traceRoadPath(g, points, width, height) {
+    g.beginPath();
+    g.moveTo(points[0][0] * width, points[0][1] * height);
+    for (let i = 1; i < points.length - 1; i++) {
+      const current = points[i];
+      const next = points[i + 1];
+      const midX = (current[0] + next[0]) * width / 2;
+      const midY = (current[1] + next[1]) * height / 2;
+      g.quadraticCurveTo(current[0] * width, current[1] * height, midX, midY);
+    }
+    const last = points[points.length - 1];
+    g.lineTo(last[0] * width, last[1] * height);
+  }
+
+  function sampleRoadPolyline(points, progress, width, height) {
+    const coords = points.map(point => [point[0] * width, point[1] * height]);
+    const lengths = [];
+    let total = 0;
+    for (let i = 1; i < coords.length; i++) {
+      const length = Math.hypot(coords[i][0] - coords[i - 1][0], coords[i][1] - coords[i - 1][1]);
+      lengths.push(length);
+      total += length;
+    }
+    let remaining = Math.max(0, Math.min(1, progress)) * total;
+    for (let i = 0; i < lengths.length; i++) {
+      if (remaining <= lengths[i] || i === lengths.length - 1) {
+        const a = coords[i];
+        const b = coords[i + 1];
+        const t = lengths[i] ? Math.max(0, Math.min(1, remaining / lengths[i])) : 0;
+        const dx = b[0] - a[0];
+        const dy = b[1] - a[1];
+        const distance = Math.hypot(dx, dy) || 1;
+        return {
+          x: a[0] + dx * t,
+          y: a[1] + dy * t,
+          tangentX: dx / distance,
+          tangentY: dy / distance
+        };
+      }
+      remaining -= lengths[i];
+    }
+    return {x:coords[0][0],y:coords[0][1],tangentX:1,tangentY:0};
+  }
+
+  function drawOuterRoad(g, roomCol, roomRow, width, height) {
+    const route = outerRoadRoutes[`${roomCol},${roomRow}`];
+    if (!route) return;
+
+    const scale = Math.min(width / 1920, height / 1080);
+    const roadWidth = Math.max(22, 76 * scale);
+    g.save();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+
+    traceRoadPath(g, route, width, height);
+    g.strokeStyle = 'rgba(42,32,23,.46)';
+    g.lineWidth = roadWidth + 18 * scale;
+    g.stroke();
+
+    traceRoadPath(g, route, width, height);
+    g.strokeStyle = '#5d4932';
+    g.lineWidth = roadWidth + 10 * scale;
+    g.stroke();
+
+    traceRoadPath(g, route, width, height);
+    g.strokeStyle = '#98784e';
+    g.lineWidth = roadWidth;
+    g.stroke();
+
+    // Pequenas irregularidades nas margens evitam o aspecto de faixa geométrica.
+    for (let i = 0; i <= 38; i++) {
+      const sample = sampleRoadPolyline(route, i / 38, width, height);
+      const side = random01(i + roomCol * 31, roomRow * 47 + i, 71) < .5 ? -1 : 1;
+      const offset = roadWidth * (.43 + random01(i, roomCol + roomRow * 13, 72) * .17);
+      const radius = (3 + random01(i, roomRow, 73) * 6) * scale;
+      const x = sample.x - sample.tangentY * offset * side;
+      const y = sample.y + sample.tangentX * offset * side;
+      g.fillStyle = i % 2 ? 'rgba(153,121,77,.92)' : 'rgba(111,83,52,.82)';
+      g.beginPath();
+      g.ellipse(x, y, radius * 1.5, radius, Math.atan2(sample.tangentY, sample.tangentX), 0, Math.PI * 2);
+      g.fill();
+    }
+
+    traceRoadPath(g, route, width, height);
+    g.strokeStyle = 'rgba(209,181,135,.39)';
+    g.lineWidth = roadWidth * .40;
+    g.stroke();
+
+    // Grãos e pequenas marcas de terra, distribuídos de forma determinística.
+    for (let i = 0; i < 86; i++) {
+      const sample = sampleRoadPolyline(route, (i + .37) / 87, width, height);
+      const across = (random01(i + roomCol * 19, roomRow * 23 + i, 74) - .5) * roadWidth * .72;
+      const x = sample.x - sample.tangentY * across;
+      const y = sample.y + sample.tangentX * across;
+      const radius = (.55 + random01(i, roomCol - roomRow * 11, 75) * 1.5) * scale;
+      g.fillStyle = i % 3 ? 'rgba(62,48,34,.24)' : 'rgba(230,207,164,.42)';
+      g.beginPath();
+      g.ellipse(x, y, radius * 1.5, radius, 0, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    g.restore();
+  }
+
   function buildRoomCanvas(roomCol, roomRow, width, height) {
     const roomCanvas = document.createElement('canvas');
     roomCanvas.width = Math.max(1, Math.round(width));
@@ -449,6 +566,7 @@
     }
 
     drawDecorations(roomCtx, left, top, width, height, size);
+    drawOuterRoad(roomCtx, roomCol, roomRow, width, height);
     return roomCanvas;
   }
 
