@@ -73,17 +73,30 @@
       variants: ['Águas Abertas', 'Blocos de Gelo', 'Icebergs', 'Ilhas Congeladas']
     }
   ];
-  // Keep only the central fields active while the rest of the world is on hold.
+  // O mapa atual permanece no centro. Os oito territórios vizinhos começam
+  // vazios, mas têm exatamente as mesmas dimensões e conexões de uma sala.
   const centralBiome = biomes.find(biome => biome.id === 'campos');
   if (centralBiome) centralBiome.variants = ['Pradaria do Centro'];
-  biomes.splice(0, biomes.length, ...(centralBiome ? [centralBiome] : []));
+  const emptyBiome = {
+    id: 'vazio', name: 'Campos Abertos', base: '#719b50', detail: '#719b50', accent: '#719b50',
+    resource: 'Nenhum', season: 'summer', variants: ['Terreno vazio']
+  };
+  biomes.splice(0, biomes.length, ...(centralBiome ? [centralBiome, emptyBiome] : [emptyBiome]));
   const biomeById = new Map(biomes.map(biome => [biome.id, biome]));
   const biomeOrder = new Map(biomes.map((biome, index) => [biome.id, index]));
 
-  // Single active region: Campos Centrais.
-  // A matriz é provisória e pode ser expandida sem alterar o sistema de salas.
-  const layout = [['campos']];
-  const GRID_CENTER = 0;
+  // Norte em cima; os Campos Centrais ocupam a sala central (0, 0).
+  const layout = [
+    ['vazio', 'vazio', 'vazio'],
+    ['vazio', 'campos', 'vazio'],
+    ['vazio', 'vazio', 'vazio']
+  ];
+  const GRID_CENTER = 1;
+
+  function getRoomLimits() {
+    return { minX: -GRID_CENTER, maxX: layout[0].length-1-GRID_CENTER,
+      minY: -GRID_CENTER, maxY: layout.length-1-GRID_CENTER };
+  }
 
   // Coordenada da sala é calculada em relação ao tamanho atual da viewport.
   function roomAt(x, y) {
@@ -197,6 +210,14 @@
     const biome = region.biome;
     const seed = random01(tx, ty, region.ring + 1);
     g.imageSmoothingEnabled = false;
+
+    // Salas externas vazias: mesmo chão verde do mapa central, sem vegetação,
+    // flores, recursos visuais ou obstáculos.
+    if (biome.id === 'vazio') {
+      g.fillStyle = biome.base;
+      g.fillRect(0, 0, TILE, TILE);
+      return;
+    }
 
     if (biome.id === 'aguas-quentes' || biome.id === 'oceano-polar') {
       drawWaterTile(g, tx, ty, biome, seed);
@@ -462,6 +483,7 @@
     get bounds() { return { x: viewWidth / 2, y: viewHeight / 2 }; },
     tileSize: TILE,
     get regionSize() { return { width: viewWidth, height: viewHeight }; },
+    get roomLimits() { return getRoomLimits(); },
     get layoutSize() { return { columns: layout[0].length, rows: layout.length }; }
   };
 })();

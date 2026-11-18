@@ -2,7 +2,7 @@
 import { state } from "./state.js?v=20261117-walk-v1";
 import { supabase } from "./supabase-client.js?v=20261117-walk-v1";
 import { loadWorldState } from "./realtime.js?v=20261117-walk-v1";
-import { syncPositionForAction } from "./movement.js?v=20261117-combat-v1";
+import { syncPositionForAction } from "./movement.js?v=20261118-room-grid-v1";
 
 const POSITION_SENSITIVE_ACTIONS = new Set(["attack", "launch_projectile"]);
 const POSITION_SYNC_ACTIONS = new Set([...POSITION_SENSITIVE_ACTIONS, "drop"]);

@@ -153,16 +153,22 @@ var  camera = {x:0,y:0};
 function setLocalPlayerPosition(x,y,direction=player.direction) {
   const nextX=Number(x),nextY=Number(y);
   if(!Number.isFinite(nextX)||!Number.isFinite(nextY)) return false;
+  const viewportWidth=Math.max(1,Number(canvas?.clientWidth)||Number(window.KTKWorldMap?.regionSize?.width)||1920);
+  const viewportHeight=Math.max(1,Number(canvas?.clientHeight)||Number(window.KTKWorldMap?.regionSize?.height)||1080);
+  window.KTKWorldMap?.setViewport?.(viewportWidth,viewportHeight);
+  const limits=window.KTKWorldMap?.roomLimits||{minX:0,maxX:0,minY:0,maxY:0};
+  const pad=Math.max(1,Number(COLLISION_RADIUS)||18);
+  const boundedX=Math.max(limits.minX*viewportWidth-viewportWidth/2+pad,Math.min(limits.maxX*viewportWidth+viewportWidth/2-pad,nextX));
+  const boundedY=Math.max(limits.minY*viewportHeight-viewportHeight/2+pad,Math.min(limits.maxY*viewportHeight+viewportHeight/2-pad,nextY));
+  const roomX=Math.max(limits.minX,Math.min(limits.maxX,Math.floor(boundedX/viewportWidth+0.5)));
+  const roomY=Math.max(limits.minY,Math.min(limits.maxY,Math.floor(boundedY/viewportHeight+0.5)));
   const nextDirection=Number(direction);
-  player.x=nextX;
-  player.y=nextY;
+  player.x=boundedX-roomX*viewportWidth;
+  player.y=boundedY-roomY*viewportHeight;
   if(Number.isFinite(nextDirection)) player.direction=Math.max(0,Math.min(3,Math.trunc(nextDirection)));
-  playerVisual.x=nextX;
-  playerVisual.y=nextY;
-  playerVisual.direction=player.direction;
-  playerVisual.initialized=true;
-  camera.x=0;
-  camera.y=0;
+  playerVisual.x=player.x; playerVisual.y=player.y;
+  playerVisual.direction=player.direction; playerVisual.initialized=true;
+  camera.x=roomX; camera.y=roomY;
   return true;
 }
 
@@ -195,12 +201,17 @@ function updateLocalPlayerVisual(deltaSeconds) {
   const wantedX=inputX/inputLength*distance;
   const wantedY=inputY/inputLength*distance;
 
+  const roomWidth=Math.max(1,Number(canvas?.clientWidth)||Number(window.KTKWorldMap?.regionSize?.width)||1920);
+  const roomHeight=Math.max(1,Number(canvas?.clientHeight)||Number(window.KTKWorldMap?.regionSize?.height)||1080);
+  window.KTKWorldMap?.setViewport?.(roomWidth,roomHeight);
+  const roomOffsetX=camera.x*roomWidth, roomOffsetY=camera.y*roomHeight;
+
   const obstacles=[];
 
   // Árvores e outros obstáculos estáticos vêm do próprio mapa, não de posições
   // estimadas pelo desenho. O raio informado pelo mapa é somado ao do jogador.
   const mapColliders=window.KTKWorldMap?.getCollisionCircles?.(
-    playerVisual.x,playerVisual.y,96
+    roomOffsetX+playerVisual.x,roomOffsetY+playerVisual.y,96
   );
   if(Array.isArray(mapColliders)) {
     mapColliders.forEach(collider=>{
@@ -264,12 +275,31 @@ function updateLocalPlayerVisual(deltaSeconds) {
   const steps=Math.max(1,Math.ceil(Math.max(Math.abs(wantedX),Math.abs(wantedY))/6));
   const stepX=wantedX/steps,stepY=wantedY/steps;
   for(let index=0;index<steps;index++) {
-    const nextX=playerVisual.x+stepX;
-    if(!blocked(nextX,playerVisual.y,playerVisual.x,playerVisual.y)) playerVisual.x=nextX;
-    const nextY=playerVisual.y+stepY;
-    if(!blocked(playerVisual.x,nextY,playerVisual.x,playerVisual.y)) playerVisual.y=nextY;
+    const currentWorldX=roomOffsetX+playerVisual.x, currentWorldY=roomOffsetY+playerVisual.y;
+    const nextWorldX=currentWorldX+stepX;
+    if(!blocked(nextWorldX,currentWorldY,currentWorldX,currentWorldY)) playerVisual.x+=stepX;
+    const updatedWorldX=roomOffsetX+playerVisual.x, updatedWorldY=roomOffsetY+playerVisual.y;
+    const nextWorldY=updatedWorldY+stepY;
+    if(!blocked(updatedWorldX,nextWorldY,updatedWorldX,updatedWorldY)) playerVisual.y+=stepY;
   }
 
+  // Ao cruzar uma borda, a câmera muda sem alterar a coordenada global do personagem.
+  const limits=window.KTKWorldMap?.roomLimits||{minX:0,maxX:0,minY:0,maxY:0};
+  const halfW=roomWidth/2, halfH=roomHeight/2, pad=Math.max(1,Number(COLLISION_RADIUS)||18);
+  if(playerVisual.x>halfW) {
+    if(camera.x<limits.maxX) {camera.x+=1; playerVisual.x-=roomWidth;}
+    else playerVisual.x=halfW-pad;
+  } else if(playerVisual.x< -halfW) {
+    if(camera.x>limits.minX) {camera.x-=1; playerVisual.x+=roomWidth;}
+    else playerVisual.x=-halfW+pad;
+  }
+  if(playerVisual.y>halfH) {
+    if(camera.y<limits.maxY) {camera.y+=1; playerVisual.y-=roomHeight;}
+    else playerVisual.y=halfH-pad;
+  } else if(playerVisual.y< -halfH) {
+    if(camera.y>limits.minY) {camera.y-=1; playerVisual.y+=roomHeight;}
+    else playerVisual.y=-halfH+pad;
+  }
   player.x=playerVisual.x;
   player.y=playerVisual.y;
 }

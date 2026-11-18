@@ -4,9 +4,9 @@
 
 ## Organização
 
-O mundo é uma matriz de mapas independentes, um por tela. Cada coordenada tem um bioma e uma sub-região determinísticos. Os Campos Centrais ficam no centro, ladeados por uma faixa irregular de Águas Quentes; florestas, pântanos, desertos, savanas, selvas, taiga e terras congeladas ocupam regiões vizinhas, com o Oceano Polar ao norte. O castelo central está reservado para uma etapa posterior.
+O mundo começa em uma matriz 3×3 de salas independentes, todas com as mesmas dimensões e proporção 16:9. Os Campos Centrais permanecem intactos na posição central. As oito salas ao redor estão vazias: exibem somente o chão verde, sem vegetação, recursos ou obstáculos. A expansão futura poderá preencher cada uma sem alterar o tamanho das salas nem a posição do mapa central.
 
-Cada tela tem proporção 16:9 e usa câmera fixa. As salas ocupam células adjacentes numa grade: a coordenada da câmera escolhe a sala, e cruzar uma borda muda para a sala vizinha e posiciona o jogador no lado oposto. O layout macro usa uma matriz irregular; a mesma coordenada sempre produz o mesmo terreno e sub-região. Os tiles são desenhados em coordenadas globais, sem recorte nos limites da sala inicial, e usam cache local. Estradas, pontes e travessias ainda precisam ser incluídas para garantir continuidade visual e navegação entre mapas.
+Cada tela usa câmera fixa. Ao cruzar uma borda, a câmera muda para a sala vizinha e o personagem reaparece no lado oposto. As coordenadas transmitidas ao servidor e aos outros jogadores são globais, de modo que todos compartilham a mesma posição no mundo mesmo quando estão em salas diferentes. O limite externo da matriz bloqueia a saída do mundo. Os tiles são desenhados em coordenadas globais e usam cache local.
 
 ## Integração
 

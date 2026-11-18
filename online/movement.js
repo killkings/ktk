@@ -18,8 +18,12 @@ let pendingCheckpoint = null;
 
 function readLocalPosition() {
   const local = window.player;
-  const x = Number(local?.x);
-  const y = Number(local?.y);
+  const roomSize=window.KTKWorldMap?.regionSize||{width:window.canvas?.clientWidth||window.innerWidth,height:window.canvas?.clientHeight||window.innerHeight};
+  const roomCamera=window.camera||{x:0,y:0};
+  const roomWidth=Math.max(1,Number(roomSize.width)||1920), roomHeight=Math.max(1,Number(roomSize.height)||1080);
+  // A rede usa coordenadas globais, independentes da sala visível no cliente.
+  const x=Number(local?.x)+Number(roomCamera.x||0)*roomWidth;
+  const y=Number(local?.y)+Number(roomCamera.y||0)*roomHeight;
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
 
   const inputX = Math.max(-1, Math.min(1, Math.trunc(Number(window.playerInputX) || 0)));

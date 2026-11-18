@@ -3,7 +3,7 @@ import { state } from "./state.js?v=20261117-walk-v1";
 import {
   supabase, SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY
 } from "./supabase-client.js?v=20261117-walk-v1";
-import { resetMovementNetwork } from "./movement.js?v=20261117-combat-v1";
+import { resetMovementNetwork } from "./movement.js?v=20261118-room-grid-v1";
 import { subscribeWorld } from "./realtime.js?v=20261118-remote-hit-v1";
 import { updateRemotes, resetPlayerSyncState } from "./player-sync.js?v=20261118-remote-hit-v1";
 import { syncEquipmentCatalog } from "../equipment/catalog-sync.js?v=20261117-walk-v1";

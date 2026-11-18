@@ -1,8 +1,8 @@
 /* Ponto de composição do multiplayer V1: expõe somente a API pública do jogo. */
 import {
   enter, markDead, leaveWorld, getPlayerState, startHeartbeat
-} from "../online/session.js?v=20261118-ephemeral-player-v1";
-import { gameAction, claimKingCrown, dropKingCrown, swapInventoryItem, expandInventorySlot } from "../online/actions.js?v=20261118-inventory-expansion-v1";
+} from "../online/session.js?v=20261118-room-grid-v1";
+import { gameAction, claimKingCrown, dropKingCrown, swapInventoryItem, expandInventorySlot } from "../online/actions.js?v=20261118-room-grid-v1";
 import { state } from "../online/state.js?v=20261117-walk-v1";
 import { supabase } from "../online/supabase-client.js?v=20261117-walk-v1";
 
@@ -21,7 +21,7 @@ async function sendChat(message) {
   window.KTKChat?.showBubble(state.user.id, data.message || text);
   return data;
 }
-import { sendPosition } from "../online/movement.js?v=20261117-combat-v1";
+import { sendPosition } from "../online/movement.js?v=20261118-room-grid-v1";
 
 window.KTKOnline = {
   enter, markDead, leaveWorld, claimKingCrown, dropKingCrown, getPlayerState, gameAction, swapInventoryItem, expandInventorySlot, sendPosition, sendChat,
