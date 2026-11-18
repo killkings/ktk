@@ -28,8 +28,7 @@ function readLocalPosition() {
   const guarding = Boolean(
     window.rightMouseHeld &&
     !window.shieldStaminaExhausted &&
-    Array.isArray(window.inventory) &&
-    window.inventory.some(item => item?.equipmentClass === "shield")
+    Boolean(window.getBlockingShield?.())
   );
 
   return {
@@ -44,7 +43,7 @@ function readLocalPosition() {
   };
 }
 
-function persistPosition(snapshot, force = false) {
+function persistPosition(snapshot) {
   if (checkpointInFlight) {
     pendingCheckpoint = snapshot;
     return;
@@ -73,7 +72,7 @@ function persistPosition(snapshot, force = false) {
       const pending = pendingCheckpoint;
       pendingCheckpoint = null;
       if (pending && state.online && state.joined && !state.leaving) {
-        persistPosition(pending, true);
+        persistPosition(pending);
       }
     });
 }
