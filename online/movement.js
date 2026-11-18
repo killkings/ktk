@@ -28,8 +28,8 @@ function readLocalPosition() {
   const guarding = Boolean(
     window.rightMouseHeld &&
     !window.shieldStaminaExhausted &&
-    window.KTKPlayerStats &&
-    window.KTKPlayerStats.getBlockingShield?.()
+    Array.isArray(window.inventory) &&
+    window.inventory.some(item => item?.equipmentClass === "shield")
   );
 
   return {
