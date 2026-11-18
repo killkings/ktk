@@ -50,7 +50,16 @@
   canvas.addEventListener('mousedown',event=>{
     if(event.button===0) {
       leftMouseHeld=true;
-      startPunch(event);
+      const selectedItem=inventory[selectedInventorySlot];
+      if(selectedItem?.id==='rod') {
+        // Segurar a vara é uma pose de pescaria, não um ataque normal.
+        punch.active=false;
+        punch.hitApplied=true;
+        punch.weaponAttack=false;
+        punch.weaponItem=null;
+      } else {
+        startPunch(event);
+      }
     }
     if(event.button===2) {
       event.preventDefault();
