@@ -374,6 +374,35 @@
     return result;
   }
 
+  // Retorna os troncos das árvores visíveis nas proximidades do jogador.
+  // A consulta usa a mesma decoração determinística usada pelo renderizador.
+  function getCollisionCircles(x, y, range = 96) {
+    const centerX = Number(x);
+    const centerY = Number(y);
+    if (!Number.isFinite(centerX) || !Number.isFinite(centerY)) return [];
+
+    const searchRange = Math.max(0, Math.min(2048, Number(range) || 0)) + TILE;
+    const minX = Math.floor((centerX - searchRange) / TILE);
+    const maxX = Math.floor((centerX + searchRange) / TILE);
+    const minY = Math.floor((centerY - searchRange) / TILE);
+    const maxY = Math.floor((centerY + searchRange) / TILE);
+    const colliders = [];
+
+    for (let ty = minY; ty <= maxY; ty++) {
+      for (let tx = minX; tx <= maxX; tx++) {
+        if (!decorationAt(tx, ty).tree) continue;
+        colliders.push({
+          id: `tree:${tx}:${ty}`,
+          type: 'tree',
+          x: tx * TILE + TILE / 2,
+          y: ty * TILE + TILE / 2 + 13,
+          radius: 7
+        });
+      }
+    }
+    return colliders;
+  }
+
   function drawDecorations(ctx, left, top, width, height, tileSize) {
     const minX = Math.floor(left / tileSize) - 1;
     const maxX = Math.floor((left + width) / tileSize) + 1;
@@ -520,6 +549,7 @@
 
   window.KTKWorldMap = {
     draw,
+    getCollisionCircles,
     regionAt,
     getBiomeAt,
     biomes,
