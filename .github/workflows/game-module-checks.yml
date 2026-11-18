@@ -24,6 +24,7 @@ on:
       - "supabase/migrations/**"
       - "inventory/**"
       - "tools/test-wearable-separation.mjs"
+      - "tools/test-inventory-interaction.mjs"
       - "input/input-controller.js"
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
@@ -103,6 +104,8 @@ jobs:
         run: node tools/test-combat-flow.mjs
       - name: Check wearable separation
         run: node tools/test-wearable-separation.mjs
+      - name: Check inventory E drop and swap
+        run: node tools/test-inventory-interaction.mjs
       - name: Check module boundaries and script order
         run: |
           node <<'NODE'
