@@ -171,10 +171,10 @@ assert.equal(skeleton.knockback,previousKnockback,
   "A stale world snapshot must not replay a past impact.");
 
 // The database retains responsibility for computing and applying the projectile's damage and push.
-assert.match(pvpRuleMigration, /'damage',greatest\\(1,round/);
-assert.match(pvpRuleMigration, /v_damage:=greatest\\(1,coalesce\\(\\(v_proj->>'damage'\\)::integer,5\\)\\)/);
-assert.match(pvpRuleMigration, /'health',greatest\\(0,v_target_health-v_damage\\)/);
-assert.match(pvpRuleMigration, /x=x\\+\\(v_dx\\/v_len\\)\\*18,y=y\\+\\(v_dy\\/v_len\\)\\*18/);
+assert.ok(pvpRuleMigration.includes("'damage',greatest(1,round("));
+assert.ok(pvpRuleMigration.includes("v_damage:=greatest(1,coalesce((v_proj->>'damage')::integer,5))"));
+assert.ok(pvpRuleMigration.includes("'health',greatest(0,v_target_health-v_damage)"));
+assert.ok(pvpRuleMigration.includes("x=x+(v_dx/v_len)*18,y=y+(v_dy/v_len)*18"));
 
 
 // 4) The position action flush broadcasts first and persists the exact local point before returning.
