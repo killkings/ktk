@@ -196,7 +196,7 @@ begin
 
   return jsonb_build_object('active',true,'damage',v_damage,'health',v_health,'dead',v_is_dead,'state',v_state);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION public.ktk_game_action(p_action text, p_payload jsonb DEFAULT '{}'::jsonb)
  RETURNS jsonb
@@ -558,7 +558,7 @@ begin
 
   return public.ktk_game_action_legacy(p_action,p_payload);
 end;
-$function$
+$function$;
 
 CREATE OR REPLACE FUNCTION ktk_private.projectile_tick()
  RETURNS void
@@ -709,5 +709,4 @@ begin
     end if;
   end loop;
 end;
-$function$
-
+$function$;
