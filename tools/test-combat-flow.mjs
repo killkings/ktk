@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [combatSource, movementSource, actionSource, stateSource, html, index, migration, worldEntities, worldRenderer, replicaSource] = await Promise.all([
+const [combatSource, movementSource, actionSource, stateSource, html, index, migration, pvpRuleMigration, worldEntities, worldRenderer, replicaSource] = await Promise.all([
   read("../combat/combat-controller.js"),
   read("../online/movement.js"),
   read("../online/actions.js"),
@@ -11,6 +11,7 @@ const [combatSource, movementSource, actionSource, stateSource, html, index, mig
   read("../campo_livre_atualizado.html"),
   read("../index.html"),
   read("../supabase/migrations/20261118005653_fix_combat_pipeline.sql"),
+  read("../supabase/migrations/20261118011315_fix_same_clan_pvp_rule.sql"),
   read("../world/world-entities.js"),
   read("../render/world-renderer.js"),
   read("../multiplayer/player-replica.js")
@@ -199,4 +200,14 @@ assert.match(migration,/estimate_player_position/);
 assert.match(migration,/last_attack_weapon_id/);
 assert.match(migration,/p_position_updated_at/);
 
-console.log("Combat flow passed: unarmed punch RPC, magic projectile RPC, innate magic, pre-action position sync, response feedback, and preserved walking physics.");
+
+// 8) Same-clan PvP remains enabled except for attacks against the king by their own clan.
+const kingGuardMatches = [...pvpRuleMigration.matchAll(/p\.user_id\s*=\s*\(select w\.king_user_id from public\.ktk_worlds w where w\.id='main'\)/g)];
+assert.equal(kingGuardMatches.length,2,
+  "Both melee and projectile targeting must protect only the king from their own clan.");
+assert.match(pvpRuleMigration,/a\.clan_color=b\.clan_color/);
+assert.match(pvpRuleMigration,/owner_profile\.clan_color=target_profile\.clan_color/);
+assert.doesNotMatch(pvpRuleMigration,/and not\(a\.clan_color is not null and a\.clan_color=b\.clan_color\)/);
+assert.doesNotMatch(pvpRuleMigration,/and not\(owner_profile\.clan_color is not null and owner_profile\.clan_color=target_profile\.clan_color\)/);
+
+console.log("Combat flow passed: unarmed punch RPC, magic projectile RPC, innate magic, PvP clan/king rules, pre-action position sync, response feedback, and preserved walking physics.");
