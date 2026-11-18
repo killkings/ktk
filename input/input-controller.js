@@ -53,7 +53,8 @@
     if(event.button===0) {
       leftMouseHeld=true;
       const selectedItem=inventory[selectedInventorySlot];
-      if(selectedItem?.id==='rod') {
+      const isFishingRod=selectedItem?.id==='equipment-rod'||selectedItem?.id==='rod';
+      if(isFishingRod) {
         // Segurar a vara é uma pose de pescaria, não um ataque normal.
         punch.active=false;
         punch.hitApplied=true;
