@@ -141,6 +141,29 @@
     }
   }
 
+  function removeCollectedWorldItem(item) {
+    if(!item) return;
+    const entityId=String(item.entityId||'');
+    item.collected=true;
+
+    // Remove todas as referências locais à mesma entidade, não só a primeira.
+    worldItems.forEach(candidate=>{
+      if(candidate===item||(entityId&&String(candidate.entityId||'')===entityId)) {
+        candidate.collected=true;
+        worldItems.delete(candidate);
+      }
+    });
+
+    if(entityId) {
+      const known=serverEntityRevisions.get(entityId);
+      const revision=Math.max(Number(item.revision)||0,Number(known?.revision)||0);
+      // A tombstone impede que uma fotografia antiga recrie o item já coletado.
+      serverEntityRevisions.set(entityId,{revision,deleted:true});
+      serverWorldEntities.delete(entityId);
+    }
+    updateKingStatus();
+  }
+
   function renderWearableSlots() {
     document.querySelectorAll('.wearable-slot').forEach(button=>{
       const slot=button.dataset.wearSlot;
@@ -209,11 +232,22 @@
       return true;
     }
 
+    const gameAction=window.KTKOnline?.gameAction;
+    if(typeof gameAction!=='function') {
+      toast('A conexão com o servidor não está disponível.');
+      return true;
+    }
     try {
-      const result=await window.KTKOnline?.gameAction?.('pickup',{entity_id:itemToCollect.entityId});
-      if(result?.ok===false) toast(result?.error||'O servidor recusou a coleta.');
+      const result=await gameAction('pickup',{entity_id:itemToCollect.entityId});
+      if(result?.ok===true) {
+        // Só apaga do mapa depois da confirmação da coleta no servidor.
+        removeCollectedWorldItem(itemToCollect);
+      } else {
+        toast(result?.error||'O servidor não confirmou a coleta.');
+      }
       return true;
     } catch(error) {
+      // Falha de rede ou RPC não consome o item visualmente.
       toast(error?.message||'O servidor recusou a coleta.');
       return true;
     }
