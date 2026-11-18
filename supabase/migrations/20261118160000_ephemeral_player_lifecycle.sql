@@ -171,7 +171,7 @@ begin
 
   return v_count;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION ktk_private.simulate_player_survival(p_dt double precision)
@@ -312,7 +312,7 @@ begin
     end if;
   end loop;
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.ktk_leave_world()
@@ -364,7 +364,7 @@ begin
 
   return jsonb_build_object('ok', true, 'dead', true);
 end;
-$function$
+$function$;
 
 
 CREATE OR REPLACE FUNCTION public.ktk_mark_dead()
@@ -408,7 +408,7 @@ begin
 
   perform ktk_private.delete_player_identity(v_uid);
 end;
-$function$
+$function$;
 
 
 commit;
