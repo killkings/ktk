@@ -354,7 +354,15 @@
     playerInputY=dy;
     const shieldHeld=rightMouseHeld && Boolean(getBlockingShield());
     const defending=shieldHeld && !shieldStaminaExhausted;
-    const movement=window.KTKPlayerStats.updateStamina(dt,playerMoving,keys.has('shift'),defending);
+    const roomOffsetX=camera.x*roomWidth;
+    const roomOffsetY=camera.y*roomHeight;
+    const onRoad=Boolean(window.KTKWorldMap?.isOnRoad?.(
+      roomOffsetX+playerVisual.x,roomOffsetY+playerVisual.y
+    ));
+    const roadSpeedMultiplier=onRoad?1.5:1;
+    const movement=window.KTKPlayerStats.updateStamina(
+      dt,playerMoving,keys.has('shift'),defending,roadSpeedMultiplier
+    );
     window.KTKPlayerStats.updateMana(
       dt,
       playerMoving,
