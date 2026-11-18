@@ -21,17 +21,6 @@
   const assets = new Map();
   const assetStatus = new Map();
 
-  // Textura LPC exclusiva para as oito salas externas. Não altera os Campos Centrais.
-  const emptyGrassAsset = new Image();
-  emptyGrassAsset.onload = () => {
-    tileCache.clear();
-    roomCanvasCache.clear();
-  };
-  emptyGrassAsset.onerror = () => {
-    // Se a arte não carregar, o piso verde original continua como fallback.
-  };
-  emptyGrassAsset.src = './mapa/assets/lpc-terrain-summer.png';
-
   const biomes = [
     {
       id: 'campos', name: 'Campos Centrais', base: '#719b50', detail: '#91ad60', accent: '#d4cc79',
@@ -227,31 +216,9 @@
     const seed = random01(tx, ty, region.ring + 1);
     g.imageSmoothingEnabled = false;
 
-    // As oito salas externas usam o miolo da área de grama do tileset LPC.
-    // Quatro quadrantes reais do PNG fornecem variação sem repetir o recorte de terra.
-    if (biome.id === 'vazio') {
-      const grassSamples = [
-        [32, 32], [48, 32],
-        [32, 48], [48, 48]
-      ];
-      if (emptyGrassAsset.complete &&
-          emptyGrassAsset.naturalWidth >= 64 &&
-          emptyGrassAsset.naturalHeight >= 64) {
-        const sampleIndex = Math.floor(random01(tx, ty, 801) * grassSamples.length);
-        const [sourceX, sourceY] = grassSamples[sampleIndex];
-        const flipX = random01(tx, ty, 802) > 0.5;
-        const flipY = random01(tx, ty, 803) > 0.5;
-        g.save();
-        g.translate(flipX ? TILE : 0, flipY ? TILE : 0);
-        g.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-        g.drawImage(emptyGrassAsset, sourceX, sourceY, 16, 16, 0, 0, TILE, TILE);
-        g.restore();
-      } else {
-        g.fillStyle = biome.base;
-        g.fillRect(0, 0, TILE, TILE);
-      }
-      return;
-    }
+    // O chão dos nove mapas fica transparente para revelar a grama CSS do #world.
+    // Elementos de jogo e decorações continuam renderizados em primeiro plano.
+    if (biome.id === 'campos' || biome.id === 'vazio') return;
 
     if (biome.id === 'aguas-quentes' || biome.id === 'oceano-polar') {
       drawWaterTile(g, tx, ty, biome, seed);
@@ -453,8 +420,12 @@
     const size = TILE;
 
     roomCtx.imageSmoothingEnabled = false;
-    roomCtx.fillStyle = '#263f59';
-    roomCtx.fillRect(0, 0, width, height);
+    const roomId = layout[roomRow + GRID_CENTER]?.[roomCol + GRID_CENTER] || 'campos';
+    const isCssGrassRoom = roomId === 'campos' || roomId === 'vazio';
+    if (!isCssGrassRoom) {
+      roomCtx.fillStyle = '#263f59';
+      roomCtx.fillRect(0, 0, width, height);
+    }
 
     const minX = Math.floor(left / size) - 1;
     const maxX = Math.floor((left + width) / size) + 1;
