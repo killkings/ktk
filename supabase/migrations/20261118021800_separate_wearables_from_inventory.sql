@@ -639,7 +639,7 @@ begin
 
   return public.ktk_game_action_legacy(p_action,p_payload);
 end;
-$function$
+$function$;
 
 -- Conserta qualquer vestimenta que tenha entrado na mochila antes desta regra.
 -- A trava do mundo segue a ordem usada pelos RPCs de equipamento e coroa.
