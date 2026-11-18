@@ -434,13 +434,9 @@
   // Um lago em cada extremidade externa do anel de oito mapas.
   // As posições ficam afastadas do traçado das estradas e nunca ocupam o centro.
   const outerLakeLocations = {
-    '-1,-1': { x: .18, y: .18, rx: .078, ry: .095, phase: .3 },
     '0,-1':  { x: .50, y: .14, rx: .095, ry: .065, phase: 1.1 },
     '1,-1':  { x: .82, y: .18, rx: .078, ry: .095, phase: 2.0 },
-    '1,0':   { x: .90, y: .50, rx: .065, ry: .090, phase: 2.8 },
-    '1,1':   { x: .82, y: .82, rx: .078, ry: .095, phase: 3.6 },
     '0,1':   { x: .50, y: .88, rx: .095, ry: .065, phase: 4.4 },
-    '-1,1':  { x: .18, y: .82, rx: .078, ry: .095, phase: 5.2 },
     '-1,0':  { x: .10, y: .50, rx: .065, ry: .090, phase: 5.9 }
   };
 
