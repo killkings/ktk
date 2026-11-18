@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
-const [combatSource, movementSource, actionSource, stateSource, html, index, migration, pvpRuleMigration, worldEntities, worldRenderer, replicaSource] = await Promise.all([
+const [combatSource, movementSource, actionSource, stateSource, html, index, migration, pvpRuleMigration, worldEntities, worldRenderer, replicaSource, inputSource] = await Promise.all([
   read("../combat/combat-controller.js"),
   read("../online/movement.js"),
   read("../online/actions.js"),
@@ -14,10 +14,11 @@ const [combatSource, movementSource, actionSource, stateSource, html, index, mig
   read("../supabase/migrations/20261118011327_fix_same_clan_pvp_rule.sql"),
   read("../world/world-entities.js"),
   read("../render/world-renderer.js"),
-  read("../multiplayer/player-replica.js")
+  read("../multiplayer/player-replica.js"),
+  read("../input/input-controller.js")
 ]);
 
-const combatStart = combatSource.indexOf("  function startPunch() {");
+const combatStart = combatSource.indexOf("  function startPunch(event=null) {");
 const combatEnd = combatSource.indexOf("  function getEntityWorldPosition(", combatStart);
 const applyHitStart = combatSource.indexOf("  function applyCombatHit(");
 const applyHitEnd = combatSource.indexOf("  function startKnockback(", applyHitStart);
@@ -88,6 +89,21 @@ assert.equal(fist.calls[0].payload.weapon_id,null);
 assert.ok(fist.toasts.some(message=>message.includes("6 de dano")),
   "A player hit must give the attacker feedback about dealt damage.");
 
+// An empty hand must remain a punch even when innate magic is unlocked.
+const highLevelFist = makeCombatContext({
+  magicLevel:10,
+  response:{ok:true,hit:true,target_type:"player",damage:6,target_health:94}
+});
+highLevelFist.context.combatApi.startPunch({altKey:false});
+highLevelFist.context.combatApi.updatePunch(0.21);
+await new Promise(resolve => setImmediate(resolve));
+assert.equal(highLevelFist.calls.length,1);
+assert.equal(highLevelFist.calls[0].action,"attack",
+  "Level-six innate magic must not silently replace an unarmed punch.");
+assert.equal(highLevelFist.calls[0].payload.weapon_id,null);
+
+// Holding Alt while clicking explicitly selects level-six innate magic.
+
 // 2) A selected magic weapon takes the projectile route, not the unarmed/melee route.
 const wand = makeCombatContext({
   inventory:[{id:"equipment-wand",equipmentClass:"magic",itemType:"equipment",range:7,attackInterval:0.7},null],
@@ -107,11 +123,13 @@ assert.equal(wand.predicted[0].direction,3);
 
 // 3) Level-six innate magic must also use the projectile action with the server item id.
 const innate = makeCombatContext({magicLevel:6,response:{ok:true,projectile_id:"projectile-innate"}});
-innate.context.combatApi.startPunch();
+innate.context.combatApi.startPunch({altKey:true});
 innate.context.combatApi.updatePunch(0.21);
 await new Promise(resolve => setImmediate(resolve));
 assert.equal(innate.calls[0].action,"launch_projectile");
 assert.equal(innate.calls[0].payload.weapon_id,"level-six-innate-magic");
+assert.match(inputSource,/startPunch\(event\)/,
+  "The mouse modifier must reach the combat controller.");
 
 // 4) The position action flush broadcasts first and persists the exact local point before returning.
 const movementCode = movementSource
@@ -186,11 +204,12 @@ assert.equal(actionEvents.some(event=>event.kind==="rpc"),true);
 assert.match(stateSource,/var\s+SPEED\s*=\s*225/);
 assert.match(stateSource,/function updateLocalPlayerVisual\(deltaSeconds\)/);
 assert.match(movementSource,/MOVING_CHECKPOINT_INTERVAL\s*=\s*500/);
-assert.match(html,/combat-controller\.js\?v=20261117-combat-v1/);
+assert.match(html,/combat-controller\.js\?v=20261118-punch-v1/);
 assert.match(html,/online\.js\?v=20261117-combat-v1/);
 assert.match(html,/world\/world-entities\.js\?v=20261117-combat-v1/);
 assert.match(html,/world-renderer\.js\?v=20261117-combat-v1/);
-assert.match(index,/20261117-combat-v1/);
+assert.match(html,/input-controller\.js\?v=20261118-punch-v1/);
+assert.match(index,/20261118-punch-v1/);
 assert.match(replicaSource,/function predictProjectile\(/);
 assert.match(worldRenderer,/entity\.type==='remote-projectile'&&entity\.phase==='outbound'/);
 
@@ -210,4 +229,4 @@ assert.match(pvpRuleMigration,/owner_profile\.clan_color=target_profile\.clan_co
 assert.doesNotMatch(pvpRuleMigration,/and not\(a\.clan_color is not null and a\.clan_color=b\.clan_color\)/);
 assert.doesNotMatch(pvpRuleMigration,/and not\(owner_profile\.clan_color is not null and owner_profile\.clan_color=target_profile\.clan_color\)/);
 
-console.log("Combat flow passed: unarmed punch RPC, magic projectile RPC, innate magic, PvP clan/king rules, pre-action position sync, response feedback, and preserved walking physics.");
+console.log("Combat flow passed: unarmed punch at magic level 10, explicit innate magic modifier, magic projectile RPC, PvP clan/king rules, pre-action position sync, response feedback, and preserved walking physics.");
