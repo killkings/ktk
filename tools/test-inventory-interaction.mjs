@@ -68,7 +68,7 @@ const drop=makeInteractionContext({
   selected:{type:"item",id:"equipment-arming-sword",displayName:"Espada",itemType:"equipment"}
 });
 await drop.context.runInventoryInteraction();
-assert.deepEqual(drop.calls,[{action:"drop",payload:{slot:0,direction:3}}]);
+assert.deepEqual(JSON.parse(JSON.stringify(drop.calls)),[{action:"drop",payload:{slot:0,direction:3}}]);
 assert.ok(drop.toasts.some(message=>message.includes("Espada solto")));
 assert.equal(drop.renderCount,1);
 
@@ -82,7 +82,7 @@ const swap=makeInteractionContext({
   nearby:groundBow
 });
 await swap.context.runInventoryInteraction();
-assert.deepEqual(swap.calls,[{action:"swap",entityId:"loot-bow",slot:0,direction:3}]);
+assert.deepEqual(JSON.parse(JSON.stringify(swap.calls)),[{action:"swap",entityId:"loot-bow",slot:0,direction:3}]);
 assert.equal(swap.removed,groundBow,
   "A entidade de chão substituída deve ser removida localmente após confirmação do servidor.");
 assert.ok(swap.toasts.some(message=>message.includes("Trocou Espada por Arco")));
