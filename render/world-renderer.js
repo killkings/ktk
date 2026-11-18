@@ -264,7 +264,7 @@
           const bodyFrameColumns=Math.max(1,Math.floor(bodyImageWidth/bodyFrameSize));
           const direction=punch.active?punch.direction:(playerMoving?playerVisual.direction:player.direction);
           const selectedItem=inventory[selectedInventorySlot];
-          const fishingRodHeld=(selectedItem?.id==='equipment-rod'||selectedItem?.id==='rod')&&leftMouseHeld;
+          const fishingRodHeld=isFishingRodItem(selectedItem)&&leftMouseHeld;
           let weaponMode=punch.active?(punch.weaponAttack?'attack':'none'):'held';
           if(fishingRodHeld) weaponMode='attack';
           if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
