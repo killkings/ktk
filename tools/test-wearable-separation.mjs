@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 
 const read = path => readFile(new URL(path, import.meta.url), "utf8");
 const [migration, input, inventoryUi, inventoryState] = await Promise.all([
-  read("../supabase/migrations/20261118021800_separate_wearables_from_inventory.sql"),
+  read("../supabase/migrations/20261118022700_separate_wearables_from_inventory.sql"),
   read("../input/input-controller.js"),
   read("../inventory/inventory-ui.js"),
   read("../inventory/inventory-state.js")
