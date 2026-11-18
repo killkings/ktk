@@ -22,6 +22,7 @@ await assert.rejects(
 assert.equal(timedSignalAborted, true);
 
 const session = await readFile(new URL("../online/session.js", import.meta.url), "utf8");
+const lifecycleMigration = await readFile(new URL("../supabase/migrations/20261118160000_ephemeral_player_lifecycle.sql", import.meta.url), "utf8");
 const realtimeSource = await readFile(new URL("../online/realtime.js", import.meta.url), "utf8");
 const playerSyncSource = await readFile(new URL("../online/player-sync.js", import.meta.url), "utf8");
 const catalog = await readFile(new URL("../equipment/catalog-sync.js", import.meta.url), "utf8");
@@ -47,3 +48,12 @@ assert.doesNotMatch(lifecycle, /onProgress\s*:/);
 assert.ok(lifecycle.indexOf("showScreen('game')") < lifecycle.indexOf("applyServerState(onlinePlayer.state)"));
 
 console.log("Online entry phase deadlines, abort signals and progress checks passed.");
+
+assert.match(session, /supabase\\.rpc\\([\"']ktk_heartbeat[\"']\\)/);
+assert.match(session, /window\\.setInterval[\\s\\S]*?20000/);
+assert.match(session, /ktk_discard_unused_identity/);
+assert.match(session, /supabase\\.rpc\\([\"']ktk_leave_world[\"']\\)/);
+assert.match(lifecycleMigration, /last_seen_at < v_now - interval '2 minutes'/);
+assert.match(lifecycleMigration, /delete from public\\.ktk_profiles/);
+assert.match(lifecycleMigration, /delete from auth\\.users[\\s\\S]*?is_anonymous is true/);
+assert.match(lifecycleMigration, /perform ktk_private\\.delete_player_identity\\(v_player\\.user_id\\)/);
