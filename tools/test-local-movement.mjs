@@ -103,16 +103,25 @@ assert.equal(blocked.player.x, 100,
 const blockedBySkeleton = makeLocalContext({
   skeleton: { x: 130, y: 120, defeated: false, radius: 18 }
 });
+blockedBySkeleton.setLocalPlayerPosition(80, 120, 3);
 for (let frame = 0; frame < 20; frame++) blockedBySkeleton.updateLocalPlayerVisual(1 / 60);
-assert.ok(blockedBySkeleton.player.x <= 104,
-  "O personagem não pode atravessar o esqueleto.");
+assert.ok(blockedBySkeleton.player.x > 90 && blockedBySkeleton.player.x <= 94,
+  "O personagem deve se aproximar do esqueleto e parar antes de atravessá-lo.");
 
 const blockedByResource = makeLocalContext({
   serverEntities: [{ type: "resource", status: "ready", x: 130, y: 120, radius: 8 }]
 });
+blockedByResource.setLocalPlayerPosition(80, 120, 3);
 for (let frame = 0; frame < 20; frame++) blockedByResource.updateLocalPlayerVisual(1 / 60);
-assert.ok(blockedByResource.player.x <= 104,
-  "Nós de recursos ativos devem bloquear a passagem.");
+assert.ok(blockedByResource.player.x > 100 && blockedByResource.player.x <= 104,
+  "Nós de recursos ativos devem bloquear a passagem após uma aproximação real.");
+
+const passDepletedResource = makeLocalContext({
+  serverEntities: [{ type: "resource", status: "depleted", x: 130, y: 120, radius: 8 }]
+});
+passDepletedResource.updateLocalPlayerVisual(1 / 60);
+assert.ok(passDepletedResource.player.x > 100,
+  "Um nó de recurso esgotado não pode continuar bloqueando o caminho.");
 
 const mapContext = {
   window: {},
