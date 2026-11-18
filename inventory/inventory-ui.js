@@ -349,32 +349,97 @@
     return true;
   }
 
+  function findNearbyWorldItemForSwap() {
+    const worldX=camera.x*canvas.clientWidth+player.x;
+    const worldY=camera.y*canvas.clientHeight+player.y;
+    const hasArrowStack=Boolean(getArrowAmmoStack());
+    let closestItem=null;
+    let closestDistance=Infinity;
+    let nearbyArrow=null;
+    let nearbyArrowDistance=Infinity;
+
+    worldItems.forEach(item=>{
+      if(item.collected) return;
+      const distance=Math.hypot(worldX-item.x,worldY-item.y);
+      if(distance<closestDistance) {
+        closestDistance=distance;
+        closestItem=item;
+      }
+      if(hasArrowStack&&isArrowAmmo(item)&&distance<=64&&distance<nearbyArrowDistance) {
+        nearbyArrow=item;
+        nearbyArrowDistance=distance;
+      }
+    });
+
+    if(nearbyArrow) return nearbyArrow;
+    return closestDistance<=64?closestItem:null;
+  }
+
   async function interactWithSelectedItem() {
     if(await harvestNearbyResource()) return;
+
+    let selectedItem=inventory[selectedInventorySlot];
+    const nearbyItem=findNearbyWorldItemForSwap();
+    const alreadyHasStack=Boolean(nearbyItem?.isStackable
+      &&inventory.some(item=>item?.id===nearbyItem.id));
+
+    // E troca o item do espaço selecionado pelo objeto próximo.
+    // Pilhas, munições já possuídas e vestimentas continuam no fluxo de coleta.
+    if(selectedItem&&nearbyItem&&!nearbyItem.isKingCrown&&!nearbyItem.wearSlot&&!alreadyHasStack) {
+      const swapInventoryItem=window.KTKOnline?.swapInventoryItem;
+      if(typeof swapInventoryItem==='function') {
+        try {
+          const result=await swapInventoryItem(nearbyItem.entityId,selectedInventorySlot,player.direction);
+          if(result?.ok!==true) {
+            toast(result?.error||'O servidor não confirmou a troca.');
+            return;
+          }
+          removeCollectedWorldItem(nearbyItem);
+          renderInventory();
+          toast(`Trocou ${selectedItem.displayName||'o item'} por ${nearbyItem.displayName||'o item do chão'}.`);
+          return;
+        } catch(error) {
+          toast(error?.message||'O servidor recusou a troca dos itens.');
+          return;
+        }
+      }
+    }
+
     if(await collectNearbyItem()) return;
-    const selectedItem=inventory[selectedInventorySlot];
+
+    selectedItem=inventory[selectedInventorySlot];
     if(!selectedItem) return;
     if(['food','drink'].includes(selectedItem.itemType)) {
       try {
-        await window.KTKOnline?.gameAction?.('consume',{slot:selectedInventorySlot});
+        const result=await window.KTKOnline?.gameAction?.('consume',{slot:selectedInventorySlot});
+        if(result?.ok===false) {
+          toast(result.error||'O servidor não permitiu consumir este item.');
+          return;
+        }
         toast(selectedItem.itemType==='food'?'Você comeu o alimento.':'Você bebeu a água.');
       } catch(error) {
         toast(error?.message||'O servidor não permitiu consumir este item.');
       }
       return;
     }
-    if(selectedItem.type!=='item'||!Number.isFinite(selectedItem.x)||!Number.isFinite(selectedItem.y)) {
+
+    if(selectedItem.type!=='item'||!selectedItem.id) {
       toast('Este item nao pode ser solto.');
       return;
     }
+
     try {
-      await window.KTKOnline?.gameAction?.('drop',{slot:selectedInventorySlot,direction:player.direction});
-      return;
+      const result=await window.KTKOnline?.gameAction?.('drop',{
+        slot:selectedInventorySlot,direction:player.direction
+      });
+      if(result?.ok!==true) {
+        toast(result?.error||'O servidor não confirmou o descarte.');
+        return;
+      }
+      renderInventory();
+      toast(`${selectedItem.displayName||'Item'} solto.`);
     } catch(error) {
       toast(error?.message||'O servidor recusou o descarte.');
-      return;
     }
-    renderInventory();
-    toast(`${selectedItem.displayName||'Item'} solto.`);
   }
   // Entrada para sincronização futura de posições vindas do servidor online.
