@@ -7,7 +7,28 @@
   button,input { font:inherit; }
   button { cursor:pointer; }
   #app { position:relative; width:100%; height:100%; overflow:hidden; background:#000000; }
-  #world { position:absolute; display:block; width:min(calc(100vw - 280px - 54px),177.7778vh); height:min(100vh,56.25vw); right:0; top:50%; transform:translateY(-50%); image-rendering:auto; }
+  #world {
+    position:absolute; display:block;
+    width:min(calc(100vw - 280px - 54px),177.7778vh);
+    height:min(100vh,56.25vw);
+    right:0; top:50%; transform:translateY(-50%);
+    image-rendering:auto;
+    background-color:#719b50;
+    background-image:
+      radial-gradient(ellipse 17px 13px at 22px 20px,rgba(155,190,101,.20) 0 38%,transparent 78%),
+      radial-gradient(ellipse 15px 12px at 68px 58px,rgba(43,91,43,.16) 0 42%,transparent 80%),
+      radial-gradient(ellipse 2px 6px at 9px 10px,rgba(218,235,156,.72) 0 42%,transparent 72%),
+      radial-gradient(ellipse 2px 5px at 14px 13px,rgba(220,233,153,.58) 0 42%,transparent 72%),
+      radial-gradient(ellipse 2px 6px at 34px 27px,rgba(44,91,43,.58) 0 42%,transparent 72%),
+      radial-gradient(ellipse 2px 5px at 39px 29px,rgba(44,91,43,.48) 0 42%,transparent 72%),
+      radial-gradient(ellipse 2px 6px at 56px 8px,rgba(212,231,145,.64) 0 42%,transparent 72%),
+      radial-gradient(ellipse 2px 5px at 61px 11px,rgba(212,231,145,.52) 0 42%,transparent 72%),
+      radial-gradient(ellipse 2px 6px at 83px 43px,rgba(39,84,39,.55) 0 42%,transparent 72%),
+      radial-gradient(ellipse 2px 5px at 88px 46px,rgba(39,84,39,.42) 0 42%,transparent 72%),
+      repeating-linear-gradient(74deg,rgba(43,89,39,.075) 0 1px,transparent 1px 12px);
+    background-size:96px 96px,128px 128px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,96px 96px,64px 64px;
+    background-position:0 0,31px 19px,0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0,0 0;
+  }
   .screen { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px; }
   .screen.active { display:flex; }
   #welcome { background:radial-gradient(ellipse at 50% 42%,rgba(112,151,83,.28),transparent 44%),linear-gradient(145deg,#10251b,#1e4932 55%,#12291e); }
