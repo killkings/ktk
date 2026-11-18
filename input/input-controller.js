@@ -49,6 +49,7 @@
   });
   canvas.addEventListener('mousedown',event=>{
     if(event.button===0) {
+      leftMouseHeld=true;
       startPunch(event);
     }
     if(event.button===2) {
@@ -60,6 +61,7 @@
   });
   canvas.addEventListener('contextmenu',event=>event.preventDefault());
   window.addEventListener('mouseup',event=>{
+    if(event.button===0) leftMouseHeld=false;
     if(event.button===2&&rightMouseHeld) {
       rightMouseHeld=false;
       shieldStaminaExhausted=false;
@@ -88,6 +90,7 @@
   });
   window.addEventListener('blur',()=>{
     keys.clear();
+    leftMouseHeld=false;
     refreshLocalMovementInput();
     playerRunning=false;
     if(rightMouseHeld) {
@@ -100,6 +103,7 @@
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden') {
       keys.clear();
+      leftMouseHeld=false;
       refreshLocalMovementInput();
       playerRunning=false;
       rightMouseHeld=false;
