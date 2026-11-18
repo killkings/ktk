@@ -452,6 +452,14 @@
     // Descobrimos a coordenada dela pelo centro do retângulo global.
     const roomCol = Math.round((left + width / 2) / width);
     const roomRow = Math.round((top + height / 2) / height);
+
+    // Cada sala identifica sua própria variação de grama CSS no canvas principal.
+    if (ctx.canvas?.dataset) {
+      const cssCol = Math.max(0, Math.min(layout[0].length - 1, roomCol + GRID_CENTER));
+      const cssRow = Math.max(0, Math.min(layout.length - 1, roomRow + GRID_CENTER));
+      ctx.canvas.dataset.grassRoom = `${cssCol}-${cssRow}`;
+    }
+
     const cacheKey = `${roomCol},${roomRow},${Math.round(width)}x${Math.round(height)}`;
     let roomCanvas = roomCanvasCache.get(cacheKey);
 
