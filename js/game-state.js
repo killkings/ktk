@@ -278,6 +278,7 @@ var  SPEED = 225;
 var  COLLISION_RADIUS = 18;
 var  NEARBY_INFO_RADIUS = 80;
 var  remotePlayers = new Map();
+var  MAX_INVENTORY_SLOTS = 10;
 var  inventory = [null, null];
 var  selectedInventorySlot = 0;
 var  equipmentCatalog = window.KTKEquipmentCatalog;

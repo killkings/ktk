@@ -71,10 +71,10 @@
   .stat-meter i { display:block; width:var(--fill); height:100%; border-radius:inherit; background:linear-gradient(90deg,#92b86f,#d9e89d); }
   .inventory { margin-top:18px; padding-top:14px; border-top:1px solid rgba(238,247,226,.16); }
   .inventory-heading { margin:0 0 9px; color:#d9e89d; font-size:10px; font-weight:800; letter-spacing:.14em; }
-  .inventory-slots { display:grid; grid-template-columns:repeat(5,40px); gap:6px; }
-  .inventory-slot { position:relative; display:grid; place-items:center; width:40px; height:48px; border:1px solid rgba(238,247,226,.23); border-radius:8px; background:rgba(255,255,255,.055); cursor:pointer; }
+  .inventory-slots { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); grid-template-rows:repeat(2,48px); gap:6px; width:100%; }
+  .inventory-slot { position:relative; display:grid; place-items:center; width:100%; min-width:0; height:48px; border:1px solid rgba(238,247,226,.23); border-radius:8px; background:rgba(255,255,255,.055); cursor:pointer; }
   .inventory-slot.is-selected { border-color:#d9e89d; background:rgba(217,232,157,.15); box-shadow:0 0 0 2px rgba(217,232,157,.22); }
-  .inventory-slot.is-locked { display:none; }
+  .inventory-slot.is-locked { display:grid; opacity:.28; cursor:not-allowed; border-style:dashed; background:rgba(255,255,255,.018); box-shadow:none; pointer-events:none; }
   .inventory-slot canvas { width:34px; height:34px; image-rendering:pixelated; }
   .inventory-quantity { position:absolute; top:-5px; right:-5px; display:none; min-width:16px; height:16px; padding:0 3px; border:1px solid rgba(255,255,255,.8); border-radius:999px; color:#17251a; background:#e5efbf; font-size:10px; line-height:14px; font-weight:900; text-align:center; font-variant-numeric:tabular-nums; z-index:2; }
   .inventory-slot.has-quantity .inventory-quantity { display:block; }
@@ -149,6 +149,10 @@
     .stat-list { gap:8px; }
     .stat-row dt { font-size:10px; }
     .stat-value { font-size:10px; }
+    .inventory-slots { grid-template-rows:repeat(2,42px); gap:4px; }
+    .inventory-slot { height:42px; }
+    .inventory-slot canvas { width:22px; height:22px; }
+    .inventory-quantity { top:-4px; right:-4px; min-width:14px; height:14px; font-size:9px; line-height:12px; }
     .creator-shell { grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); height:calc(100vh - 48px); max-height:calc(100vh - 48px); min-height:0; overflow:hidden; }
     .creator-preview { grid-row:1; min-height:220px; padding:16px; border-left:0; border-bottom:1px solid rgba(255,255,255,.08); }
     .preview-stage { width:170px; }

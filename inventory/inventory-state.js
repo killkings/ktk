@@ -13,7 +13,7 @@ function applyInventoryContentsFromServer(serverState) {
   if(Array.isArray(serverState?.inventory)) {
     const signature=JSON.stringify(serverState.inventory);
     if(signature!==lastServerInventorySignature) {
-      inventory.splice(0,inventory.length,...serverState.inventory.slice(0,2).map(entry=>{
+      inventory.splice(0,inventory.length,...serverState.inventory.slice(0,MAX_INVENTORY_SLOTS).map(entry=>{
         if(!entry || entry==='null') return null;
         const id=entry.item_id;
         let item=id==='longsword-1'?window.KTKWorldSword?.entity:equipmentCatalog?.items.find(candidate=>candidate.id===id);

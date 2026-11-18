@@ -18,7 +18,7 @@
     worldItems.clear();
     crownRealtimeSeen=false;
     kingCrownClaimedBy=null;
-    inventory.fill(null);
+    inventory.splice(0,inventory.length,null,null);
     wearableSlotOrder.forEach(slot=>{equippedWearables[slot]=null;});
     selectedInventorySlot=0;
     lastServerInventorySignature=null;

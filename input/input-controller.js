@@ -27,6 +27,7 @@
         refreshLocalMovementInput();
       }
       if(key==='e'&&!event.repeat) interactWithSelectedItem();
+      if(key==='n'&&!event.repeat) { event.preventDefault(); void expandInventorySlot(); }
       if((key==='1'||key==='2')&&!event.repeat) selectInventorySlot(Number(key)-1);
       if(key==='m'&&!event.repeat) {
         void window.KTKOnline?.gameAction?.('magic_level',{}).then(result=>{
@@ -63,16 +64,19 @@
   });
   // A mochila não fornece roupas aos espaços de equipamento.
   // Vestimentas só entram nesses espaços quando são coletadas no mapa.
-  document.querySelectorAll('.inventory-slot:not(.is-locked)').forEach(slot=>{
-    slot.tabIndex=0;
-    slot.setAttribute('role','button');
-    slot.addEventListener('click',()=>selectInventorySlot(Number(slot.dataset.slot)));
-    slot.addEventListener('keydown',event=>{
-      if(event.key==='Enter'||event.key===' ') {
-        event.preventDefault();
-        selectInventorySlot(Number(slot.dataset.slot));
-      }
-    });
+  const inventorySlots=document.querySelector('.inventory-slots');
+  inventorySlots?.addEventListener('click',event=>{
+    const slot=event.target.closest('.inventory-slot');
+    if(!slot||slot.classList.contains('is-locked')) return;
+    selectInventorySlot(Number(slot.dataset.slot));
+  });
+  inventorySlots?.addEventListener('keydown',event=>{
+    const slot=event.target.closest('.inventory-slot');
+    if(!slot||slot.classList.contains('is-locked')) return;
+    if(event.key==='Enter'||event.key===' ') {
+      event.preventDefault();
+      selectInventorySlot(Number(slot.dataset.slot));
+    }
   });
   // Clicar em uma peça vestida retira-a para o mapa; não existe retorno à mochila.
   document.querySelectorAll('.wearable-slot').forEach(slot=>{
