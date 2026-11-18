@@ -76,11 +76,36 @@
     return inventory.find(isArrowAmmo)||null;
   }
 
+  function combatErrorMessage(error) {
+    const message=String(error?.message||error||'');
+    if(message.includes('NOT_ENOUGH_MANA')) return 'Mana insuficiente. Fique parado para regenerar mana.';
+    if(message.includes('MAGIC_LEVEL_TOO_LOW')) return 'Seu nível mágico ainda é insuficiente para esse feitiço.';
+    if(message.includes('ATTACK_COOLDOWN')) return 'Aguarde um instante antes de atacar novamente.';
+    if(message.includes('NOT_ENOUGH_STAMINA')) return 'Estamina insuficiente para esse ataque.';
+    if(message.includes('AMMO_REQUIRED')) return 'Você precisa de flechas para usar essa arma.';
+    if(message.includes('STONE_AMMO_REQUIRED')) return 'Você precisa de pedras para usar o estilingue.';
+    if(message.includes('ITEM_NOT_OWNED')) return 'Essa arma não está no seu inventário.';
+    if(message.includes('INVALID_PROJECTILE_WEAPON')) return 'Essa arma não pode lançar projéteis.';
+    if(message.includes('PLAYER_NOT_ACTIVE')) return 'Seu personagem não está ativo no mundo.';
+    if(message.includes('Não foi possível sincronizar sua posição')) return message;
+    return message||'O servidor recusou a ação de combate.';
+  }
+
   function requestServerProjectile(item,direction) {
-    void window.KTKOnline?.gameAction?.('launch_projectile',{
-      weapon_id:String(item?.id||''),
-      direction:Number(direction)
-    }).catch(error=>toast(error?.message||'O servidor recusou o disparo.'));
+    void (async()=>{
+      try {
+        const gameAction=window.KTKOnline?.gameAction;
+        if(typeof gameAction!=='function') throw new Error('A conexão de combate não está disponível.');
+        const result=await gameAction('launch_projectile',{
+          weapon_id:String(item?.id||''),
+          direction:Number(direction)
+        });
+        if(!result?.ok) throw new Error(result?.error||'O servidor não confirmou o disparo.');
+        if(item?.equipmentClass==='magic') toast('Feitiço lançado.');
+      } catch(error) {
+        toast(combatErrorMessage(error));
+      }
+    })();
   }
 
   function launchArrowProjectile(item,direction) {
@@ -150,22 +175,52 @@
     if(defenseValue) defenseValue.textContent=combat.defense;
   }
 
+  let lastCombatMissFeedbackAt=0;
+
   function applyCombatHit(attacker,target,direction,confirmedProjectileContact=false,weaponItemOverride=null) {
     if(attacker!==player || !gameStarted || !Number.isInteger(Number(direction))) return false;
     const weapon=weaponItemOverride||punch.weaponItem;
-    void window.KTKOnline?.gameAction?.('attack',{
-      direction:Number(direction),
-      weapon_id:weapon?.id||null
-    }).then(result=>{
-      if(!result?.ok) return;
-      if(result.target_dead && result.target_type==='enemy') toast('Esqueleto derrotado.');
-      if(result.hit && result.target_type==='enemy') {
-        const enemy=window.KTKEnemySkeleton.entity;
-        startKnockback(enemy,{x:[0,-1,0,1][Number(direction)],y:[-1,0,1,0][Number(direction)]});
-        if(enemy.knockback) enemy.knockback.authoritative=true;
+    void (async()=>{
+      try {
+        const gameAction=window.KTKOnline?.gameAction;
+        if(typeof gameAction!=='function') throw new Error('A conexão de combate não está disponível.');
+        const result=await gameAction('attack',{
+          direction:Number(direction),
+          weapon_id:weapon?.id||null
+        });
+        if(!result?.ok) throw new Error(result?.error||'O servidor não confirmou o golpe.');
+        if(result.state) applyServerState(result.state);
+
+        if(!result.hit) {
+          const now=performance.now();
+          if(now-lastCombatMissFeedbackAt>900) {
+            lastCombatMissFeedbackAt=now;
+            toast('Golpe no vazio. Aproxime-se e vire-se para o adversário.');
+          }
+          return;
+        }
+
+        const damage=Math.max(0,Number(result.damage)||0);
+        if(result.target_type==='player') {
+          const remaining=Number.isFinite(Number(result.target_health))
+            ? Math.max(0,Number(result.target_health)) : null;
+          toast(remaining===null
+            ? `Você acertou outro jogador: ${damage} de dano.`
+            : `Você causou ${damage} de dano. Vida do adversário: ${remaining}.`);
+          return;
+        }
+
+        if(result.target_type==='enemy') {
+          const enemy=window.KTKEnemySkeleton.entity;
+          startKnockback(enemy,{x:[0,-1,0,1][Number(direction)],y:[-1,0,1,0][Number(direction)]});
+          if(enemy.knockback) enemy.knockback.authoritative=true;
+          if(result.target_dead) toast('Esqueleto derrotado.');
+          else toast(`Acertou o inimigo: ${damage} de dano.`);
+        }
+      } catch(error) {
+        toast(combatErrorMessage(error));
       }
-      if(result.state) applyServerState(result.state);
-    }).catch(error=>toast(error?.message||'O servidor recusou o ataque.'));
+    })();
     return true;
   }
 
