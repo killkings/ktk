@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <meta name="theme-color" content="#183d2b">
 <title>Kill the King — Protótipo</title>
-<link rel="stylesheet" href="./css/game.css?v=20261118-player-identity-status-width-v4">
+<link rel="stylesheet" href="./css/game.css?v=20261118-player-identity-status-width-v5">
 </head>
 <body>
 <div id="app">
@@ -135,27 +135,27 @@
       </div>
       </section>
     </aside>
-    <div class="hud-top">
-      <div class="world-label player-identity-card" aria-label="Informações do jogador">
-        <div class="identity-heading">
-          <span class="identity-mark" aria-hidden="true">♛</span>
-          <div class="world-label-content">
-            <strong>KILL THE KING</strong>
-            <span class="identity-caption">IDENTIDADE DO JOGADOR</span>
-          </div>
-          <span class="king-status" id="king-status">Coroa Real livre</span>
+    <div class="world-label player-identity-card" aria-label="Informações do jogador">
+      <div class="identity-heading">
+        <span class="identity-mark" aria-hidden="true">♛</span>
+        <div class="world-label-content">
+          <strong>KILL THE KING</strong>
+          <span class="identity-caption">IDENTIDADE DO JOGADOR</span>
         </div>
-        <div class="player-info" aria-label="Dados do jogador">
-          <div class="player-info-item">
-            <span class="player-info-label">PERSONAGEM</span>
-            <strong class="player-name" id="player-name">—</strong>
-          </div>
-          <div class="player-info-item treasure-info">
-            <span class="player-info-label">TESOURO</span>
-            <strong class="player-treasure"><span class="treasure-coin" aria-hidden="true">◈</span><span id="player-treasure">0</span></strong>
-          </div>
+        <span class="king-status" id="king-status">Coroa Real livre</span>
+      </div>
+      <div class="player-info" aria-label="Dados do jogador">
+        <div class="player-info-item">
+          <span class="player-info-label">PERSONAGEM</span>
+          <strong class="player-name" id="player-name">—</strong>
+        </div>
+        <div class="player-info-item treasure-info">
+          <span class="player-info-label">TESOURO</span>
+          <strong class="player-treasure"><span class="treasure-coin" aria-hidden="true">◈</span><span id="player-treasure">0</span></strong>
         </div>
       </div>
+    </div>
+    <div class="hud-top">
       <div class="hud-actions">
         <button id="edit-character">PERSONAGEM</button>
       </div>

@@ -165,17 +165,18 @@ assert.equal(element("toast").textContent,
 
 assert.match(onlineModule, /dispatchEvent\(new Event\(["']ktk-online-ready["']\)\)/);
 assert.match(html, /id="enter-world"/);
-assert.match(html, /game\.css\?v=20261118-player-identity-status-width-v4/);
+assert.match(html, /game\.css\?v=20261118-player-identity-status-width-v5/);
 assert.match(html, /id="player-name"/);
 assert.match(html, /class="player-info-label">TESOURO/);
 assert.match(html, /id="player-treasure">0<\/span>/);
 assert.match(html, /class="world-label player-identity-card"/);
+assert.match(html, /class="world-label player-identity-card"[\\s\\S]*?<\\/div>\\s*<div class="hud-top">/);
 assert.match(gameCss, /#game-ui\s*\{[^}]*--player-panel-width:clamp\(190px,21vw,280px\)/);
 assert.match(gameCss, /\.player-stats\s*\{[^}]*width:var\(--player-panel-width\)/);
-assert.match(gameCss, /\.world-label\.player-identity-card\s*\{[^}]*flex:0 0 var\(--player-panel-width\); width:var\(--player-panel-width\); min-width:var\(--player-panel-width\); max-width:var\(--player-panel-width\); padding:12px/);
+assert.match(gameCss, /\.world-label\.player-identity-card\s*\{[^}]*position:absolute; top:18px; left:18px; display:block; flex:none; width:var\(--player-panel-width\); min-width:var\(--player-panel-width\); max-width:var\(--player-panel-width\); padding:12px/);
 assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?#game-ui\s*\{[^}]*--player-panel-width:min\(190px,46vw\)/);
 assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.player-stats\s*\{[^}]*width:var\(--player-panel-width\)/);
-assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.world-label\.player-identity-card\s*\{[^}]*flex-basis:var\(--player-panel-width\); width:var\(--player-panel-width\); min-width:var\(--player-panel-width\); max-width:var\(--player-panel-width\); padding:10px/);
+assert.match(gameCss, /@media \(max-width:740px\)[\s\S]*?\.world-label\.player-identity-card\s*\{[^}]*top:18px; left:10px; width:var\(--player-panel-width\); min-width:var\(--player-panel-width\); max-width:var\(--player-panel-width\); padding:10px/);
 assert.doesNotMatch(gameCss, /--identity-card-width/);
 assert.match(gameCss, /\.identity-mark\s*\{[^}]*width:30px; height:30px/);
 assert.match(gameCss, /\.world-label \.player-info-item\s*\{[^}]*min-height:43px/);
