@@ -28,7 +28,10 @@
       }
       if(key==='e'&&!event.repeat) interactWithSelectedItem();
       if(key==='n'&&!event.repeat) { event.preventDefault(); void expandInventorySlot(); }
-      if((key==='1'||key==='2')&&!event.repeat) selectInventorySlot(Number(key)-1);
+      if(/^[0-9]$/.test(key)&&!event.repeat) {
+        const slotIndex=key==='0'?9:Number(key)-1;
+        selectInventorySlot(slotIndex);
+      }
       if(key==='m'&&!event.repeat) {
         void window.KTKOnline?.gameAction?.('magic_level',{}).then(result=>{
           const level=Number(result?.state?.magic_level)||0;

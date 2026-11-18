@@ -115,6 +115,60 @@ assert.match(swapMigration,/GRANT EXECUTE ON FUNCTION public\.ktk_swap_inventory
 
 
 assert.ok(input.includes("if(key==='n'&&!event.repeat) { event.preventDefault(); void expandInventorySlot(); }"));
+
+// Atalhos numéricos: 1–9 selecionam os slots correspondentes e 0 seleciona o décimo.
+// O teste usa o seletor real para garantir que espaços ainda bloqueados não façam RPC.
+const selectStart=inventoryUi.indexOf("  function selectInventorySlot(index) {");
+const selectEnd=inventoryUi.indexOf("\\n  async function expandInventorySlot()",selectStart);
+assert.ok(selectStart>=0&&selectEnd>selectStart);
+const selectCode=inventoryUi.slice(selectStart,selectEnd);
+const keydownStart=input.indexOf("  window.addEventListener('keydown',event=>{");
+const keydownEnd=input.indexOf("\\n  window.addEventListener('keyup'",keydownStart);
+assert.ok(keydownStart>=0&&keydownEnd>keydownStart);
+const keydownCode=input.slice(keydownStart,keydownEnd);
+const numericSelectionCalls=[];
+const keyboardContext={
+  inventory:[null,null],
+  selectedInventorySlot:0,
+  keys:new Set(),
+  gameStarted:true,
+  screens:{game:{classList:{contains:()=>true}}},
+  refreshLocalMovementInput(){},
+  window:{
+    KTKOnline:{gameAction(action,payload){
+      numericSelectionCalls.push({action,payload});
+      return Promise.resolve({ok:true});
+    }},
+    addEventListener(type,handler){
+      if(type==="keydown") this.keydownHandler=handler;
+    }
+  }
+};
+vm.createContext(keyboardContext);
+vm.runInContext(selectCode+"\\n"+keydownCode,keyboardContext);
+const pressDigit=(key,repeat=false)=>{
+  keyboardContext.keys.clear();
+  keyboardContext.window.keydownHandler({key,repeat,preventDefault(){}});
+};
+pressDigit("1");
+pressDigit("2");
+pressDigit("3");
+pressDigit("0");
+assert.deepEqual(JSON.parse(JSON.stringify(numericSelectionCalls)),[
+  {action:"select_slot",payload:{slot:0}},
+  {action:"select_slot",payload:{slot:1}}
+],"Somente os dois espaços liberados inicialmente podem ser selecionados.");
+
+keyboardContext.inventory.push(...Array.from({length:8},()=>null));
+for(const key of ["3","4","5","6","7","8","9","0"]) pressDigit(key);
+assert.deepEqual(
+  JSON.parse(JSON.stringify(numericSelectionCalls.slice(2))),
+  Array.from({length:8},(_,i)=>({action:"select_slot",payload:{slot:i+2}})),
+  "As teclas 3–9 e 0 devem selecionar os slots 3–10, com 0 no décimo."
+);
+pressDigit("0",true);
+assert.equal(numericSelectionCalls.length,10,
+  "Repetição de tecla pressionada não deve alternar ou disparar outra seleção.");
 assert.ok(inventoryUi.includes("async function expandInventorySlot()"));
 assert.ok(inventoryUi.includes("inventory.length>=MAX_INVENTORY_SLOTS"));
 assert.ok(inventoryUi.includes("window.KTKOnline?.expandInventorySlot"));
