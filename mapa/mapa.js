@@ -562,6 +562,56 @@
     g.restore();
   }
 
+  // Ondulações e reflexos são desenhados fora do canvas em cache para que
+  // possam se mover continuamente sem reconstruir o cenário a cada quadro.
+  function drawOuterLakeAnimation(g, roomCol, roomRow, width, height, timeSeconds) {
+    const lake = outerLakeLocations[`${roomCol},${roomRow}`];
+    if (!lake) return;
+
+    const centerX = lake.x * width;
+    const centerY = lake.y * height;
+    const radiusX = lake.rx * width;
+    const radiusY = lake.ry * height;
+    const scale = Math.min(width / 1920, height / 1080);
+
+    g.save();
+    traceLakeShape(g, centerX, centerY, radiusX, radiusY, lake.phase, .79);
+    g.clip();
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+
+    // Filetes de luz deslizam lentamente pela superfície da água.
+    for (let i = 0; i < 8; i++) {
+      const phase = timeSeconds * .62 + lake.phase + i * 1.13;
+      const x = centerX + Math.sin(phase * .73) * radiusX * .48;
+      const y = centerY + Math.cos(phase * .81 + i * .47) * radiusY * .43;
+      const length = (7 + (i % 3) * 3) * scale;
+      const wave = Math.sin(phase * 1.7) * 1.8 * scale;
+      const opacity = .15 + (.13 * (.5 + .5 * Math.sin(phase * 1.2)));
+
+      g.strokeStyle = `rgba(205,235,224,${opacity.toFixed(3)})`;
+      g.lineWidth = Math.max(.8, 1.35 * scale);
+      g.beginPath();
+      g.moveTo(x - length, y);
+      g.quadraticCurveTo(x, y + wave, x + length, y - wave * .35);
+      g.stroke();
+    }
+
+    // Brilhos curtos aparecem e desaparecem suavemente.
+    for (let i = 0; i < 3; i++) {
+      const phase = timeSeconds * .48 + lake.phase * 1.7 + i * 2.1;
+      const x = centerX + Math.sin(phase + i) * radiusX * .36;
+      const y = centerY + Math.cos(phase * .9 + i * 1.4) * radiusY * .30;
+      const opacity = .10 + .16 * (.5 + .5 * Math.sin(phase * 2));
+      g.fillStyle = `rgba(224,243,228,${opacity.toFixed(3)})`;
+      g.beginPath();
+      g.ellipse(x, y, 2.2 * scale, .9 * scale, Math.sin(phase) * .15, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    g.restore();
+  }
+
   function traceRoadPath(g, points, width, height) {
     g.beginPath();
     g.moveTo(points[0][0] * width, points[0][1] * height);
@@ -809,6 +859,8 @@
     ctx.clip();
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(roomCanvas, 0, 0, width, height);
+    const animationTime = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+    drawOuterLakeAnimation(ctx, roomCol, roomRow, width, height, animationTime);
     ctx.restore();
   }
 
