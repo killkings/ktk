@@ -59,7 +59,7 @@
   .preview-caption span { display:block; margin-top:5px; font-size:11px; color:#a9bea4; }
   #game-ui { --player-panel-width:280px; position:absolute; inset:0; display:none; pointer-events:none; }
   #game-ui.active { display:block; }
-  .player-stats { position:absolute; left:18px; top:166px; transform:none; width:var(--player-panel-width); max-height:calc(100vh - 184px); overflow:auto; padding:18px; border:1px solid rgba(238,247,226,.2); border-radius:18px; background:rgba(17,39,27,.82); backdrop-filter:blur(12px); box-shadow:0 12px 36px rgba(0,0,0,.2); pointer-events:auto; }
+  .player-stats { position:absolute; left:18px; top:166px; transform:none; width:var(--player-panel-width); max-height:none; overflow:visible; padding:18px; border:1px solid rgba(238,247,226,.2); border-radius:18px; background:rgba(17,39,27,.82); backdrop-filter:blur(12px); box-shadow:0 12px 36px rgba(0,0,0,.2); pointer-events:auto; }
   .stats-heading { margin:0 0 15px; color:#d9e89d; font-size:11px; letter-spacing:.16em; text-transform:uppercase; }
   .stat-list { display:grid; gap:11px; margin:0; }
   .stat-row { display:grid; grid-template-columns:1fr auto; align-items:center; gap:5px 12px; }
@@ -140,7 +140,7 @@
   @media (max-width:740px) {
     #game-ui { --player-panel-width:190px; }
     #world { right:0; top:50%; width:min(100vw,177.7778vh); }
-    .player-stats { left:10px; top:166px; transform:none; width:var(--player-panel-width); max-height:calc(100vh - 178px); padding:12px; }
+    .player-stats { left:10px; top:166px; transform:none; width:var(--player-panel-width); max-height:none; overflow:visible; padding:12px; }
     .world-label.player-identity-card { top:18px; left:10px; width:var(--player-panel-width); min-width:var(--player-panel-width); max-width:var(--player-panel-width); padding:10px; }
     .world-label .king-status { max-width:104px; padding:5px 7px; font-size:8px; }
     .world-label .player-info { grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
@@ -159,4 +159,35 @@
     .creator-controls { padding:20px; }
     .creator-controls h2 { font-size:27px; }
     .coords { bottom:112px; }
+  }
+
+  @media (max-height:760px) {
+    .player-stats { top:136px; max-height:none; overflow:visible; padding:12px; }
+    .stats-heading { margin-bottom:8px; }
+    .stat-list { gap:6px; }
+    .stat-row { gap:3px 10px; }
+    .stat-meter { height:4px; }
+    .inventory { margin-top:11px; padding-top:9px; }
+    .inventory-slots { grid-template-rows:repeat(2,40px); gap:4px; }
+    .inventory-slot { height:40px; }
+    .wearable-section { margin-top:10px; padding:7px; }
+    .wearable-heading { margin-bottom:5px; }
+    .wearable-slot { min-height:40px; }
+    .wearable-slot canvas { width:24px; height:24px; }
+  }
+  @media (max-height:600px) {
+    .player-stats { top:128px; padding:9px; }
+    .stats-heading { margin-bottom:6px; }
+    .stat-list { gap:4px; }
+    .stat-row { gap:2px 8px; }
+    .stat-meter { height:3px; }
+    .inventory { margin-top:8px; padding-top:7px; }
+    .inventory-slots { grid-template-rows:repeat(2,34px); gap:3px; }
+    .inventory-slot { height:34px; }
+    .wearable-section { margin-top:7px; padding:5px; }
+    .wearable-heading { margin-bottom:4px; }
+    .wearable-slots { gap:3px; }
+    .wearable-slot { min-height:34px; padding:2px 0; }
+    .wearable-slot canvas { width:20px; height:20px; }
+    .wearable-slot span { font-size:6px; line-height:7px; }
   }
