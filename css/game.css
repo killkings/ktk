@@ -162,7 +162,7 @@
   }
 
   @media (max-height:760px) {
-    .player-stats { top:136px; max-height:none; overflow:visible; padding:12px; }
+    .player-stats { top:166px; max-height:none; overflow:visible; padding:12px; }
     .stats-heading { margin-bottom:8px; }
     .stat-list { gap:6px; }
     .stat-row { gap:3px 10px; }
@@ -176,7 +176,7 @@
     .wearable-slot canvas { width:24px; height:24px; }
   }
   @media (max-height:600px) {
-    .player-stats { top:128px; padding:9px; }
+    .player-stats { top:166px; padding:9px; }
     .stats-heading { margin-bottom:6px; }
     .stat-list { gap:4px; }
     .stat-row { gap:2px 8px; }
