@@ -280,8 +280,6 @@ var  NEARBY_INFO_RADIUS = 80;
 var  remotePlayers = new Map();
 var  inventory = [null, null];
 var  selectedInventorySlot = 0;
-var  draggedWearableIndex = -1;
-var  suppressWearSlotClick = false;
 var  equipmentCatalog = window.KTKEquipmentCatalog;
 var  playerStats = window.KTKPlayerStats;
 var  arrowSpriteItem = equipmentCatalog?.items.find(item=>item.id==='equipment-arrow')||null;
