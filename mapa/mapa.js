@@ -380,7 +380,13 @@
         const drawX = wx - left;
         const drawY = wy - top;
 
-        if (decoration.flower) {
+        const insideCentralClearing = region.id === 'campos'
+          && drawX >= width * .37 - 8
+          && drawX <= width * .63 + 8
+          && drawY >= height * .36 - 8
+          && drawY <= height * .64 + 8;
+
+        if (decoration.flower && !insideCentralClearing) {
           const flowers = assets.get('wildflowers_' + (season === 'winter_ice' ? 'winter' : (season || 'summer')) + '.png');
           let drewFlower = false;
           if (flowers && flowers.complete && flowers.naturalWidth >= 16 && flowers.naturalHeight >= 16) {
@@ -473,6 +479,21 @@
       const baseY = sprite.y * height;
       const sway = Math.sin(timeSeconds * 1.35 + sprite.phase) * sprite.amplitude;
       const sourceY = sprite.sy;
+
+      // Clareira central: impede que qualquer parte visível da planta entre na área reservada.
+      const clearLeft = width * .37;
+      const clearRight = width * .63;
+      const clearTop = height * .36;
+      const clearBottom = height * .64;
+      const spriteLeft = baseX - drawWidth / 2;
+      const spriteRight = baseX + drawWidth / 2;
+      const spriteTop = baseY - drawHeight;
+      const spriteBottom = baseY;
+      const overlapsClearing = spriteLeft < clearRight
+        && spriteRight > clearLeft
+        && spriteTop < clearBottom
+        && spriteBottom > clearTop;
+      if (overlapsClearing) continue;
 
       // O eixo fica na base de cada planta para ela não deslizar pelo chão.
       ctx.save();
