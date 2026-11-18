@@ -189,13 +189,36 @@
   }
 
   function updateServerWorldEntities(deltaSeconds) {
-    serverWorldEntities.forEach(entity=>{
-      entity.elapsed=(entity.elapsed||0)+Math.max(0,deltaSeconds);
+    const delta=Math.max(0,Number(deltaSeconds)||0);
+    serverWorldEntities.forEach((entity,id)=>{
+      entity.elapsed=(entity.elapsed||0)+delta;
+
+      // Projéteis são animados localmente entre as confirmações do servidor.
+      // O deslocamento visual é preditivo; colisão e dano continuam no banco.
+      if(entity.type==='remote-projectile'&&entity.phase==='outbound') {
+        const maxDistance=Math.max(1,Number(entity.maxDistance)||160);
+        const serverDistance=Math.max(0,Number(entity.serverDistance)||0);
+        entity.distance=Math.max(Number(entity.distance)||0,serverDistance);
+        const remaining=Math.max(0,maxDistance-entity.distance);
+        const step=Math.min(Math.max(1,Number(entity.speed)||600)*delta,remaining);
+        entity.distance+=step;
+        const originX=Number.isFinite(entity.originX)?entity.originX:Number(entity.x)||0;
+        const originY=Number.isFinite(entity.originY)?entity.originY:Number(entity.y)||0;
+        const vectorX=Number(entity.vectorX)||0;
+        const vectorY=Number(entity.vectorY)||0;
+        entity.x=originX+vectorX*entity.distance;
+        entity.y=originY+vectorY*entity.distance;
+        if(entity.distance>=maxDistance&&entity.elapsed>(maxDistance/Math.max(1,Number(entity.speed)||600))+0.35) {
+          serverWorldEntities.delete(id);
+        }
+        return;
+      }
+
       const dx=(Number(entity.targetX)||0)-(Number(entity.x)||0);
       const dy=(Number(entity.targetY)||0)-(Number(entity.y)||0);
       const distance=Math.hypot(dx,dy);
       if(distance>0.05) {
-        const blend=Math.min(1,1-Math.exp(-Math.max(0,deltaSeconds)*14));
+        const blend=Math.min(1-Math.exp(-delta*14),1);
         entity.x+=dx*blend;
         entity.y+=dy*blend;
       }
