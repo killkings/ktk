@@ -21,6 +21,7 @@
   const roomCanvasCache = new Map();
   const assets = new Map();
   const assetStatus = new Map();
+  let plantComponents = null;
 
   const biomes = [
     {
@@ -152,11 +153,167 @@
     };
   }
 
+  // Detecta os limites reais de cada desenho no PNG pela transparência.
+  // Assim, uma planta que ultrapassa a célula de 32px não perde suas pontas.
+  function detectPlantComponents(image) {
+    const width = image.naturalWidth;
+    const height = image.naturalHeight;
+    const surface = document.createElement('canvas');
+    surface.width = width;
+    surface.height = height;
+    const surfaceCtx = surface.getContext('2d', { willReadFrequently: true });
+    surfaceCtx.drawImage(image, 0, 0);
+    const pixels = surfaceCtx.getImageData(0, 0, width, height).data;
+    const total = width * height;
+    const visited = new Uint8Array(total);
+    const queue = new Int32Array(total);
+    const components = [];
+    const alphaThreshold = 12;
+
+    for (let start = 0; start < total; start++) {
+      if (visited[start] || pixels[start * 4 + 3] <= alphaThreshold) continue;
+
+      let head = 0;
+      let tail = 0;
+      queue[tail++] = start;
+      visited[start] = 1;
+      let minX = width;
+      let minY = height;
+      let maxX = -1;
+      let maxY = -1;
+      let area = 0;
+
+      while (head < tail) {
+        const index = queue[head++];
+        const x = index % width;
+        const y = Math.floor(index / width);
+        area++;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+
+        for (let oy = -1; oy <= 1; oy++) {
+          for (let ox = -1; ox <= 1; ox++) {
+            if (ox === 0 && oy === 0) continue;
+            const nx = x + ox;
+            const ny = y + oy;
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+            const next = ny * width + nx;
+            if (visited[next] || pixels[next * 4 + 3] <= alphaThreshold) continue;
+            visited[next] = 1;
+            queue[tail++] = next;
+          }
+        }
+      }
+
+      if (area >= 4) {
+        components.push({
+          x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1,
+          area
+        });
+      }
+    }
+
+    // Une partes desconectadas por poucos pixels (folhas, hastes e sombras)
+    // sem unir plantas vizinhas que estão separadas no atlas.
+    let merged = true;
+    while (merged) {
+      merged = false;
+      outer: for (let i = 0; i < components.length; i++) {
+        for (let j = i + 1; j < components.length; j++) {
+          const a = components[i];
+          const b = components[j];
+          const gapX = Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w));
+          const gapY = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
+          if (gapX > 3 || gapY > 3 || Math.hypot(gapX, gapY) > 4) continue;
+
+          const left = Math.min(a.x, b.x);
+          const top = Math.min(a.y, b.y);
+          const right = Math.max(a.x + a.w, b.x + b.w);
+          const bottom = Math.max(a.y + a.h, b.y + b.h);
+          a.x = left;
+          a.y = top;
+          a.w = right - left;
+          a.h = bottom - top;
+          a.area += b.area;
+          components.splice(j, 1);
+          merged = true;
+          break outer;
+        }
+      }
+    }
+
+    return components.map(component => {
+      const padding = 2;
+      const x = Math.max(0, component.x - padding);
+      const y = Math.max(0, component.y - padding);
+      const right = Math.min(width, component.x + component.w + padding);
+      const bottom = Math.min(height, component.y + component.h + padding);
+      return { sx: x, sy: y, sw: right - x, sh: bottom - y, area: component.area };
+    });
+  }
+
+  function resolvePlantSprites(sprites) {
+    if (!plantComponents?.length) return sprites;
+
+    const resolved = [];
+    const componentOwners = new Map();
+    for (const sprite of completeSprites) {
+      const hint = { x: sprite.sx, y: sprite.sy, w: sprite.sw, h: sprite.sh };
+      const hintKey = [hint.x, hint.y, hint.w, hint.h].join(',');
+      let best = null;
+      let bestScore = -Infinity;
+
+      for (let index = 0; index < plantComponents.length; index++) {
+        const component = plantComponents[index];
+        const overlapW = Math.max(0, Math.min(hint.x + hint.w, component.sx + component.sw) - Math.max(hint.x, component.sx));
+        const overlapH = Math.max(0, Math.min(hint.y + hint.h, component.sy + component.sh) - Math.max(hint.y, component.sy));
+        const overlap = overlapW * overlapH;
+        if (!overlap) continue;
+
+        const componentCenterX = component.sx + component.sw / 2;
+        const componentCenterY = component.sy + component.sh / 2;
+        const hintCenterX = hint.x + hint.w / 2;
+        const hintCenterY = hint.y + hint.h / 2;
+        const distance = Math.hypot(componentCenterX - hintCenterX, componentCenterY - hintCenterY);
+        const score = overlap * 4 - distance;
+        if (score > bestScore) {
+          bestScore = score;
+          best = { index, component };
+        }
+      }
+
+      if (!best) {
+        resolved.push(sprite);
+        continue;
+      }
+
+      const previousHint = componentOwners.get(best.index);
+      // Recortes diferentes que apontam para a mesma planta eram partes
+      // duplicadas do mesmo desenho. Só repetimos quando o recorte é idêntico.
+      if (previousHint && previousHint !== hintKey) continue;
+      componentOwners.set(best.index, hintKey);
+      resolved.push({
+        ...sprite,
+        sx: best.component.sx,
+        sy: best.component.sy,
+        sw: best.component.sw,
+        sh: best.component.sh
+      });
+    }
+    return resolved;
+  }
+
   function loadAsset(file) {
     if (assets.has(file)) return;
     const image = new Image();
     image.onload = () => {
       assetStatus.set(file, 'loaded');
+      if (file === 'plants_summer.png') {
+        try { plantComponents = detectPlantComponents(image); }
+        catch (error) { plantComponents = null; console.warn('Não foi possível analisar os recortes das plantas LPC:', error); }
+      }
       tileCache.clear();
       roomCanvasCache.clear();
     };
@@ -460,6 +617,8 @@
       { x: .91, y: .33, sx: 384, sy: 0, sw: 32, sh: 64, phase: 3.1, amplitude: .034 },
       { x: .55, y: .91, sx: 416, sy: 0, sw: 32, sh: 64, phase: 5.1, amplitude: .033 }
     ];
+
+    const completeSprites = resolvePlantSprites(sprites);
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
