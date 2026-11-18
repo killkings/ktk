@@ -1,17 +1,15 @@
 # Mapa do mundo
 
-`mapa.js` desenha o mundo em salas independentes 16:9. O **mapa central (Campos Centrais)** usa o terreno de verão de Eliza Wyatt (DeathsDarling) e Lanea Zimmerman (Sharm), armazenado localmente em `mapa/assets/lpc-terrain-summer.png`. As flores de chão usam `wildflowers_summer.png` da mesma revisão LPC, carregada de uma URL fixa do repositório original. O renderizador aplica o terreno LPC às células centrais, mantém variação de capim e distribui flores em posições determinísticas.
+Os nove mapas (Campos Centrais e as oito salas ao redor) usam grama desenhada exclusivamente em CSS no fundo do canvas `#world`. A textura combina gradientes repetidos com pequenas lâminas claras e escuras, sem PNG, imagem externa ou dependência de tileset.
 
-As oito salas externas ficam fora do escopo desta alteração e serão tratadas separadamente. Esta mudança não altera o layout do mundo, as dimensões das salas, a movimentação, as colisões nem os Campos Centrais em relação à posição no mapa.
+O renderizador deixa o piso dessas nove salas transparente para que o padrão CSS apareça. Personagens, sombras, itens e decorações continuam sendo desenhados normalmente por cima. Como o padrão está no canvas principal, ele acompanha a sala exibida durante a navegação pelas nove áreas.
 
-## Integração
+## Organização
 
-O HTML principal carrega `mapa/mapa.js`. O módulo expõe `window.KTKWorldMap.draw(...)`, `regionAt(x, y)`, `bounds` e metadados dos biomas. Quando os arquivos LPC são carregados, o módulo limpa os caches de tiles e salas para reconstruir o mapa com a arte.
+O mundo mantém a matriz 3×3 de salas 16:9, com os Campos Centrais na posição central e oito salas externas. Esta alteração muda somente a aparência do chão. Não altera dimensões, limites, movimentação, colisões, coordenadas globais nem lógica de salas.
 
-## Créditos do terreno central
+## Implementação
 
-- Terreno: [terrain_summer.png](https://github.com/ElizaWy/LPC/blob/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/terrain_summer.png).
-- Autoria: grama, terra e águas rasas originais por Lanea Zimmerman (Sharm); edição, animação e recoloração por Eliza Wyatt (DeathsDarling).
-- Flores: [wildflowers_summer.png](https://github.com/ElizaWy/LPC/blob/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/wildflowers_summer.png), flores originais por Lanea Zimmerman; reconfiguradas e recoloridas por Eliza Wyatt.
-- Licença: OGA-BY 3.0. Consulte [Terrain/Credits.txt](https://github.com/ElizaWy/LPC/blob/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/Credits.txt).
-
+- Estilo de grama: `css/game.css`, seletor `#world`.
+- Transparência do piso: `mapa/mapa.js`, salas `campos` e `vazio`.
+- Cache de versão atualizado no HTML principal para recarregar CSS e renderizador.
