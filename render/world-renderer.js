@@ -139,43 +139,32 @@
     ctx.setTransform(dpr,0,0,dpr,0,0);
   }
 
-  const fishingRodSingleFrameCache = new WeakMap();
+  function drawFrozenFishingRodLayer(g,item,image,x,y,scale,direction) {
+    const imageWidth=Number(image?.naturalWidth||image?.width)||0;
+    const imageHeight=Number(image?.naturalHeight||image?.height)||0;
+    if(!image||imageWidth<=0||imageHeight<=0) return;
 
-  function getFishingRodSingleFrame(image, frameSize=128) {
-    if(!image) return null;
-    const imageWidth=Number(image.naturalWidth||image.width)||0;
-    const imageHeight=Number(image.naturalHeight||image.height)||0;
-    const size=Math.max(1,Math.floor(Number(frameSize)||128));
-    if(imageWidth<size||imageHeight<size) return null;
+    const frameSize=Math.max(1,Number(item.attackFrameSize)||Number(item.heldFrameSize)||128);
+    const columns=Math.max(1,Math.floor(imageWidth/frameSize));
+    const rows=Math.max(1,Math.floor(imageHeight/frameSize));
+    const configuredFrames=Math.max(1,Number(item.attackFrameCount)||columns);
+    const frame=Math.min(columns-1,Math.max(0,configuredFrames-2));
+    const row=((Math.trunc(Number(direction)||0)%rows)+rows)%rows;
+    const displaySize=Math.max(1,Number(item.attackDisplaySize)||frameSize);
 
-    const columns=Math.max(1,Math.floor(imageWidth/size));
-    const rows=Math.max(1,Math.floor(imageHeight/size));
-    const penultimateFrame=Math.max(0,columns-2);
-    let imageCache=fishingRodSingleFrameCache.get(image);
-    if(!imageCache) {
-      imageCache=new Map();
-      fishingRodSingleFrameCache.set(image,imageCache);
-    }
-    const cacheKey=`${size}:${penultimateFrame}:${rows}`;
-    if(imageCache.has(cacheKey)) return imageCache.get(cacheKey);
-
-    // A folha original tem 13 quadros por direção. Criamos uma nova folha
-    // com somente o penúltimo quadro de cada direção, impossibilitando avanço.
-    const frozen=document.createElement('canvas');
-    frozen.width=size;
-    frozen.height=rows*size;
-    const frozenContext=frozen.getContext('2d');
-    if(!frozenContext) return null;
-    frozenContext.imageSmoothingEnabled=false;
-    for(let row=0;row<rows;row++) {
-      frozenContext.drawImage(
-        image,
-        penultimateFrame*size,row*size,size,size,
-        0,row*size,size,size
-      );
-    }
-    imageCache.set(cacheKey,frozen);
-    return frozen;
+    // Desenha sempre o mesmo retângulo da folha. Nenhum índice de animação,
+    // frame do corpo ou sincronização pode alterar este recorte enquanto segura.
+    g.save();
+    g.imageSmoothingEnabled=false;
+    g.drawImage(
+      image,
+      frame*frameSize,row*frameSize,frameSize,frameSize,
+      x-(displaySize/2)*scale,
+      y-(displaySize/2)*scale,
+      displaySize*scale,
+      displaySize*scale
+    );
+    g.restore();
   }
 
   function getHeadOnlyLayers(layers, extraImages=[]) {
@@ -265,43 +254,35 @@
           const direction=punch.active?punch.direction:(playerMoving?playerVisual.direction:player.direction);
           const selectedItem=inventory[selectedInventorySlot];
           const fishingRodHeld=isFishingRodItem(selectedItem)&&leftMouseHeld;
-          let weaponMode=punch.active?(punch.weaponAttack?'attack':'none'):'held';
-          if(fishingRodHeld) weaponMode='attack';
+          let weaponMode=fishingRodHeld
+            ? 'none'
+            : punch.active?(punch.weaponAttack?'attack':'none'):'held';
           if(boomerangProjectile.active&&selectedItem===boomerangProjectile.item) weaponMode='none';
-          let playerLayers=getPlayerLayers(baseLayers,weaponMode,fishingRodHeld?selectedItem:null);
-          const fishingRodForegroundImage=selectedItem?.attackImage?.naturalWidth
-            ? selectedItem.attackImage
-            : selectedItem?.image;
-          const fishingRodBackgroundImage=selectedItem?.attackBackgroundImage||selectedItem?.heldBackgroundImage;
-          const fishingRodOriginalImages=fishingRodHeld
-            ? [fishingRodForegroundImage,fishingRodBackgroundImage].filter(Boolean)
-            : [];
-          const fishingRodFrozenImages=[];
-          if(fishingRodHeld) {
-            playerLayers=playerLayers.map(layer=>{
-              if(!fishingRodOriginalImages.includes(layer.image)) return layer;
-              const frameSize=Math.max(1,Number(layer.frameSize)||Number(selectedItem.attackFrameSize)||128);
-              const imageWidth=Number(layer.image.naturalWidth||layer.image.width)||0;
-              const frameCount=Math.max(1,Math.floor(imageWidth/frameSize));
-              const fixedFrame=Math.max(0,frameCount-2);
-              const frozenImage=getFishingRodSingleFrame(layer.image,frameSize);
-              // Se não for possível recortar a folha, o staticFrame ainda fixa
-              // a imagem original no penúltimo quadro e desliga a sincronização.
-              const visibleImage=frozenImage||layer.image;
-              fishingRodFrozenImages.push(visibleImage);
-              return {
-                ...layer,
-                image:visibleImage,
-                staticFrame:frozenImage?0:fixedFrame,
-                syncToBody:false,
-                fallbackMotion:false
-              };
-            });
-          }
+          const playerLayers=getPlayerLayers(baseLayers,weaponMode);
           const visiblePlayerLayers=inLakeWater
-            ? getHeadOnlyLayers(playerLayers,fishingRodFrozenImages)
+            ? getHeadOnlyLayers(playerLayers)
             : playerLayers;
-          drawLayeredCharacter(ctx,screenX,screenY-(player.knockbackHeight||0),visiblePlayerLayers,PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
+          const drawY=screenY-(player.knockbackHeight||0);
+
+          // A vara é desenhada à parte, usando sempre um único quadro fixo.
+          // Assim o loop de animação do personagem não consegue avançar a vara.
+          if(fishingRodHeld) {
+            const rodBackground=selectedItem.attackBackgroundImage||selectedItem.heldBackgroundImage;
+            if(rodBackground?.naturalWidth) {
+              drawFrozenFishingRodLayer(ctx,selectedItem,rodBackground,screenX,drawY,PLAYER_WORLD_SCALE,direction);
+            }
+          }
+
+          drawLayeredCharacter(ctx,screenX,drawY,visiblePlayerLayers,PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
+
+          if(fishingRodHeld) {
+            const rodForeground=selectedItem.attackImage?.naturalWidth
+              ? selectedItem.attackImage
+              : selectedItem.image;
+            if(rodForeground?.naturalWidth) {
+              drawFrozenFishingRodLayer(ctx,selectedItem,rodForeground,screenX,drawY,PLAYER_WORLD_SCALE,direction);
+            }
+          }
           const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
           if(chatBubble) visibleChatBubbles.push({
             text:chatBubble.text,opacity:chatBubble.opacity,x:screenX,
