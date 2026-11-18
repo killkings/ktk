@@ -10,7 +10,7 @@
       const g=canvas.getContext('2d');
       g.clearRect(0,0,canvas.width,canvas.height);
       const item=inventory[index];
-      slot.draggable=Boolean(item?.wearSlot);
+      slot.draggable=false;
       const maximum=Math.max(0,Number(item?.maxDurability)||0);
       const remaining=Math.max(0,Number(item?.durability)||0);
       const durabilityPercent=maximum?Math.max(0,Math.min(100,remaining/maximum*100)):0;
@@ -89,27 +89,6 @@
     return slot===undefined?-1:slot;
   }
 
-  async function equipWearableFromInventory(inventoryIndex,targetSlot) {
-    const item=inventory[inventoryIndex];
-    if(!item?.wearSlot||!wearableSlotOrder.includes(targetSlot)) return false;
-    if(item.wearSlot!==targetSlot) {
-      toast(`Essa peca deve ir no espaco ${wearableSlotLabel(item.wearSlot)}.`);
-      return false;
-    }
-    const gameAction=window.KTKOnline?.gameAction;
-    if(typeof gameAction!=='function') {
-      toast('A conexão com o servidor não está disponível.');
-      return false;
-    }
-    try {
-      await gameAction('equip',{slot_index:inventoryIndex,wear_slot:targetSlot});
-      return true;
-    } catch(error) {
-      toast(error?.message||'O servidor recusou o equipamento.');
-      return false;
-    }
-  }
-
   async function equipCollectedWearable(item) {
     const targetSlot=item?.wearSlot;
     if(!item||!wearableSlotOrder.includes(targetSlot)) return false;
@@ -119,12 +98,11 @@
         toast(claim?.error||'O servidor não confirmou a posse da Coroa Real.');
         return true;
       }
-      // O servidor decide se a Coroa ocupa a cabeça ou vai para o inventário
-      // quando o espaço já está ocupado. O cliente apenas aplica o resultado.
+      // A Coroa ocupa a cabeça; qualquer peça anterior é enviada ao mapa pelo servidor.
       if(claim.data?.state) applyServerState(claim.data.state);
       toast(equippedWearables.head?.isKingCrown
         ? 'Você pegou a Coroa Real. Você agora é o rei!'
-        : 'Coroa Real guardada no inventário.');
+        : 'A Coroa Real não foi confirmada como equipada.');
       return true;
     }
     return false;
