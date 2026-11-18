@@ -1,23 +1,6 @@
 /* Perfis remotos, entidades recebidas e sincronização dos jogadores. */
 import { state } from "./state.js?v=20261117-remote-snapshot-007";
 import { supabase, WORLD_ID } from "./supabase-client.js?v=20261117-remote-snapshot-007";
-import { applyOwnServerPosition } from "./movement.js?v=20261117-movement-reconcile-001";
-
-// Ordena timestamps timestamptz incluindo os microssegundos do PostgreSQL.
-function compareServerTimestamps(a, b) {
-  const leftText=String(a||"");
-  const rightText=String(b||"");
-  const leftMs=Date.parse(leftText), rightMs=Date.parse(rightText);
-  if(Number.isFinite(leftMs)&&Number.isFinite(rightMs)) {
-    const fraction=value=>Number((String(value).match(/\.(\d+)(?=(?:Z|[+-]\d{2}:?\d{2})$)/i)?.[1]||"").padEnd(6,"0").slice(3,6)||0);
-    const left=leftMs*1000+fraction(leftText);
-    const right=rightMs*1000+fraction(rightText);
-    return left===right?0:(left<right?-1:1);
-  }
-  if(!leftText) return rightText?-1:0;
-  if(!rightText) return 1;
-  return leftText===rightText?0:(leftText<rightText?-1:1);
-}
 
 function mergeRemoteAppearance(current, incoming, options = {}) {
   const contract = window.KTKRemoteAppearance;
@@ -134,7 +117,7 @@ export function acceptDatabaseChange(payload) {
     const knockbackAt=String(row.state?.last_knockback_at||"");
     if (row.is_alive !== false && knockbackAt && knockbackAt!==state.lastLocalKnockbackAt) {
       state.lastLocalKnockbackAt=knockbackAt;
-      applyOwnServerPosition(row,Number(state.lastMovementLatencyMs)||0);
+      window.KTKWorldEntities?.setLocalState?.(row.x,row.y,row.direction);
       window.KTKWorldEntities?.applyServerKnockback?.(row.state?.last_knockback);
     }
     if (row.is_alive === false) window.KTKWorldEntities?.serverDeath?.();
@@ -162,7 +145,7 @@ export function acceptDatabaseChange(payload) {
       satiety:serverState.satiety,maxSatiety:99,
       hydration:serverState.hydration,maxHydration:99
     }
-  }, "database");
+  }, "database-state");
   const changedRemote=state.remote.get(String(row.user_id));
   const knockbackAt=String(serverState.last_knockback_at||"");
   if(changedRemote&&serverState.last_knockback&&knockbackAt&&knockbackAt!==changedRemote.lastServerKnockbackAt) {
@@ -195,146 +178,77 @@ function acceptRemote(payload, source = "broadcast") {
   const id = String(payload.user_id);
   const previous = state.remote.get(id);
 
-  // Presence atualiza aparência imediatamente, mas não substitui posição
-  // recebida do banco (que é a coordenada oficial do mundo).
   if (previous && source === "presence") {
     const appearance=mergeRemoteAppearance(previous,payload);
-    const next={
+    state.remote.set(id,{
       ...previous,
       display_name:String(payload.display_name||payload.displayName||previous.display_name||"Aventureiro").slice(0,24),
       displayName:String(payload.display_name||payload.displayName||previous.displayName||"Aventureiro").slice(0,24),
       character:appearance.character,
       wearables:appearance.wearables,
       combatStats:payload.combat_stats||previous.combatStats||{}
-    };
-    state.remote.set(id,next);
+    });
     updateRemotes();
     void loadRemoteProfile(id);
     return;
   }
 
-  const sessionId = String(payload.session_id || "");
-  const rawSequence = Number(payload.sequence);
-  const hasSequence = Number.isSafeInteger(rawSequence) && rawSequence >= 0;
-  const positionTimestamp = String(payload.position_updated_at || "");
-  const databasePositionAt = positionTimestamp ? Date.parse(positionTimestamp) : 0;
-  const sentAt = Number(payload.sent_at) || (Number.isFinite(databasePositionAt) ? databasePositionAt : 0);
-  const isDatabasePosition = source === "database" || source === "database-snapshot";
-  const previousPositionTimestamp = String(previous?.lastPositionTimestamp || "");
-  const timestampOrder = positionTimestamp && previousPositionTimestamp
-    ? compareServerTimestamps(positionTimestamp, previousPositionTimestamp)
-    : null;
-  const staleDatabasePosition = Boolean(previous && isDatabasePosition && (
-    previousPositionTimestamp
-      ? (!positionTimestamp || timestampOrder <= 0)
-      : (sentAt > 0 && previous.lastPositionAt > 0 && sentAt < previous.lastPositionAt)
-  ));
-
-  // Bloqueia pacotes de posição fora de ordem e pacotes atrasados de uma
-  // sessão anterior do mesmo jogador. Para a mesma sessão, a sequência é a
-  // referência principal; o relógio só desempata quando a sequência não existe.
-  if (previous && source === "broadcast") {
-    const sameSession = Boolean(sessionId && sessionId === previous.sessionId);
-    if (sameSession && hasSequence && rawSequence <= previous.lastSequence) return;
-    if ((!sameSession || !hasSequence) && sentAt > 0 &&
-        previous.lastPositionAt > 0 && sentAt <= previous.lastPositionAt) return;
-    // Não deixa uma aba antiga, sem identificador/ordem, sobrescrever uma
-    // conexão nova que já está enviando pacotes versionados.
-    if (previous.sessionId && !sessionId && !hasSequence && !sentAt) return;
-  }
-
-  const acceptedX = staleDatabasePosition ? (previous.targetX ?? previous.x) : x;
-  const acceptedY = staleDatabasePosition ? (previous.targetY ?? previous.y) : y;
-  const acceptedDirection = staleDatabasePosition
-    ? previous.direction
-    : (Number.isFinite(Number(payload.direction)) ? Math.max(0, Math.min(3, Number(payload.direction))) : 2);
-  const appearance=mergeRemoteAppearance(previous,payload,{
-    authoritativeWearables:isDatabasePosition && payload.wearables && typeof payload.wearables==="object"
-  });
-  let velocityX=Number(previous?.velocityX)||0;
-  let velocityY=Number(previous?.velocityY)||0;
-  let positionReceivedAt=Number(previous?.positionReceivedAt)||0;
-  let serverMoving=Boolean(previous?.serverMoving);
-  const acceptedNewPosition=isDatabasePosition&&!staleDatabasePosition&&Boolean(positionTimestamp);
-  if(acceptedNewPosition) {
-    positionReceivedAt=performance.now();
-    serverMoving=Boolean(payload.moving);
-    if(!serverMoving) {
-      velocityX=0;
-      velocityY=0;
-    } else if(previous&&previousPositionTimestamp) {
-      const previousAt=Date.parse(previousPositionTimestamp);
-      const currentAt=Date.parse(positionTimestamp);
-      const elapsedMs=currentAt-previousAt;
-      if(Number.isFinite(elapsedMs)&&elapsedMs>=30&&elapsedMs<=2500) {
-        velocityX=(acceptedX-Number(previous.x||0))/(elapsedMs/1000);
-        velocityY=(acceptedY-Number(previous.y||0))/(elapsedMs/1000);
-        const speed=Math.hypot(velocityX,velocityY);
-        const maxSpeed=420;
-        if(speed>maxSpeed) {
-          velocityX*=maxSpeed/speed;
-          velocityY*=maxSpeed/speed;
-        }
-      } else {
-        const inputX=Number(payload.movementInputX)||0;
-        const inputY=Number(payload.movementInputY)||0;
-        const inputLength=Math.hypot(inputX,inputY);
-        if(serverMoving&&inputLength>0) {
-          const baseSpeed=225*(payload.running?1.5:1)*(payload.guarding?0.5:1);
-          velocityX=inputX/inputLength*baseSpeed;
-          velocityY=inputY/inputLength*baseSpeed;
-        } else {
-          velocityX=0;
-          velocityY=0;
-        }
-      }
-    } else {
-      const inputX=Number(payload.movementInputX)||0;
-      const inputY=Number(payload.movementInputY)||0;
-      const inputLength=Math.hypot(inputX,inputY);
-      if(serverMoving&&inputLength>0) {
-        // Primeiro snapshot: usa a intenção do servidor até haver duas
-        // posições oficiais para medir a velocidade real.
-        const baseSpeed=225*(payload.running?1.5:1)*(payload.guarding?0.5:1);
-        velocityX=inputX/inputLength*baseSpeed;
-        velocityY=inputY/inputLength*baseSpeed;
-      } else {
-        velocityX=0;
-        velocityY=0;
-      }
+  const sessionId=String(payload.session_id||"");
+  const sequence=Number(payload.sequence);
+  const hasSequence=Number.isSafeInteger(sequence)&&sequence>=0;
+  const sentAt=Number(payload.sent_at)||Date.now();
+  if(previous&&source==="broadcast") {
+    const sameSession=Boolean(sessionId&&sessionId===previous.sessionId);
+    if(sameSession&&hasSequence&&sequence<=previous.lastSequence) return;
+    if(!sameSession&&sessionId&&previous.sessionId&&sessionId!==previous.sessionId) {
+      // A nova sessão começa uma sequência independente.
+    } else if(hasSequence&&previous.lastSequence>=0&&sequence<=previous.lastSequence) {
+      return;
+    } else if(!hasSequence&&sentAt<=Number(previous.lastPositionAt||0)) {
+      return;
     }
   }
-  state.remote.set(id, {
-    id,
-    display_name: String(payload.display_name || payload.displayName || previous?.display_name || "Aventureiro").slice(0, 24),
-    displayName: String(payload.display_name || payload.displayName || previous?.displayName || "Aventureiro").slice(0, 24),
-    x: acceptedX, y: acceptedY, targetX: acceptedX, targetY: acceptedY,
-    direction: acceptedDirection,
-    character: appearance.character,
-    wearables: appearance.wearables,
-    combatStats: payload.combat_stats || previous?.combatStats || {},
-    velocityX,velocityY,positionReceivedAt,serverMoving,
-    type: "player",
-    lastUpdate: Date.now(),
-    sessionId: sessionId || previous?.sessionId || "",
-    lastSequence: hasSequence ? rawSequence :
-      (sessionId && sessionId !== previous?.sessionId ? -1 : (previous?.lastSequence ?? -1)),
-    lastPositionAt: (source === "broadcast" || isDatabasePosition)
-      ? Math.max(previous?.lastPositionAt || 0, sentAt || 0)
-      : (previous?.lastPositionAt || 0),
-    lastPositionTimestamp: isDatabasePosition
-      ? (staleDatabasePosition
-        ? (previous?.lastPositionTimestamp || "")
-        : (positionTimestamp || previous?.lastPositionTimestamp || ""))
-      : (previous?.lastPositionTimestamp || ""),
-    positionUpdatedAt: isDatabasePosition
-      ? (staleDatabasePosition
-        ? (previous?.lastPositionTimestamp || "")
-        : (positionTimestamp || previous?.lastPositionTimestamp || ""))
-      : (previous?.lastPositionTimestamp || "")
+
+  const metadataOnly=source==="database-state"&&Boolean(previous);
+  const acceptedX=metadataOnly?(Number(previous.targetX)||Number(previous.x)||x):x;
+  const acceptedY=metadataOnly?(Number(previous.targetY)||Number(previous.y)||y):y;
+  const acceptedDirection=metadataOnly
+    ? (Number.isFinite(Number(previous.direction))?previous.direction:2)
+    : (Number.isFinite(Number(payload.direction))?Math.max(0,Math.min(3,Number(payload.direction))):2);
+  const appearance=mergeRemoteAppearance(previous,payload,{
+    authoritativeWearables:source!=="broadcast"&&payload.wearables&&typeof payload.wearables==="object"
   });
+
+  const remote={
+    ...previous,
+    id,
+    display_name:String(payload.display_name||payload.displayName||previous?.display_name||"Aventureiro").slice(0,24),
+    displayName:String(payload.display_name||payload.displayName||previous?.displayName||"Aventureiro").slice(0,24),
+    x:acceptedX,y:acceptedY,targetX:acceptedX,targetY:acceptedY,
+    direction:acceptedDirection,
+    character:appearance.character,
+    wearables:appearance.wearables,
+    combatStats:payload.combat_stats||previous?.combatStats||{},
+    serverMoving:metadataOnly?Boolean(previous?.serverMoving):Boolean(payload.moving),
+    positionReceivedAt:performance.now(),
+    type:"player",
+    lastUpdate:Date.now(),
+    sessionId:sessionId||previous?.sessionId||"",
+    lastSequence:hasSequence?sequence:(sessionId&&sessionId!==previous?.sessionId?-1:(previous?.lastSequence??-1)),
+    lastPositionAt:source==="broadcast"?Math.max(previous?.lastPositionAt||0,sentAt):(previous?.lastPositionAt||0),
+    lastPositionTimestamp:source==="database-snapshot"
+      ? String(payload.position_updated_at||""):(previous?.lastPositionTimestamp||""),
+    positionUpdatedAt:source==="database-snapshot"
+      ? String(payload.position_updated_at||""):(previous?.positionUpdatedAt||"")
+  };
+  state.remote.set(id,remote);
   updateRemotes();
   void loadRemoteProfile(id);
+}
+
+export function acceptMovementBroadcast(payload) {
+  if(!state.user||state.leaving||!payload?.user_id) return;
+  acceptRemote(payload,"broadcast");
 }
 
 export function rebuildPresence() {
