@@ -27,7 +27,7 @@
     player.x=0; player.y=0; player.direction=2;
     player.knockback=null; player.knockbackHeight=0;
     playerVisual.x=0; playerVisual.y=0;
-    playerVisual.targetX=0; playerVisual.targetY=0;
+    playerVisual.direction=2;
     playerVisual.initialized=false;
     camera.x=0; camera.y=0;
     walkTime=0; idleTime=0;
@@ -192,6 +192,7 @@ var  leavingGame = false;
             serverSpawnX,serverSpawnY,
             Number.isFinite(serverSpawnDirection)?serverSpawnDirection:2
           );
+          window.KTKOnline?.sendPosition?.(true);
         }
       } catch(error) {
         visualPreparationFailed=true;

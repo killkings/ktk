@@ -1,10 +1,10 @@
 /* Canal Broadcast privado e fotografias oficiais do mundo. */
-import { state } from "./state.js?v=20261117-remote-snapshot-007";
-import { supabase, TOPIC } from "./supabase-client.js?v=20261117-remote-snapshot-007";
+import { state } from "./state.js?v=20261117-walk-v1";
+import { supabase, TOPIC } from "./supabase-client.js?v=20261117-walk-v1";
 import {
-  acceptDatabaseChange, acceptWorldEntityChange, loadExistingPlayers
-} from "./player-sync.js?v=20261117-remote-snapshot-007";
-import { withTimeout } from "./request-timeout.js?v=20261117-remote-snapshot-007";
+  acceptDatabaseChange, acceptMovementBroadcast, acceptWorldEntityChange, loadExistingPlayers
+} from "./player-sync.js?v=20261117-walk-v1";
+import { withTimeout } from "./request-timeout.js?v=20261117-walk-v1";
 
 export async function loadWorldState(signal) {
   if(!state.user||state.leaving) return null;
@@ -52,6 +52,7 @@ export async function subscribeWorld(onProgress = () => {}) {
     }
   });
   state.channel
+    .on("broadcast", { event: "player_position" }, ({ payload }) => acceptMovementBroadcast(payload))
     .on("broadcast", { event: "INSERT" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "UPDATE" }, ({ payload }) => acceptDatabaseChange(payload))
     .on("broadcast", { event: "ENTITY_INSERT" }, ({ payload }) => acceptWorldEntityChange(payload))

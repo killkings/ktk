@@ -58,6 +58,7 @@
     try {
       update(dt,w,h);
       updateLocalPlayerVisual(dt);
+      window.KTKOnline?.sendPosition?.();
       updateRemotePlayerMotion(dt);
       if(window.KTKWorldMap) window.KTKWorldMap.setViewport(w,h);
 
@@ -235,8 +236,7 @@
     }
     playerRunning=movement.running;
     if(playerMoving) {
-      // O cliente lê apenas a intenção. Não altera coordenadas, direção oficial
-      // nem colisões: o próximo estado de posição chega do RPC do servidor.
+      // A posição e as colisões já foram atualizadas localmente neste quadro.
       walkTime+=dt;
     } else {
       walkTime=0;

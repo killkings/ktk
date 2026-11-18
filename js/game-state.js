@@ -147,245 +147,87 @@ var  keys = new Set();
 var  rightMouseHeld = false;
 var  shieldStaminaExhausted = false;
 var  player = {x:0,y:0,direction:2,knockback:null,knockbackHeight:0};
-  // player.x/y continuam sendo exclusivamente a posição confirmada pelo servidor.
-  // playerVisual é previsão de desenho e é reconciliada pelas respostas oficiais.
-var  playerVisual = {
-  x:0,y:0,targetX:0,targetY:0,initialized:false,direction:2,
-  correctionX:0,correctionY:0,correctionRemaining:0
-};
-  // Posição fixa no mundo: não acompanha o deslocamento do jogador.
+var  playerVisual = {x:0,y:0,initialized:false,direction:2};
 var  camera = {x:0,y:0};
 
-  function setAuthoritativePlayerPosition(
-    x,y,direction,snap=false,latencyMs=0,requestInput=null,currentInput=null,intentTimeline=null
-  ) {
-    const serverX=Number(x),serverY=Number(y);
-    if(!Number.isFinite(serverX)||!Number.isFinite(serverY)) return false;
-    camera.x=0; camera.y=0;
-    player.x=serverX; player.y=serverY;
-    if(Number.isFinite(Number(direction))) {
-      player.direction=Math.max(0,Math.min(3,Number(direction)));
-    }
-    if(snap||!playerVisual.initialized) {
-      playerVisual.x=serverX; playerVisual.y=serverY;
-      playerVisual.targetX=serverX; playerVisual.targetY=serverY;
-      playerVisual.direction=player.direction;
-      playerVisual.correctionX=0;
-      playerVisual.correctionY=0;
-      playerVisual.correctionRemaining=0;
-      playerVisual.initialized=true;
-      return true;
-    }
+function setLocalPlayerPosition(x,y,direction=player.direction) {
+  const nextX=Number(x),nextY=Number(y);
+  if(!Number.isFinite(nextX)||!Number.isFinite(nextY)) return false;
+  const nextDirection=Number(direction);
+  player.x=nextX;
+  player.y=nextY;
+  if(Number.isFinite(nextDirection)) player.direction=Math.max(0,Math.min(3,Math.trunc(nextDirection)));
+  playerVisual.x=nextX;
+  playerVisual.y=nextY;
+  playerVisual.direction=player.direction;
+  playerVisual.initialized=true;
+  camera.x=0;
+  camera.y=0;
+  return true;
+}
 
-    const controls=currentInput||{
-      inputX:playerInputX,inputY:playerInputY,
-      running:playerRunning,guarding:Boolean(rightMouseHeld&&!shieldStaminaExhausted),
-      inputAgeMs:0
-    };
-    const hasRequestIntent=Boolean(requestInput&&typeof requestInput==="object");
-    const hasIntentRevision=hasRequestIntent
-      &&typeof requestInput.intentRevision==="number"
-      &&Number.isFinite(requestInput.intentRevision)
-      &&typeof controls.intentRevision==="number"
-      &&Number.isFinite(controls.intentRevision);
-    // Mesmo vetor não significa mesma intenção: o jogador pode ter mudado e
-    // voltado à direção original enquanto a RPC estava em trânsito.
-    const sameIntent=hasRequestIntent&&(hasIntentRevision
-      ? requestInput.intentRevision===controls.intentRevision
-      : Number(requestInput.inputX)===Number(controls.inputX)
-        && Number(requestInput.inputY)===Number(controls.inputY)
-        && Boolean(requestInput.running)===Boolean(controls.running)
-        && Boolean(requestInput.guarding)===Boolean(controls.guarding));
-    const oneWayLatencyMs=Math.max(0,Math.min(750,Number(latencyMs)||0)/2);
-    const intentAgeMs=Math.max(0,Math.min(750,Number(controls.inputAgeMs)||0));
-    let expectedX=serverX,expectedY=serverY;
-
-    // Repete o mesmo cálculo de velocidade do servidor para cada trecho da
-    // intenção: corrida, escudo e penalidade das roupas alteram a velocidade.
-    const movementSpeedForIntent=intent=>{
-      const running=Boolean(intent?.running);
-      const guarding=Boolean(intent?.guarding);
-      const slots=typeof wearableSlotOrder!=="undefined"?wearableSlotOrder:[];
-      const penalty=slots.reduce((sum,slot)=>{
-        const item=typeof equippedWearables!=="undefined"?equippedWearables?.[slot]:null;
-        return sum+(item?.durability>0?Math.max(0,Number(item.speedPenalty)||0):0);
-      },0);
-      const level=(running?3:2)*(guarding?0.5:1);
-      return SPEED*Math.max(1,level-penalty)/2;
-    };
-    const applyIntentSegment=(intent,durationMs)=>{
-      if(!intent||durationMs<=0) return;
-      const inputX=Math.max(-1,Math.min(1,Math.trunc(Number(intent.inputX)||0)));
-      const inputY=Math.max(-1,Math.min(1,Math.trunc(Number(intent.inputY)||0)));
-      const inputLength=Math.hypot(inputX,inputY);
-      if(inputLength<=0) return;
-      const distance=movementSpeedForIntent(intent)*durationMs/1000;
-      expectedX+=(inputX/inputLength)*distance;
-      expectedY+=(inputY/inputLength)*distance;
-    };
-
-    if(Array.isArray(intentTimeline)&&hasRequestIntent) {
-      // Reconstrói cada mudança de tecla ocorrida enquanto a resposta estava
-      // em trânsito, inclusive várias trocas rápidas de direção.
-      intentTimeline.forEach(segment=>{
-        applyIntentSegment(segment,Math.max(0,Number(segment?.durationMs)||0));
-      });
-    } else if(!hasRequestIntent) {
-      // Knockback e outras correções discretas não carregam a intenção da RPC.
-      applyIntentSegment(controls,Math.min(oneWayLatencyMs,intentAgeMs));
-    } else if(sameIntent) {
-      applyIntentSegment(requestInput,oneWayLatencyMs);
-    } else {
-      // Compatibilidade para respostas sem histórico temporal disponível.
-      const currentIntentMs=Math.min(oneWayLatencyMs,intentAgeMs);
-      const requestIntentMs=Math.max(0,oneWayLatencyMs-currentIntentMs);
-      applyIntentSegment(requestInput,requestIntentMs);
-      applyIntentSegment(controls,currentIntentMs);
-    }
-
-    const inputX=Math.max(-1,Math.min(1,Math.trunc(Number(controls.inputX)||0)));
-    const inputY=Math.max(-1,Math.min(1,Math.trunc(Number(controls.inputY)||0)));
-    const inputLength=Math.hypot(inputX,inputY);
-    if(inputLength>0) {
-      playerVisual.direction=Math.abs(inputX)>Math.abs(inputY)
-        ? (inputX>0?3:1)
-        : (inputY>0?2:0);
-    } else {
-      playerVisual.direction=player.direction;
-    }
-    playerVisual.targetX=expectedX;
-    playerVisual.targetY=expectedY;
-
-    // Never ignore ordinary discrepancies inside an RTT tolerance dead zone.
-    const errorX=expectedX-playerVisual.x;
-    const errorY=expectedY-playerVisual.y;
-    const errorDistance=Math.hypot(errorX,errorY);
-    if(errorDistance>360) {
-      // Snap only genuine discontinuities; normal latency/collision drift is smoothed.
-      playerVisual.x=expectedX;
-      playerVisual.y=expectedY;
-      playerVisual.correctionX=0;
-      playerVisual.correctionY=0;
-      playerVisual.correctionRemaining=0;
-    } else {
-      playerVisual.correctionX=errorX;
-      playerVisual.correctionY=errorY;
-      const correctionSpeed=Math.max(180,SPEED*2.4);
-      playerVisual.correctionRemaining=errorDistance>0.15
-        ? Math.max(0.10,Math.min(0.42,errorDistance/correctionSpeed))
-        : 0;
-      if(playerVisual.correctionRemaining===0) {
-        playerVisual.correctionX=0;
-        playerVisual.correctionY=0;
-      }
-    }
-    return true;
+function updateLocalPlayerVisual(deltaSeconds) {
+  if(!playerVisual.initialized) setLocalPlayerPosition(player.x,player.y,player.direction);
+  const dt=Math.max(0,Math.min(0.05,Number(deltaSeconds)||0));
+  const inputX=Math.max(-1,Math.min(1,Number(playerInputX)||0));
+  const inputY=Math.max(-1,Math.min(1,Number(playerInputY)||0));
+  const inputLength=Math.hypot(inputX,inputY);
+  if(playerDead||!playerMoving||inputLength===0) {
+    playerVisual.direction=player.direction;
+    player.x=playerVisual.x;
+    player.y=playerVisual.y;
+    return;
   }
 
-  function updateLocalPlayerVisual(deltaSeconds) {
-    if(!playerVisual.initialized) {
-      setAuthoritativePlayerPosition(player.x,player.y,player.direction,true);
-      return;
-    }
-    const dt=Math.max(0,Math.min(.05,Number(deltaSeconds)||0));
-    const inputLength=Math.hypot(playerInputX,playerInputY);
-    const isMoving=playerMoving&&inputLength>0&&window.KTKOnline?.connected!==false;
-    let actualMoveX=0,actualMoveY=0;
-    if(isMoving) {
-      const speedLevel=Number(playerStats?.stats?.speed?.value);
-      const movementSpeed=SPEED*(Number.isFinite(speedLevel)&&speedLevel>0?speedLevel/2:1);
-      const travel=movementSpeed*dt;
-      const wantedX=(playerInputX/inputLength)*travel;
-      const wantedY=(playerInputY/inputLength)*travel;
-      // Reproduz a colisão autoritativa em passos curtos, usando os mesmos
-      // obstáculos dinâmicos conhecidos pelo cliente (jogadores e esqueleto).
-      const obstacles=[];
-      if(typeof remotePlayers!=="undefined" && remotePlayers && typeof remotePlayers.forEach==="function") remotePlayers.forEach(remote=>{
-        // x/y são interpolados para desenho; a colisão deve usar a última posição
-        // oficial recebida do servidor, mantida em targetX/targetY.
-        const obstacleX=Number.isFinite(remote?.targetX)?remote.targetX:Number(remote?.x);
-        const obstacleY=Number.isFinite(remote?.targetY)?remote.targetY:Number(remote?.y);
-        if(remote&&Number.isFinite(obstacleX)&&Number.isFinite(obstacleY)) {
-          obstacles.push({x:obstacleX,y:obstacleY,radius:COLLISION_RADIUS*2});
-        }
-      });
-      const skeleton=window.KTKEnemySkeleton?.entity;
-      if(skeleton&&!skeleton.defeated&&Number.isFinite(Number(skeleton.x))&&Number.isFinite(Number(skeleton.y))) {
-        obstacles.push({x:Number(skeleton.x),y:Number(skeleton.y),radius:COLLISION_RADIUS+Math.max(0,Number(skeleton.collision_radius)||18)});
-      }
-      const blocked=(x,y,fromX,fromY)=>obstacles.some(obstacle=>{
-        const before=Math.hypot(fromX-obstacle.x,fromY-obstacle.y);
-        const after=Math.hypot(x-obstacle.x,y-obstacle.y);
-        return after<obstacle.radius && after+0.01<before;
-      });
-      const steps=Math.max(1,Math.ceil(Math.max(Math.abs(wantedX),Math.abs(wantedY))/6));
-      const stepX=wantedX/steps,stepY=wantedY/steps;
-      for(let i=0;i<steps;i++) {
-        const nextX=playerVisual.x+stepX;
-        if(!blocked(nextX,playerVisual.y,playerVisual.x,playerVisual.y)) {
-          playerVisual.x=nextX; actualMoveX+=stepX;
-        }
-        const nextY=playerVisual.y+stepY;
-        if(!blocked(playerVisual.x,nextY,playerVisual.x,playerVisual.y)) {
-          playerVisual.y=nextY; actualMoveY+=stepY;
-        }
-      }
-      // O destino acompanha apenas o deslocamento que passou pela colisão.
-      playerVisual.targetX+=actualMoveX;
-      playerVisual.targetY+=actualMoveY;
-      playerVisual.direction=Math.abs(playerInputX)>Math.abs(playerInputY)
-        ? (playerInputX>0?3:1)
-        : (playerInputY>0?2:0);
-    }
+  playerVisual.direction=Math.abs(inputX)>Math.abs(inputY)
+    ? (inputX>0?3:1)
+    : (inputY>0?2:0);
+  player.direction=playerVisual.direction;
 
-    // A correção nunca pode inverter o deslocamento enquanto a tecla segue
-    // pressionada. O componente contrário fica pendente até haver espaço ou
-    // o jogador parar; isso evita o "passo para frente e puxão para trás".
-    if(playerVisual.correctionRemaining>0) {
-      const fraction=Math.min(1,dt/playerVisual.correctionRemaining);
-      let correctionX=playerVisual.correctionX*fraction;
-      let correctionY=playerVisual.correctionY*fraction;
-      if(isMoving) {
-        const dirX=playerInputX/inputLength,dirY=playerInputY/inputLength;
-        const parallel=correctionX*dirX+correctionY*dirY;
-        // Uma correção atrasada pode reduzir a passada, mas nunca consumir
-        // todo o avanço do quadro: mantém pelo menos 75% do deslocamento local.
-        const maxBackward=Math.hypot(actualMoveX,actualMoveY)*0.25;
-        if(parallel < -maxBackward) {
-          const adjustment=(-maxBackward-parallel);
-          correctionX+=dirX*adjustment;
-          correctionY+=dirY*adjustment;
-        }
-      }
-      playerVisual.x+=correctionX;
-      playerVisual.y+=correctionY;
-      playerVisual.correctionX-=correctionX;
-      playerVisual.correctionY-=correctionY;
-      const remainingDistance=Math.hypot(playerVisual.correctionX,playerVisual.correctionY);
-      playerVisual.correctionRemaining=remainingDistance<0.15?0:Math.max(dt,Math.min(0.42,remainingDistance/Math.max(180,SPEED*2.4)));
-      if(playerVisual.correctionRemaining===0) {
-        playerVisual.x=playerVisual.targetX;
-        playerVisual.y=playerVisual.targetY;
-        playerVisual.correctionX=0;
-        playerVisual.correctionY=0;
-      }
-      return;
-    }
+  const guarding=Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield());
+  const movementLevel=(playerRunning?3:2)*(guarding?0.5:1);
+  const speedPenalty=wearableSlotOrder.reduce((sum,slot)=>{
+    const item=equippedWearables?.[slot];
+    return sum+(item?.durability>0?Math.max(0,Number(item.speedPenalty)||0):0);
+  },0);
+  const movementSpeed=SPEED*Math.max(1,movementLevel-speedPenalty)/2;
+  const distance=movementSpeed*dt;
+  const wantedX=inputX/inputLength*distance;
+  const wantedY=inputY/inputLength*distance;
 
-    if(!isMoving) {
-      playerVisual.direction=player.direction;
-      const blend=1-Math.exp(-dt*24);
-      const maxStep=520*dt;
-      const dx=playerVisual.targetX-playerVisual.x;
-      const dy=playerVisual.targetY-playerVisual.y;
-      const stepX=Math.sign(dx)*Math.min(Math.abs(dx*blend),maxStep);
-      const stepY=Math.sign(dy)*Math.min(Math.abs(dy*blend),maxStep);
-      playerVisual.x+=stepX;
-      playerVisual.y+=stepY;
-      if(Math.abs(playerVisual.targetX-playerVisual.x)<.15) playerVisual.x=playerVisual.targetX;
-      if(Math.abs(playerVisual.targetY-playerVisual.y)<.15) playerVisual.y=playerVisual.targetY;
+  const obstacles=[];
+  remotePlayers?.forEach(remote=>{
+    const obstacleX=Number.isFinite(remote?.targetX)?remote.targetX:Number(remote?.x);
+    const obstacleY=Number.isFinite(remote?.targetY)?remote.targetY:Number(remote?.y);
+    if(Number.isFinite(obstacleX)&&Number.isFinite(obstacleY)) {
+      obstacles.push({x:obstacleX,y:obstacleY,radius:COLLISION_RADIUS*2});
     }
+  });
+  const skeleton=window.KTKEnemySkeleton?.entity;
+  if(skeleton&&!skeleton.defeated&&Number.isFinite(Number(skeleton.x))&&Number.isFinite(Number(skeleton.y))) {
+    obstacles.push({
+      x:Number(skeleton.x),y:Number(skeleton.y),
+      radius:COLLISION_RADIUS+Math.max(0,Number(skeleton.collision_radius)||18)
+    });
   }
+
+  const blocked=(x,y,fromX,fromY)=>obstacles.some(obstacle=>{
+    const before=Math.hypot(fromX-obstacle.x,fromY-obstacle.y);
+    const after=Math.hypot(x-obstacle.x,y-obstacle.y);
+    return after<obstacle.radius&&after+0.01<before;
+  });
+  const steps=Math.max(1,Math.ceil(Math.max(Math.abs(wantedX),Math.abs(wantedY))/6));
+  const stepX=wantedX/steps,stepY=wantedY/steps;
+  for(let index=0;index<steps;index++) {
+    const nextX=playerVisual.x+stepX;
+    if(!blocked(nextX,playerVisual.y,playerVisual.x,playerVisual.y)) playerVisual.x=nextX;
+    const nextY=playerVisual.y+stepY;
+    if(!blocked(playerVisual.x,nextY,playerVisual.x,playerVisual.y)) playerVisual.y=nextY;
+  }
+
+  player.x=playerVisual.x;
+  player.y=playerVisual.y;
+}
 var  TILE = 72;
 var  SPEED = 225;
 var  COLLISION_RADIUS = 18;
