@@ -18,6 +18,10 @@
 
   function render() {
     const combat = playerStats.getEffectiveCombatStats();
+    const magicLevel = Number(playerStats.stats.magicLevel?.value);
+    const manaRow = valueNodes.get('magicLevel')?.closest('.stat-row');
+    // visibility:hidden mantém a linha reservada no layout enquanto o nível mágico é zero.
+    manaRow?.classList.toggle('mana-hidden', magicLevel === 0);
     for (const [name, stat] of Object.entries(playerStats.stats)) {
       const value = valueNodes.get(name);
       const shownValue = name === 'attack'
