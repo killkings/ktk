@@ -31,23 +31,140 @@
   }
   
   /* Northwest — dark dense blades. */
-  #world[data-grass-room="0-0"]{background-color:#426b36;background-image:repeating-linear-gradient(76deg,rgba(19,56,29,.52) 0 2px,transparent 2px 7px),repeating-linear-gradient(102deg,rgba(203,225,125,.30) 0 1px,transparent 1px 12px),radial-gradient(ellipse 80px 46px at 22% 28%,rgba(151,184,87,.28) 0 30%,transparent 78%),radial-gradient(ellipse 90px 50px at 76% 74%,rgba(17,48,27,.32) 0 34%,transparent 80%);background-size:31px 37px,47px 53px,220px 190px,260px 220px;background-position:0 0,12px 18px,0 0,35px 23px;}
-  /* North — light, short meadow with small bright flecks. */
-  #world[data-grass-room="1-0"]{background-color:#8eaf4c;background-image:radial-gradient(circle,rgba(239,244,166,.88) 0 1.5px,transparent 2.8px),radial-gradient(circle,rgba(52,105,40,.65) 0 1.6px,transparent 2.8px),repeating-linear-gradient(18deg,rgba(220,238,146,.31) 0 1px,transparent 1px 19px),radial-gradient(ellipse 70px 30px at 35% 42%,rgba(197,218,111,.38) 0 30%,transparent 80%);background-size:25px 27px,37px 39px,73px 59px,180px 160px;background-position:0 0,13px 9px,5px 12px,0 0;}
-  /* Northeast — lush, saturated grass with crossed thick strokes. */
-  #world[data-grass-room="2-0"]{background-color:#2f7145;background-image:repeating-linear-gradient(132deg,rgba(11,57,31,.62) 0 3px,transparent 3px 9px),repeating-linear-gradient(42deg,rgba(194,232,137,.48) 0 2px,transparent 2px 13px),radial-gradient(ellipse 90px 38px at 24% 70%,rgba(113,174,88,.52) 0 34%,transparent 80%);background-size:39px 43px,51px 57px,210px 170px;background-position:0 0,8px 14px,0 0;}
-  /* West — dry olive grass, sparse straw-like blades. */
-  #world[data-grass-room="0-1"]{background-color:#a4a052;background-image:repeating-linear-gradient(112deg,rgba(88,91,39,.42) 0 1px,transparent 1px 15px),repeating-linear-gradient(18deg,rgba(246,222,137,.66) 0 2px,transparent 2px 23px),radial-gradient(ellipse 100px 45px at 65% 35%,rgba(196,180,88,.44) 0 32%,transparent 82%),radial-gradient(ellipse 72px 38px at 22% 78%,rgba(70,92,42,.23) 0 30%,transparent 80%);background-size:59px 71px,83px 67px,220px 190px,180px 160px;background-position:4px 12px,18px 0,0 0,45px 28px;}
-  /* Center — balanced meadow green. */
-  #world[data-grass-room="1-1"]{background-color:#70994b;background-image:radial-gradient(ellipse 34px 21px at 22px 20px,rgba(155,190,101,.32) 0 38%,transparent 78%),radial-gradient(ellipse 32px 20px at 68px 58px,rgba(43,91,43,.28) 0 42%,transparent 80%),repeating-linear-gradient(74deg,rgba(43,89,39,.18) 0 1px,transparent 1px 9px),radial-gradient(circle,rgba(226,240,158,.65) 0 1px,transparent 2px);background-size:96px 96px,128px 128px,64px 64px,37px 41px;background-position:0 0,31px 19px,0 0,9px 7px;}
-  /* East — damp teal-green with broad mossy patches and horizontal blades. */
-  #world[data-grass-room="2-1"]{background-color:#467f6d;background-image:radial-gradient(ellipse 100px 48px at 25% 35%,rgba(153,202,151,.42) 0 32%,transparent 82%),radial-gradient(ellipse 110px 52px at 78% 78%,rgba(17,62,56,.48) 0 34%,transparent 84%),repeating-linear-gradient(4deg,rgba(18,66,56,.38) 0 2px,transparent 2px 16px),repeating-linear-gradient(87deg,rgba(209,236,176,.25) 0 1px,transparent 1px 24px);background-size:240px 190px,250px 220px,52px 46px,77px 63px;background-position:0 0,36px 21px,0 0,14px 7px;}
-  /* Southwest — sunlit yellow-green grass with wide blade groups. */
-  #world[data-grass-room="0-2"]{background-color:#9db956;background-image:repeating-linear-gradient(64deg,rgba(47,96,39,.43) 0 2px,transparent 2px 17px),repeating-linear-gradient(116deg,rgba(247,246,169,.58) 0 2px,transparent 2px 22px),radial-gradient(ellipse 120px 54px at 30% 25%,rgba(218,230,135,.50) 0 32%,transparent 82%),radial-gradient(ellipse 90px 44px at 77% 77%,rgba(68,112,42,.25) 0 32%,transparent 82%);background-size:67px 59px,91px 78px,240px 200px,220px 190px;background-position:0 0,19px 9px,0 0,55px 24px;}
-  /* South — moss carpet, rounded clumps instead of linear blades. */
-  #world[data-grass-room="1-2"]{background-color:#436b3d;background-image:radial-gradient(ellipse 45px 31px at 50% 50%,rgba(157,190,94,.53) 0 28%,transparent 76%),radial-gradient(ellipse 34px 25px at 18% 22%,rgba(23,51,29,.58) 0 35%,transparent 80%),radial-gradient(ellipse 36px 26px at 82% 78%,rgba(23,51,29,.52) 0 35%,transparent 80%),radial-gradient(circle,rgba(217,231,143,.46) 0 1.5px,transparent 2.8px);background-size:126px 106px,91px 87px,103px 99px,31px 33px;background-position:0 0,10px 5px,45px 29px,4px 8px;}
-  /* Southeast — vivid green field with crisp cross-hatched blades. */
-  #world[data-grass-room="2-2"]{background-color:#5a953d;background-image:repeating-linear-gradient(55deg,rgba(24,73,31,.48) 0 2px,transparent 2px 11px),repeating-linear-gradient(125deg,rgba(232,246,151,.52) 0 1px,transparent 1px 14px),radial-gradient(ellipse 90px 42px at 28% 62%,rgba(172,215,99,.46) 0 32%,transparent 80%),radial-gradient(ellipse 76px 38px at 78% 22%,rgba(26,77,33,.32) 0 31%,transparent 82%);background-size:41px 47px,53px 59px,210px 180px,195px 170px;background-position:0 0,13px 7px,0 0,32px 22px;}
+    /* Northwest: dense, dark-green tufts. */
+  #world[data-grass-room="0-0"] {
+    background-color:#5d843f;
+    background-image:
+      radial-gradient(ellipse 1.5px 7px at 18% 66%,rgba(33,78,35,.82) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.4px 9px at 34% 42%,rgba(177,207,109,.88) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.3px 6px at 52% 68%,rgba(42,91,40,.78) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.5px 7px at 74% 40%,rgba(34,81,38,.80) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.3px 8px at 88% 58%,rgba(192,216,119,.84) 0 40%,transparent 78%),
+      radial-gradient(ellipse 11px 4px at 48% 80%,rgba(31,76,34,.22) 0 40%,transparent 85%),
+      radial-gradient(ellipse 37px 22px at 25% 22%,rgba(170,201,99,.15) 0 30%,transparent 84%);
+    background-size:48px 44px,48px 44px,48px 44px,48px 44px,48px 44px,48px 44px,174px 150px;
+    background-position:0 0,0 0,0 0,0 0,0 0,0 0,23px 18px;
+  }
+
+  /* North: shorter, more open fresh-green lawn. */
+  #world[data-grass-room="1-0"] {
+    background-color:#7fa54a;
+    background-image:
+      radial-gradient(ellipse 1.2px 4px at 18% 68%,rgba(46,100,43,.72) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.2px 5px at 38% 46%,rgba(213,232,143,.91) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.1px 4px at 58% 68%,rgba(51,105,42,.70) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.2px 5px at 78% 47%,rgba(224,238,157,.88) 0 40%,transparent 78%),
+      radial-gradient(ellipse 8px 3px at 50% 82%,rgba(39,91,39,.16) 0 40%,transparent 85%),
+      radial-gradient(ellipse 52px 27px at 30% 27%,rgba(205,224,125,.18) 0 30%,transparent 84%);
+    background-size:62px 56px,62px 56px,62px 56px,62px 56px,62px 56px,188px 166px;
+    background-position:0 0,0 0,0 0,0 0,0 0,10px 35px;
+  }
+
+  /* Northeast: tall, tightly packed bright and dark blades. */
+  #world[data-grass-room="2-0"] {
+    background-color:#4c8241;
+    background-image:
+      radial-gradient(ellipse 1.6px 10px at 16% 70%,rgba(25,70,34,.86) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.5px 11px at 33% 35%,rgba(182,219,113,.88) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.4px 8px at 51% 72%,rgba(29,76,36,.83) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.6px 10px at 70% 42%,rgba(200,226,122,.85) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.4px 9px at 88% 65%,rgba(31,78,36,.82) 0 42%,transparent 78%),
+      radial-gradient(ellipse 13px 4px at 50% 83%,rgba(23,66,32,.24) 0 40%,transparent 85%),
+      radial-gradient(ellipse 40px 24px at 70% 20%,rgba(156,194,91,.16) 0 30%,transparent 84%);
+    background-size:39px 42px,39px 42px,39px 42px,39px 42px,39px 42px,39px 42px,190px 164px;
+    background-position:0 0,0 0,0 0,0 0,0 0,0 0,42px 9px;
+  }
+
+  /* West: fine, softer grass with olive-green undertones. */
+  #world[data-grass-room="0-1"] {
+    background-color:#718f48;
+    background-image:
+      radial-gradient(ellipse 1px 5px at 18% 65%,rgba(50,88,37,.76) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1px 6px at 35% 43%,rgba(193,213,119,.83) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1px 4px at 53% 68%,rgba(48,92,39,.73) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1px 5px at 74% 45%,rgba(206,220,130,.84) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1px 4px at 90% 65%,rgba(54,92,38,.76) 0 42%,transparent 78%),
+      radial-gradient(ellipse 10px 3px at 50% 81%,rgba(51,83,36,.17) 0 40%,transparent 85%),
+      radial-gradient(ellipse 42px 24px at 28% 26%,rgba(186,204,111,.17) 0 30%,transparent 84%);
+    background-size:53px 49px,53px 49px,53px 49px,53px 49px,53px 49px,53px 49px,210px 178px;
+    background-position:0 0,0 0,0 0,0 0,0 0,0 0,31px 17px;
+  }
+
+  /* Center: balanced prairie with small three-blade tufts. */
+  #world[data-grass-room="1-1"] {
+    background-color:#719b50;
+    background-image:
+      radial-gradient(ellipse 1.3px 6px at 18% 67%,rgba(40,85,37,.78) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.4px 7px at 35% 42%,rgba(194,220,126,.88) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.2px 5px at 52% 68%,rgba(43,94,40,.76) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.4px 6px at 72% 44%,rgba(207,228,137,.86) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.2px 5px at 88% 65%,rgba(43,91,40,.78) 0 42%,transparent 78%),
+      radial-gradient(ellipse 11px 4px at 50% 81%,rgba(39,84,39,.18) 0 40%,transparent 85%),
+      radial-gradient(ellipse 45px 25px at 25% 25%,rgba(166,200,100,.17) 0 30%,transparent 84%);
+    background-size:48px 46px,48px 46px,48px 46px,48px 46px,48px 46px,48px 46px,196px 170px;
+    background-position:0 0,0 0,0 0,0 0,0 0,0 0,21px 27px;
+  }
+
+  /* East: cooler green, longer bent-looking narrow tufts. */
+  #world[data-grass-room="2-1"] {
+    background-color:#5e9160;
+    background-image:
+      radial-gradient(ellipse 1.4px 8px at 20% 70%,rgba(30,80,51,.78) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.2px 6px at 38% 42%,rgba(187,220,157,.86) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.4px 7px at 56% 68%,rgba(34,85,54,.76) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.2px 6px at 76% 42%,rgba(199,228,164,.84) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.2px 5px at 91% 65%,rgba(35,88,53,.76) 0 42%,transparent 78%),
+      radial-gradient(ellipse 12px 4px at 48% 82%,rgba(27,71,49,.20) 0 40%,transparent 85%),
+      radial-gradient(ellipse 55px 28px at 72% 22%,rgba(188,222,156,.17) 0 30%,transparent 84%);
+    background-size:56px 51px,56px 51px,56px 51px,56px 51px,56px 51px,56px 51px,205px 178px;
+    background-position:0 0,0 0,0 0,0 0,0 0,0 0,33px 11px;
+  }
+
+  /* Southwest: sunlit meadow, lighter tufts but still green. */
+  #world[data-grass-room="0-2"] {
+    background-color:#88a94d;
+    background-image:
+      radial-gradient(ellipse 1.3px 6px at 18% 68%,rgba(50,95,39,.73) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.4px 7px at 34% 42%,rgba(231,238,160,.92) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.2px 5px at 52% 68%,rgba(57,103,41,.70) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.4px 6px at 73% 44%,rgba(221,236,150,.90) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.2px 5px at 90% 67%,rgba(51,99,40,.72) 0 42%,transparent 78%),
+      radial-gradient(ellipse 10px 4px at 50% 82%,rgba(57,93,39,.14) 0 40%,transparent 85%),
+      radial-gradient(ellipse 52px 29px at 25% 22%,rgba(220,231,139,.22) 0 30%,transparent 84%);
+    background-size:58px 53px,58px 53px,58px 53px,58px 53px,58px 53px,58px 53px,206px 180px;
+    background-position:0 0,0 0,0 0,0 0,0 0,0 0,18px 28px;
+  }
+
+  /* South: deeper grass with darker, clearly visible overlapping tufts. */
+  #world[data-grass-room="1-2"] {
+    background-color:#527d43;
+    background-image:
+      radial-gradient(ellipse 1.6px 8px at 17% 68%,rgba(24,64,32,.86) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.5px 9px at 34% 40%,rgba(160,198,99,.82) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.4px 7px at 51% 69%,rgba(28,72,34,.84) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.5px 8px at 72% 42%,rgba(177,208,108,.84) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.4px 7px at 88% 68%,rgba(27,70,33,.82) 0 42%,transparent 78%),
+      radial-gradient(ellipse 14px 5px at 50% 82%,rgba(19,54,28,.28) 0 40%,transparent 85%),
+      radial-gradient(ellipse 46px 26px at 75% 25%,rgba(139,181,78,.18) 0 30%,transparent 84%);
+    background-size:42px 40px,42px 40px,42px 40px,42px 40px,42px 40px,42px 40px,184px 158px;
+    background-position:0 0,0 0,0 0,0 0,0 0,0 0,16px 22px;
+  }
+
+  /* Southeast: dense but fine-cut bright green field. */
+  #world[data-grass-room="2-2"] {
+    background-color:#649747;
+    background-image:
+      radial-gradient(ellipse 1.2px 5px at 17% 67%,rgba(33,83,35,.80) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.3px 7px at 34% 43%,rgba(211,231,135,.91) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.1px 5px at 52% 69%,rgba(38,92,38,.77) 0 42%,transparent 78%),
+      radial-gradient(ellipse 1.3px 6px at 72% 43%,rgba(222,237,146,.90) 0 40%,transparent 78%),
+      radial-gradient(ellipse 1.1px 5px at 89% 67%,rgba(35,86,36,.78) 0 42%,transparent 78%),
+      radial-gradient(ellipse 9px 3px at 50% 82%,rgba(33,78,34,.18) 0 40%,transparent 85%),
+      radial-gradient(ellipse 44px 25px at 70% 24%,rgba(183,213,110,.18) 0 30%,transparent 84%);
+    background-size:44px 42px,44px 42px,44px 42px,44px 42px,44px 42px,44px 42px,192px 166px;
+    background-position:0 0,0 0,0 0,0 0,0 0,0 0,36px 13px;
+  }
+
   .screen { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px; }
   .screen.active { display:flex; }
   #welcome { background:radial-gradient(ellipse at 50% 42%,rgba(112,151,83,.28),transparent 44%),linear-gradient(145deg,#10251b,#1e4932 55%,#12291e); }
