@@ -1,159 +1,55 @@
 /* Interpolação, representação dos jogadores remotos e API de estado do mundo. */
 'use strict';
 
-var localMovementIntentSignature = null;
-var localMovementIntentChangedAt = 0;
-var localMovementIntentRevision = 0;
-var localMovementIntentHistory = [];
-var LOCAL_MOVEMENT_INTENT_HISTORY_LIMIT = 128;
-
-function getLocalMovementControls() {
-  const inputX=Number(keys.has('d')||keys.has('arrowright'))-Number(keys.has('a')||keys.has('arrowleft'));
-  const inputY=Number(keys.has('s')||keys.has('arrowdown'))-Number(keys.has('w')||keys.has('arrowup'));
-  const moving=inputX!==0||inputY!==0;
-  const running=Boolean(moving&&keys.has('shift')&&(Number(playerStats?.stats?.stamina?.value)||0)>0);
-  const guarding=Boolean(rightMouseHeld&&!shieldStaminaExhausted&&getBlockingShield());
-  const signature=JSON.stringify({inputX,inputY,running,guarding});
-  const now=performance.now();
-  if(signature!==localMovementIntentSignature) {
-    localMovementIntentSignature=signature;
-    localMovementIntentChangedAt=now;
-    localMovementIntentRevision++;
-    localMovementIntentHistory.push({
-      inputX,inputY,running,guarding,
-      intentRevision:localMovementIntentRevision,
-      changedAt:now
-    });
-    if(localMovementIntentHistory.length>LOCAL_MOVEMENT_INTENT_HISTORY_LIMIT) {
-      localMovementIntentHistory.splice(0,localMovementIntentHistory.length-LOCAL_MOVEMENT_INTENT_HISTORY_LIMIT);
-    }
-  }
-  return {
-    inputX,inputY,running,guarding,
-    intentRevision:localMovementIntentRevision,
-    inputAgeMs:Math.max(0,Math.min(750,Math.round(now-localMovementIntentChangedAt))),
-    observedAtMs:now
-  };
-}
-
-function getLocalMovementIntentTimeline(startAtMs, initialIntent) {
-  // Registra também uma tecla alterada entre o último heartbeat e a resposta.
-  const current=getLocalMovementControls();
-  const endAt=Number(current.observedAtMs)||performance.now();
-  const startValue=Number(startAtMs);
-  const startAt=Number.isFinite(startValue)?Math.min(endAt,Math.max(0,startValue)):endAt;
-  let active={
-    inputX:Number(initialIntent?.inputX)||0,
-    inputY:Number(initialIntent?.inputY)||0,
-    running:Boolean(initialIntent?.running),
-    guarding:Boolean(initialIntent?.guarding)
-  };
-  let cursor=startAt;
-  const changes=localMovementIntentHistory
-    .filter(entry=>entry.changedAt>startAt&&entry.changedAt<=endAt)
-    .sort((a,b)=>a.changedAt-b.changedAt);
-  const segments=[];
-  changes.forEach(change=>{
-    const changeAt=Math.max(cursor,Math.min(endAt,change.changedAt));
-    if(changeAt>cursor) segments.push({...active,durationMs:changeAt-cursor});
-    active={
-      inputX:change.inputX,inputY:change.inputY,
-      running:change.running,guarding:change.guarding
-    };
-    cursor=changeAt;
-  });
-  if(endAt>cursor) segments.push({...active,durationMs:endAt-cursor});
-  return segments;
-}
-
-  var REMOTE_MOTION_SNAPSHOT_DELAY_MS = 180;
-  var REMOTE_MOTION_MAX_EXTRAPOLATION_MS = 180;
-
-  function getRemoteMotionSample(remote, now) {
-    const snapshots=Array.isArray(remote.motionSnapshots)?remote.motionSnapshots:[];
-    const fallbackX=Number.isFinite(remote.targetX)?remote.targetX:remote.x;
-    const fallbackY=Number.isFinite(remote.targetY)?remote.targetY:remote.y;
-    if(!snapshots.length) {
-      return {x:fallbackX,y:fallbackY,moving:false,
-        direction:Number.isFinite(remote.direction)?remote.direction:2};
-    }
-    const renderAt=now-REMOTE_MOTION_SNAPSHOT_DELAY_MS;
-    const first=snapshots[0];
-    if(renderAt<=first.receivedAt) {
-      return {x:first.x,y:first.y,moving:false,direction:first.direction};
-    }
-    for(let i=0;i<snapshots.length-1;i++) {
-      const a=snapshots[i],b=snapshots[i+1];
-      if(renderAt>b.receivedAt) continue;
-      const duration=Math.max(1,b.receivedAt-a.receivedAt);
-      const alpha=Math.max(0,Math.min(1,(renderAt-a.receivedAt)/duration));
-      const dx=b.x-a.x,dy=b.y-a.y,distance=Math.hypot(dx,dy);
-      const moving=distance>0.35&&(Boolean(a.moving)||Boolean(b.moving));
-      const direction=distance>0.35
-        ? (Math.abs(dx)>Math.abs(dy)?(dx>0?3:1):(dy>0?2:0))
-        : (alpha<0.5?a.direction:b.direction);
-      return {x:a.x+dx*alpha,y:a.y+dy*alpha,moving,direction};
-    }
-    const last=snapshots[snapshots.length-1];
-    const elapsed=Math.max(0,renderAt-last.receivedAt);
-    const extrapolationMs=Math.min(REMOTE_MOTION_MAX_EXTRAPOLATION_MS,elapsed);
-    const velocityX=Number(remote.velocityX)||0,velocityY=Number(remote.velocityY)||0;
-    const speed=Math.hypot(velocityX,velocityY);
-    const moving=Boolean(last.moving)&&speed>4&&elapsed<REMOTE_MOTION_MAX_EXTRAPOLATION_MS;
-    return {x:last.x+velocityX*extrapolationMs/1000,
-      y:last.y+velocityY*extrapolationMs/1000,moving,direction:last.direction};
-  }
-
   function updateRemotePlayerMotion(dt) {
+    const delta=Math.max(0,Number(dt)||0);
     const now=performance.now();
     remotePlayers.forEach(remote=>{
-      const sample=getRemoteMotionSample(remote,now);
-      // Uma amostra atrasada pode ficar atrás do último quadro já exibido
-      // quando há perda/jitter acima do buffer. Na mesma direção, nunca volta:
-      // remove só a componente contrária; mudanças reais de direção e knockback
-      // continuam podendo deslocar o personagem normalmente.
-      const previousDirection=Number.isFinite(remote.renderDirection)
-        ? remote.renderDirection : remote.direction;
-      let nextX=sample.x,nextY=sample.y;
-      if(!remote.knockback&&sample.direction===previousDirection) {
-        const directionVector=sample.direction===0?[0,-1]
-          : sample.direction===1?[-1,0]
-          : sample.direction===2?[0,1]:[1,0];
-        const correctionX=nextX-remote.x,correctionY=nextY-remote.y;
-        const backwards=correctionX*directionVector[0]+correctionY*directionVector[1];
-        if(backwards<0) {
-          nextX-=directionVector[0]*backwards;
-          nextY-=directionVector[1]*backwards;
-        }
+      const dx=(Number(remote.targetX)||0)-(Number(remote.x)||0);
+      const dy=(Number(remote.targetY)||0)-(Number(remote.y)||0);
+      const distance=Math.hypot(dx,dy);
+      const maxStep=520*delta;
+      if(distance>0.25&&maxStep>0) {
+        const step=Math.min(distance,maxStep);
+        remote.x+=(dx/distance)*step;
+        remote.y+=(dy/distance)*step;
+      } else if(distance<=0.25) {
+        remote.x=Number(remote.targetX)||0;
+        remote.y=Number(remote.targetY)||0;
       }
-      remote.x=nextX; remote.y=nextY;
-      remote.direction=sample.direction; remote.renderDirection=sample.direction;
-      remote.moving=sample.moving;
-      if(remote.moving) remote.walkTime=(remote.walkTime||0)+Math.max(0,dt);
+      const waitingForPacket=now-(Number(remote.lastPositionReceivedAt)||0);
+      remote.moving=distance>0.5||(Boolean(remote.serverMoving)&&waitingForPacket<450);
+      if(remote.moving) remote.walkTime=(remote.walkTime||0)+delta;
       else remote.walkTime=0;
       if(remote.knockback) {
-        remote.knockback.progress=Math.min(1,(remote.knockback.progress||0)+Math.max(0,dt)/KNOCKBACK_SECONDS);
+        remote.knockback.progress=Math.min(1,(remote.knockback.progress||0)+delta/KNOCKBACK_SECONDS);
         remote.knockbackHeight=Math.sin(remote.knockback.progress*Math.PI)*KNOCKBACK_HEIGHT;
         if(remote.knockback.progress>=1) {
-          remote.knockback=null; remote.knockbackHeight=0;
+          remote.knockback=null;
+          remote.knockbackHeight=0;
         }
       }
       if(Array.isArray(remote.remoteProjectiles)) {
         remote.remoteProjectiles=remote.remoteProjectiles.filter(projectile=>{
-          projectile.elapsed+=Math.max(0,dt);
-          const step=projectile.speed*Math.max(0,dt);
+          projectile.elapsed+=delta;
+          const step=projectile.speed*delta;
           if(projectile.projectileType==='boomerang'&&projectile.phase==='returning') {
-            const dx=remote.x-projectile.x,dy=remote.y-projectile.y;
-            const distance=Math.hypot(dx,dy);
-            if(distance<=Math.max(step,BOOMERANG_PROJECTILE_RADIUS)) return false;
-            projectile.x+=dx/distance*step; projectile.y+=dy/distance*step;
+            const bx=remote.x-projectile.x,by=remote.y-projectile.y;
+            const distanceToPlayer=Math.hypot(bx,by);
+            if(distanceToPlayer<=Math.max(step,BOOMERANG_PROJECTILE_RADIUS)) return false;
+            projectile.x+=bx/distanceToPlayer*step;
+            projectile.y+=by/distanceToPlayer*step;
             return true;
           }
           const travel=Math.min(step,Math.max(0,projectile.maxDistance-projectile.distance));
           projectile.distance+=travel;
-          projectile.x+=projectile.vectorX*travel; projectile.y+=projectile.vectorY*travel;
+          projectile.x+=projectile.vectorX*travel;
+          projectile.y+=projectile.vectorY*travel;
           if(projectile.distance>=projectile.maxDistance) {
-            if(projectile.projectileType==='boomerang') { projectile.phase='returning'; return true; }
+            if(projectile.projectileType==='boomerang') {
+              projectile.phase='returning';
+              return true;
+            }
             return false;
           }
           return true;
@@ -162,7 +58,7 @@ function getLocalMovementIntentTimeline(startAtMs, initialIntent) {
     });
     const skeleton=window.KTKEnemySkeleton?.entity;
     if(skeleton?.remoteAttacking) {
-      skeleton.remoteAttackElapsed=(skeleton.remoteAttackElapsed||0)+Math.max(0,dt);
+      skeleton.remoteAttackElapsed=(skeleton.remoteAttackElapsed||0)+delta;
       if(skeleton.remoteAttackElapsed>=PUNCH_ANIMATION_SECONDS) skeleton.remoteAttacking=false;
     }
   }
@@ -231,29 +127,8 @@ function getLocalMovementIntentTimeline(startAtMs, initialIntent) {
       };
       entity.targetX=remote.x;
       entity.targetY=remote.y;
-      entity.velocityX=Number.isFinite(Number(remote.velocityX))?Number(remote.velocityX):0;
-      entity.velocityY=Number.isFinite(Number(remote.velocityY))?Number(remote.velocityY):0;
-      entity.positionReceivedAt=Number.isFinite(Number(remote.positionReceivedAt))
-        ? Number(remote.positionReceivedAt) : (entity.positionReceivedAt||performance.now());
-      entity.serverMoving=Boolean(remote.serverMoving);
-      const positionVersion=String(remote.positionUpdatedAt||"");
-      if(positionVersion&&positionVersion!==entity.lastMotionSnapshotTimestamp) {
-        const receivedValue=Number(remote.positionReceivedAt);
-        const receivedAt=Number.isFinite(receivedValue)&&receivedValue>0
-          ? receivedValue : performance.now();
-        if(!Array.isArray(entity.motionSnapshots)) entity.motionSnapshots=[];
-        const lastSnapshot=entity.motionSnapshots[entity.motionSnapshots.length-1];
-        if(!lastSnapshot||receivedAt>lastSnapshot.receivedAt) {
-          entity.motionSnapshots.push({
-            timestamp:positionVersion,receivedAt,x:Number(remote.x),y:Number(remote.y),
-            moving:Boolean(remote.serverMoving),direction:remoteDirection
-          });
-          if(entity.motionSnapshots.length>20) {
-            entity.motionSnapshots.splice(0,entity.motionSnapshots.length-20);
-          }
-        }
-        entity.lastMotionSnapshotTimestamp=positionVersion;
-      }
+      entity.lastPositionReceivedAt=performance.now();
+      entity.serverMoving=Boolean(remote.serverMoving??remote.moving);
       entity.direction=remoteDirection;
       entity.displayName=remote.displayName||remote.display_name||entity.displayName||'Aventureiro';
       entity.character=remote.character||entity.character||{};
@@ -336,12 +211,10 @@ function getLocalMovementIntentTimeline(startAtMs, initialIntent) {
   }
   window.KTKWorldEntities={
     setRemotePlayers,entities:getWorldEntities,applyServerState,
-    getLocalControls:getLocalMovementControls,
-    getLocalIntentTimeline:getLocalMovementIntentTimeline,
     applyServerKnockback:(event,x,y,direction)=>{
       if(playerDead) return false;
       if(Number.isFinite(Number(x))&&Number.isFinite(Number(y))) {
-        setAuthoritativePlayerPosition(x,y,direction,false);
+        setLocalPlayerPosition(x,y,direction);
       }
       if(event) {
         player.knockback={
@@ -353,7 +226,5 @@ function getLocalMovementIntentTimeline(startAtMs, initialIntent) {
     applyRemoteDamage:()=>false,
     applyWorldEntity,applyWorldState,
     serverDeath:()=>handlePlayerDeath(true),
-    setLocalState:(x,y,direction)=>setAuthoritativePlayerPosition(x,y,direction,true),
-    reconcileLocalPosition:(x,y,direction,latencyMs=0,requestInput=null,intentTimeline=null)=>
-      setAuthoritativePlayerPosition(x,y,direction,false,latencyMs,requestInput,getLocalMovementControls(),intentTimeline)
+    setLocalState:(x,y,direction)=>setLocalPlayerPosition(x,y,direction)
   };
