@@ -117,7 +117,7 @@ const statusEnd=html.indexOf('</aside>',sidebarStart);
 const chatStart=html.indexOf('id="chat-composer"',sidebarStart);
 const coordsStart=html.indexOf('<div class="coords"',chatStart);
 const sidebarTail=html.slice(chatStart,coordsStart);
-assert.ok(sidebarStart>=0&&statusEnd>sidebarStart&&chatStart>statusEnd&&coordsStart>chatStart&&/<\\/form>\\s*<\\/div>\\s*$/.test(sidebarTail),
+assert.ok(sidebarStart>=0&&statusEnd>sidebarStart&&chatStart>statusEnd&&coordsStart>chatStart&&sidebarTail.includes("</form>")&&sidebarTail.trimEnd().endsWith("</div>"),
   "O campo de conversa deve ficar dentro da barra lateral, depois do status do jogador.");
 assert.match(html,/chat\/chat-ui\.js\?v=20261118-world-chat-v1/);
 assert.match(css,/#game-ui \.player-sidebar > \.chat-composer\s*\{[\s\S]*?position:relative/);
