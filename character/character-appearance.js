@@ -31,6 +31,7 @@ function buildLayerDefinitions(characterData=character, wearables=equippedWearab
           mode:layer.mode||null,
           palette:layer.palette||null,
           name:item.displayName||slot,
+          wearSlot:slot,
           syncToBody:true,
           // Plate greaves have no halfslash sheet. Their slash sheet uses a
           // different leg pose, so use the matching trousers pose for punches.
