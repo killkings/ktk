@@ -35,6 +35,16 @@ assert.match(input, /wearable-slot[\s\S]*?addEventListener\('click',\(\)=>unequi
   "Clicar na roupa vestida deve chamar a retirada para o mapa.");
 assert.match(inventoryUi, /slot\.draggable=false;/,
   "Itens de inventário não podem ser arrastáveis como vestimentas.");
+assert.match(inventoryUi, /function removeCollectedWorldItem\(item\)/,
+  "A coleta precisa remover a entidade visual local.");
+assert.match(inventoryUi, /worldItems\.delete\(candidate\)/,
+  "O item coletado deve sumir do conjunto renderizado no mapa.");
+assert.match(inventoryUi, /serverEntityRevisions\.set\(entityId,\{revision,deleted:true\}\)/,
+  "Uma fotografia antiga não pode recriar o item coletado.");
+assert.match(inventoryUi, /if\(result\?\.ok===true\)\s*\{[\s\S]*?removeCollectedWorldItem\(itemToCollect\)/,
+  "A remoção visual só acontece depois da confirmação do servidor.");
+assert.match(inventoryUi, /if\(result\?\.ok===true\)[\s\S]*?else\s*\{\s*toast\(result\?\.error/,
+  "Uma coleta recusada não pode apagar o item do mapa.");
 assert.doesNotMatch(inventoryUi, /equipWearableFromInventory|guardada no inventário/,
   "A interface não deve exibir o fluxo antigo de guardar roupas na mochila.");
 assert.match(inventoryState, /if\(item\?\.wearSlot\) return null;/,
