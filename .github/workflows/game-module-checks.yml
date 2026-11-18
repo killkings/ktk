@@ -4,6 +4,9 @@ on:
   pull_request:
     paths:
       - "campo_livre_atualizado.html"
+      - "chat/**"
+      - "css/game.css"
+      - "tools/test-chat-bubbles.mjs"
       - "game/game-lifecycle.js"
       - "combat/**"
       - "js/online.js"
@@ -80,6 +83,7 @@ jobs:
           node --check render/world-renderer.js
           node --check combat/combat-controller.js
           node --check input/input-controller.js
+          node --check chat/chat-ui.js
           node --check inventory/inventory-ui.js
           node --check inventory/inventory-state.js
           node --check multiplayer/player-replica.js
@@ -93,6 +97,8 @@ jobs:
           node --input-type=module --check < online/realtime.js
           node --input-type=module --check < online/player-sync.js
           node --input-type=module --check < equipment/catalog-sync.js
+      - name: Check world chat and speech bubbles
+        run: node tools/test-chat-bubbles.mjs
       - name: Check world-entry button flow
         run: node tools/test-entry-flow.mjs
       - name: Check online entry deadlines
