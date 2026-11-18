@@ -2,9 +2,9 @@
 import {
   enter, markDead, leaveWorld, getPlayerState, startHeartbeat
 } from "../online/session.js?v=20261117-walk-v1";
-import { gameAction, claimKingCrown, dropKingCrown } from "../online/actions.js?v=20261117-walk-v1";
+import { gameAction, claimKingCrown, dropKingCrown } from "../online/actions.js?v=20261117-combat-v1";
 import { state } from "../online/state.js?v=20261117-walk-v1";
-import { sendPosition } from "../online/movement.js?v=20261117-walk-v1";
+import { sendPosition } from "../online/movement.js?v=20261117-combat-v1";
 
 window.KTKOnline = {
   enter, markDead, leaveWorld, claimKingCrown, dropKingCrown, getPlayerState, gameAction, sendPosition,
