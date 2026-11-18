@@ -54,7 +54,6 @@
       leftMouseHeld=true;
       const selectedItem=inventory[selectedInventorySlot];
       if(isFishingRodItem(selectedItem)) {
-        rodAnimationStartedAt=performance.now();
         punch.active=false;
         punch.elapsed=0;
         punch.hitApplied=true;
