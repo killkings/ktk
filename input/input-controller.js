@@ -14,13 +14,6 @@
     playerMoving=dx!==0||dy!==0;
   }
 
-  function sendImmediateMovementIntent() {
-    const request=window.KTKOnline?.sendPosition?.(false);
-    if(request&&typeof request.catch==='function') {
-      void request.catch(error=>console.warn('KTK immediate movement intent:',error?.message||error));
-    }
-  }
-
   window.addEventListener('keydown',event=>{
     const key=event.key.toLowerCase();
     if(['arrowup','arrowdown','arrowleft','arrowright',' '].includes(key)) event.preventDefault();
@@ -34,7 +27,6 @@
       keys.add(key);
       if(!wasPressed) {
         refreshLocalMovementInput();
-        if(MOVEMENT_KEYS.has(key)||key==='shift') sendImmediateMovementIntent();
       }
       if(key==='e'&&!event.repeat) interactWithSelectedItem();
       if((key==='1'||key==='2')&&!event.repeat) selectInventorySlot(Number(key)-1);
@@ -51,7 +43,6 @@
     const key=event.key.toLowerCase();
     if(!keys.delete(key)) return;
     refreshLocalMovementInput();
-    if(MOVEMENT_KEYS.has(key)||key==='shift') sendImmediateMovementIntent();
   });
   canvas.addEventListener('mousedown',event=>{
     if(event.button===0) {
@@ -62,7 +53,6 @@
       rightMouseHeld=true;
       shieldStaminaExhausted=false;
       window.KTKPlayerStats.render();
-      sendImmediateMovementIntent();
     }
   });
   canvas.addEventListener('contextmenu',event=>event.preventDefault());
@@ -129,7 +119,6 @@
     });
   });
   window.addEventListener('blur',()=>{
-    const hadMovementIntent=playerMoving||rightMouseHeld||keys.has('shift');
     keys.clear();
     refreshLocalMovementInput();
     playerRunning=false;
@@ -143,13 +132,11 @@
 
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='hidden') {
-      const hadMovementIntent=playerMoving||rightMouseHeld||keys.has('shift');
       keys.clear();
       refreshLocalMovementInput();
       playerRunning=false;
       rightMouseHeld=false;
       shieldStaminaExhausted=false;
-      if(hadMovementIntent) sendImmediateMovementIntent();
     }
   });
   window.addEventListener('resize',resize);
