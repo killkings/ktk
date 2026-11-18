@@ -17,7 +17,7 @@ const [
   read("../js/online.js"),
   read("../campo_livre_atualizado.html"),
   read("../index.html"),
-  read("../supabase/migrations/20261117235500_simplify_player_walking.sql")
+  read("../supabase/migrations/20261118000803_simplify_player_walking.sql")
 ]);
 
 // The browser owns exactly one local position. Each frame advances that position;
