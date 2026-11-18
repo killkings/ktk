@@ -191,3 +191,69 @@
     .wearable-slot canvas { width:20px; height:20px; }
     .wearable-slot span { font-size:6px; line-height:7px; }
   }
+
+  /* Painel lateral único: identidade e status em fluxo, sem coordenadas independentes. */
+  #game-ui .player-sidebar {
+    position:absolute;
+    z-index:3;
+    top:18px;
+    left:18px;
+    display:flex;
+    width:var(--player-panel-width);
+    flex-direction:column;
+    align-items:stretch;
+    gap:12px;
+    pointer-events:none;
+  }
+  #game-ui .player-sidebar > .world-label.player-identity-card {
+    position:relative;
+    inset:auto;
+    display:block;
+    flex:none;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    margin:0;
+    pointer-events:auto;
+  }
+  #game-ui .player-sidebar > .player-stats {
+    position:relative;
+    inset:auto;
+    top:auto;
+    left:auto;
+    transform:none;
+    flex:none;
+    width:100%;
+    min-width:0;
+    max-width:100%;
+    max-height:none;
+    overflow:visible;
+    margin:0;
+    pointer-events:auto;
+  }
+  #game-ui .world-label-content {
+    display:flex;
+    min-width:0;
+    flex:1 1 auto;
+    flex-direction:column;
+    align-items:flex-start;
+    gap:4px;
+  }
+  #game-ui .world-label-content > strong,
+  #game-ui .world-label-content > .identity-caption {
+    display:block;
+    min-width:0;
+    line-height:1.25;
+  }
+  #game-ui .world-label-content > strong {
+    white-space:nowrap;
+  }
+  #game-ui .world-label-content > .identity-caption {
+    white-space:normal;
+    overflow-wrap:anywhere;
+  }
+  @media (max-width:740px) {
+    #game-ui .player-sidebar { left:10px; }
+    #game-ui .player-sidebar > .world-label.player-identity-card { padding:10px; }
+    #game-ui .player-sidebar > .player-stats { padding:12px; }
+  }
