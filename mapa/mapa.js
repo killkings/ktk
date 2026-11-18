@@ -222,20 +222,24 @@
     const seed = random01(tx, ty, region.ring + 1);
     g.imageSmoothingEnabled = false;
 
-    // Salas externas vazias: mesmo chão verde do mapa central, sem vegetação,
-    // flores, recursos visuais ou obstáculos.
+    // As oito salas externas usam o miolo da área de grama do tileset LPC.
+    // Quatro quadrantes reais do PNG fornecem variação sem repetir o recorte de terra.
     if (biome.id === 'vazio') {
+      const grassSamples = [
+        [32, 32], [48, 32],
+        [32, 48], [48, 48]
+      ];
       if (emptyGrassAsset.complete &&
-          emptyGrassAsset.naturalWidth >= 112 &&
-          emptyGrassAsset.naturalHeight >= 48) {
-        // Amostra de grama LPC (16×16) ampliada em pixel art para 32×32.
-        // Pequenas inversões determinísticas reduzem a repetição visual entre tiles.
-        const flipX = random01(tx, ty, 801) > 0.5;
-        const flipY = random01(tx, ty, 802) > 0.5;
+          emptyGrassAsset.naturalWidth >= 64 &&
+          emptyGrassAsset.naturalHeight >= 64) {
+        const sampleIndex = Math.floor(random01(tx, ty, 801) * grassSamples.length);
+        const [sourceX, sourceY] = grassSamples[sampleIndex];
+        const flipX = random01(tx, ty, 802) > 0.5;
+        const flipY = random01(tx, ty, 803) > 0.5;
         g.save();
         g.translate(flipX ? TILE : 0, flipY ? TILE : 0);
         g.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-        g.drawImage(emptyGrassAsset, 96, 32, 16, 16, 0, 0, TILE, TILE);
+        g.drawImage(emptyGrassAsset, sourceX, sourceY, 16, 16, 0, 0, TILE, TILE);
         g.restore();
       } else {
         g.fillStyle = biome.base;
