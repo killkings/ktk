@@ -543,6 +543,15 @@
     return isPointInsidePolygon(localX, localY, polygon);
   }
 
+  function isInWater(worldX, worldY) {
+    if (isInLake(worldX, worldY)) return true;
+    const x = Number(worldX);
+    const y = Number(worldY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    const biomeId = roomAt(x, y).id;
+    return biomeId === 'aguas-quentes' || biomeId === 'oceano-polar';
+  }
+
   function drawOuterLake(g, roomCol, roomRow, width, height) {
     const lake = outerLakeLocations[`${roomCol},${roomRow}`];
     if (!lake) return;
@@ -983,6 +992,7 @@
     getCollisionCircles,
     isOnRoad,
     isInLake,
+    isInWater,
     regionAt,
     getBiomeAt,
     biomes,
