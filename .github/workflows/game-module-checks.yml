@@ -19,11 +19,13 @@ on:
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
       - "tools/test-local-movement.mjs"
+      - "tools/test-combat-flow.mjs"
       - "supabase/migrations/**"
       - "input/input-controller.js"
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
       - "tools/test-local-movement.mjs"
+      - "tools/test-combat-flow.mjs"
       - ".github/workflows/game-module-checks.yml"
   push:
     branches: [main]
@@ -44,11 +46,13 @@ on:
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
       - "tools/test-local-movement.mjs"
+      - "tools/test-combat-flow.mjs"
       - "supabase/migrations/**"
       - "input/input-controller.js"
       - "multiplayer/player-replica.js"
       - "js/game-state.js"
       - "tools/test-local-movement.mjs"
+      - "tools/test-combat-flow.mjs"
       - ".github/workflows/game-module-checks.yml"
 
 jobs:
@@ -70,6 +74,7 @@ jobs:
           node --check multiplayer/player-replica.js
           node --check js/game-state.js
           node --input-type=module --check < online/movement.js
+          node --input-type=module --check < online/actions.js
           node --check game/game-lifecycle.js
           node --input-type=module --check < js/online.js
           node --input-type=module --check < online/request-timeout.js
@@ -85,6 +90,8 @@ jobs:
         run: node tools/test-realtime-entry.mjs
       - name: Check immediate local movement prediction
         run: node tools/test-local-movement.mjs
+      - name: Check combat and position synchronization
+        run: node tools/test-combat-flow.mjs
       - name: Check module boundaries and script order
         run: |
           node <<'NODE'
