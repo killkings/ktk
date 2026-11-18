@@ -38,6 +38,9 @@ on:
     branches: [main]
     paths:
       - "campo_livre_atualizado.html"
+      - "chat/**"
+      - "css/game.css"
+      - "tools/test-chat-bubbles.mjs"
       - "game/game-lifecycle.js"
       - "combat/**"
       - "js/online.js"
