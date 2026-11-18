@@ -1,7 +1,8 @@
 /*
  * Kill the King — Gerador de mapas em salas 16:9
  * Cada sala ocupa uma tela. A câmera aponta para a coordenada da sala atual.
- * O terreno procedural sempre é desenhado; os tilesets LPC são opcionais.
+ * Os Campos Centrais usam o terreno de verão LPC e flores do pacote ElizaWy;
+ * o terreno procedural funciona apenas como fallback se um asset falhar.
  */
 (() => {
   'use strict';
@@ -9,7 +10,11 @@
   const TILE = 32;
   let viewWidth = 1920;
   let viewHeight = 1080;
-  const assetRoot = './mapa/LPC-main/Terrain/';
+  const assetRoot = './mapa/assets/';
+  const assetSources = {
+    'terrain_summer.png': './mapa/assets/lpc-terrain-summer.png',
+    'wildflowers_summer.png': 'https://raw.githubusercontent.com/ElizaWy/LPC/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/wildflowers_summer.png'
+  };
   const tileCache = new Map();
   const decorationCache = new Map();
   const roomCanvasCache = new Map();
@@ -161,7 +166,7 @@
       assetStatus.set(file, 'missing');
       // Falta de arquivo LPC não impede a renderização: o terreno procedural é o fallback.
     };
-    image.src = assetRoot + file;
+    image.src = assetSources[file] || (assetRoot + file);
     assets.set(file, image);
   }
 
