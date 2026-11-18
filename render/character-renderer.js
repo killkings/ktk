@@ -123,7 +123,8 @@
     const width=Math.max(72,...rows.map(row=>g.measureText(row).width+16));
     const height=rows.length*14+8;
     const left=x-width/2;
-    const top=y-(entity.knockbackHeight||0)-FRAME_SIZE*WORLD_SCALE/2-height-7;
+    const entityScale=entity.type==='player'?PLAYER_WORLD_SCALE:WORLD_SCALE;
+    const top=y-(entity.knockbackHeight||0)-FRAME_SIZE*entityScale/2-height-7;
     g.fillStyle='rgba(12,24,18,.94)';
     g.strokeStyle='#d9e89d';
     g.lineWidth=1.5;
