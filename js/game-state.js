@@ -272,11 +272,26 @@ function updateLocalPlayerVisual(deltaSeconds) {
 
   // O mesmo resolvedor por subpassos da Caminhada Perfeita impede atravessar
   // obstáculos sem mexer na velocidade, no tempo ou na suavidade do movimento.
-  const blocked=(x,y,fromX,fromY)=>obstacles.some(obstacle=>{
-    const before=Math.hypot(fromX-obstacle.x,fromY-obstacle.y);
-    const after=Math.hypot(x-obstacle.x,y-obstacle.y);
-    return after<obstacle.radius&&after+0.01<before;
-  });
+  // A máscara das pedras verifica apenas a metade inferior do sprite LPC.
+  // A largura usa a área de colisão corporal já definida pelo jogo.
+  const rockOverlapAt=(x,y)=>Number(window.KTKWorldMap?.getRockOverlap?.(
+    x,y,COLLISION_RADIUS,0,FRAME_SIZE*PLAYER_WORLD_SCALE/2
+  ))||0;
+
+  const blocked=(x,y,fromX,fromY)=>{
+    const circleBlocked=obstacles.some(obstacle=>{
+      const before=Math.hypot(fromX-obstacle.x,fromY-obstacle.y);
+      const after=Math.hypot(x-obstacle.x,y-obstacle.y);
+      return after<obstacle.radius&&after+0.01<before;
+    });
+    if(circleBlocked) return true;
+
+    // Se o personagem já estava sobreposto ao ser atualizado, permite apenas
+    // passos que não aumentem a área de contato, para que ele possa sair.
+    const previousRockOverlap=rockOverlapAt(fromX,fromY);
+    const nextRockOverlap=rockOverlapAt(x,y);
+    return nextRockOverlap>previousRockOverlap+0.001;
+  };
   const steps=Math.max(1,Math.ceil(Math.max(Math.abs(wantedX),Math.abs(wantedY))/6));
   const stepX=wantedX/steps,stepY=wantedY/steps;
   for(let index=0;index<steps;index++) {

@@ -23,6 +23,7 @@
   const roomCanvasCache = new Map();
   const assets = new Map();
   const assetStatus = new Map();
+  const rockMaskCache = new Map();
 
   const biomes = [
     {
@@ -360,15 +361,55 @@
     return result;
   }
 
-  // Pedras dos oito mapas externos: colisores circulares alinhados à base visual.
-  // O mapa central e a clareira continuam sem obstáculos ambientais.
-  function getCollisionCircles(worldX, worldY, searchRadius = 96) {
-    const hasCenter = Number.isFinite(Number(worldX)) && Number.isFinite(Number(worldY));
-    const queryX = Number(worldX);
-    const queryY = Number(worldY);
-    const queryRadius = Math.max(0, Number(searchRadius) || 96);
+  // Máscara alfa real de cada recorte de pedra (64×64 do atlas).
+  // Só pixels visíveis bloqueiam; áreas transparentes não criam colisão.
+  function getRockOpaqueMask(rocks, item) {
+    if (!rocks || !rocks.complete || !rocks.naturalWidth) return null;
+    const key = `${item.sx},${item.sy}`;
+    if (rockMaskCache.has(key)) return rockMaskCache.get(key);
+
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = 64;
+    maskCanvas.height = 64;
+    const maskContext = maskCanvas.getContext('2d', { willReadFrequently: true });
+    if (!maskContext) return null;
+
+    try {
+      maskContext.clearRect(0, 0, 64, 64);
+      maskContext.drawImage(rocks, item.sx, item.sy, 64, 64, 0, 0, 64, 64);
+      const pixels = maskContext.getImageData(0, 0, 64, 64).data;
+      const mask = new Uint8Array(64 * 64);
+      for (let index = 0; index < mask.length; index++) {
+        mask[index] = pixels[index * 4 + 3] > 0 ? 1 : 0;
+      }
+      rockMaskCache.set(key, mask);
+      return mask;
+    } catch (error) {
+      console.warn('Não foi possível ler a máscara alfa das pedras LPC:', error);
+      return null;
+    }
+  }
+
+  // Mede a área de interseção entre os pixels opacos das pedras e apenas
+  // a metade inferior do personagem. O topo/cabeça nunca participa da colisão.
+  function getRockOverlap(worldX, worldY, playerHalfWidth = 18, playerTopOffset = 0, playerBottomOffset = 41) {
+    const x = Number(worldX);
+    const y = Number(worldY);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return 0;
+
+    const halfWidth = Math.max(1, Number(playerHalfWidth) || 18);
+    const topOffset = Number(playerTopOffset) || 0;
+    const bottomOffset = Math.max(topOffset + 1, Number(playerBottomOffset) || 41);
+    const playerLeft = x - halfWidth;
+    const playerRight = x + halfWidth;
+    const playerTop = y + topOffset;
+    const playerBottom = y + bottomOffset;
+
+    const rocks = assets.get('rocks_grasslands.png');
+    if (!rocks || !rocks.complete || !rocks.naturalWidth) return 0;
+
     const scale = Math.min(viewWidth / 1920, viewHeight / 1080);
-    const colliders = [];
+    let overlapArea = 0;
 
     for (const [roomKey, placements] of Object.entries(outerNatureLayouts)) {
       const [roomCol, roomRow] = roomKey.split(',').map(Number);
@@ -376,16 +417,45 @@
         if (item.type !== 'rock') continue;
 
         const drawSize = 64 * scale * item.size;
-        const x = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth;
-        const baseY = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight;
-        const y = baseY - drawSize * 0.42;
-        const radius = drawSize * 0.38;
+        const pixelSize = drawSize / 64;
+        const rockLeft = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth - drawSize / 2;
+        const rockTop = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight - drawSize;
+        const rockRight = rockLeft + drawSize;
+        const rockBottom = rockTop + drawSize;
 
-        if (hasCenter && Math.hypot(queryX - x, queryY - y) > queryRadius + radius) continue;
-        colliders.push({ x, y, radius });
+        if (playerRight <= rockLeft || playerLeft >= rockRight ||
+            playerBottom <= rockTop || playerTop >= rockBottom) continue;
+
+        const mask = getRockOpaqueMask(rocks, item);
+        if (!mask) continue;
+
+        const firstX = Math.max(0, Math.floor((playerLeft - rockLeft) / pixelSize));
+        const lastX = Math.min(63, Math.ceil((playerRight - rockLeft) / pixelSize) - 1);
+        const firstY = Math.max(0, Math.floor((playerTop - rockTop) / pixelSize));
+        const lastY = Math.min(63, Math.ceil((playerBottom - rockTop) / pixelSize) - 1);
+
+        for (let py = firstY; py <= lastY; py++) {
+          const pixelTop = rockTop + py * pixelSize;
+          const overlapHeight = Math.min(playerBottom, pixelTop + pixelSize) - Math.max(playerTop, pixelTop);
+          if (overlapHeight <= 0) continue;
+
+          for (let px = firstX; px <= lastX; px++) {
+            if (!mask[py * 64 + px]) continue;
+            const pixelLeft = rockLeft + px * pixelSize;
+            const overlapWidth = Math.min(playerRight, pixelLeft + pixelSize) - Math.max(playerLeft, pixelLeft);
+            if (overlapWidth > 0) overlapArea += overlapWidth * overlapHeight;
+          }
+        }
       }
     }
-    return colliders;
+
+    return overlapArea;
+  }
+
+  // API de círculos preservada para outros obstáculos futuros; pedras usam
+  // exclusivamente a máscara alfa acima, nunca um círculo aproximado.
+  function getCollisionCircles() {
+    return [];
   }
 
   function drawDecorations(ctx, left, top, width, height, tileSize) {
@@ -1253,6 +1323,7 @@
     defaultMap: DEFAULT_MAP,
     draw,
     getCollisionCircles,
+    getRockOverlap,
     isOnRoad,
     isInLake,
     isInWater,
