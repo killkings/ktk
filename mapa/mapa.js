@@ -879,8 +879,8 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       // Duas árvores alternativas com troncos completos visíveis no atlas LPC.
       // Recorte 1: árvore de copa arredondada, coluna central-direita.
       { type: 'tree', x: .46, y: .43, sx: 320, sy: 0, sw: 96, sh: 144, size: 1.05 },
-      // Recorte 2: árvore de copa mais larga, logo abaixo da primeira.
-      { type: 'tree', x: .72, y: .72, sx: 320, sy: 144, sw: 96, sh: 128, size: .98 }
+      // Recorte 2: árvore de copa arredondada com tronco grosso e raízes visíveis.
+      { type: 'tree', x: .72, y: .72, sx: 224, sy: 0, sw: 96, sh: 144, size: .98 }
     ],
     '1,1': [
       { type: 'plant', x: .14, y: .83, sx: 64, sy: 0, sw: 32, sh: 32, size: 1.16 },
