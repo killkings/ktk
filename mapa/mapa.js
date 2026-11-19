@@ -868,8 +868,8 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       { type: 'plant', x: .88, y: .83, sx: 32, sy: 0, sw: 32, sh: 32, size: 1.12 },
       { type: 'rock', x: .14, y: .15, sx: 128, sy: 0, size: .60 },
       { type: 'mushroom', x: .92, y: .53, sx: 64, sy: 96, size: .76 },
-      { type: 'tree', x: .46, y: .44, sx: 256, sy: 0, size: 1.15 },
-      { type: 'tree', x: .72, y: .72, sx: 128, sy: 256, size: .95 }
+      { type: 'tree', x: .46, y: .44, sx: 256, sy: 0, size: 2.3 },
+      { type: 'tree', x: .72, y: .72, sx: 128, sy: 256, size: 1.9 }
     ],
     '1,0': [
       { type: 'plant', x: .14, y: .17, sx: 160, sy: 64, sw: 96, sh: 64, size: .78 },
@@ -878,9 +878,9 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       { type: 'flowers', x: .86, y: .83, variant: 6 },
       // Duas árvores alternativas com troncos completos visíveis no atlas LPC.
       // Recorte 1: árvore de copa arredondada, coluna central-direita.
-      { type: 'tree', x: .46, y: .43, sx: 320, sy: 0, sw: 96, sh: 144, size: 1.05 },
+      { type: 'tree', x: .46, y: .43, sx: 320, sy: 0, sw: 96, sh: 144, size: 2.1 },
       // Recorte 2: árvore de copa arredondada com tronco grosso e raízes visíveis.
-      { type: 'tree', x: .72, y: .72, sx: 224, sy: 0, sw: 96, sh: 144, size: .98 }
+      { type: 'tree', x: .72, y: .72, sx: 224, sy: 0, sw: 96, sh: 144, size: 1.96 }
     ],
     '1,1': [
       { type: 'plant', x: .14, y: .83, sx: 64, sy: 0, sw: 32, sh: 32, size: 1.16 },
@@ -888,8 +888,8 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       { type: 'rock', x: .85, y: .16, sx: 64, sy: 0, size: .64 },
       { type: 'mushroom', x: .14, y: .16, sx: 128, sy: 96, size: .74 },
       { type: 'flowers', x: .51, y: .14, variant: 9 },
-      { type: 'tree', x: .48, y: .44, sx: 256, sy: 256, size: 1.10 },
-      { type: 'tree', x: .73, y: .72, sx: 128, sy: 384, size: .96 }
+      { type: 'tree', x: .48, y: .44, sx: 256, sy: 256, size: 2.2 },
+      { type: 'tree', x: .73, y: .72, sx: 128, sy: 384, size: 1.92 }
     ],
     '0,1': [
       { type: 'plant', x: .15, y: .18, sx: 160, sy: 0, sw: 32, sh: 32, size: 1.08 },
