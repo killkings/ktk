@@ -788,13 +788,19 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
 
       if (item.type === 'tree') {
         if (trees?.complete && trees.naturalWidth >= 512 && trees.naturalHeight >= 576) {
-          const drawWidth = 128 * scale * item.size;
-          const drawHeight = 144 * scale * item.size;
-          // A coluna zero do atlas contém a sombra já alinhada a cada árvore.
+          // A coluna zero guarda apenas as sombras, em quatro faixas de 128×64.
+          // As árvores usam células de 128×144 nas outras colunas; usar item.sy
+          // diretamente aqui fazia a sombra recortar troncos e árvores secas.
+          const treeRow = Math.max(0, Math.min(3, Math.round(item.sy / 144)));
+          const shadowSy = treeRow * 64;
+          const shadowWidth = 128 * scale * item.size;
+          const shadowHeight = 64 * scale * item.size;
+
           g.drawImage(
-            trees, 0, item.sy, 128, 144,
-            x - drawWidth / 2, y - drawHeight,
-            drawWidth, drawHeight
+            trees, 0, shadowSy, 128, 64,
+            x - shadowWidth / 2,
+            y - shadowHeight / 2,
+            shadowWidth, shadowHeight
           );
         }
         continue;
