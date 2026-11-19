@@ -182,18 +182,21 @@
         : playerMoving?Math.floor(walkTime*10)%WALK_COLUMNS:Math.floor(idleTime*2)%IDLE_COLUMNS;
       const plantForegrounds=window.KTKWorldMap?.getPlantForegrounds?.(camX,camY,w,h)||[];
       const rockForegrounds=window.KTKWorldMap?.getRockForegrounds?.(camX,camY,w,h)||[];
+      const PLAYER_FOOT_DEPTH_OFFSET=33;
       const renderables=[
-        ...getWorldEntities().map(entity=>({entity,depth:entity.y})),
+        ...getWorldEntities().map(entity=>({
+          entity,
+          depth:entity.type==='player'?entity.y+PLAYER_FOOT_DEPTH_OFFSET:entity.y
+        })),
         ...plantForegrounds.map(plant=>({entity:plant,depth:plant.depth})),
         ...rockForegrounds.map(rock=>({entity:rock,depth:rock.depth})),
-        {entity:{type:'local-player'},depth:camera.y*h+playerVisual.y}
+        {entity:{type:'local-player'},depth:camera.y*h+playerVisual.y+PLAYER_FOOT_DEPTH_OFFSET}
       ].sort((a,b)=>a.depth-b.depth);
       const playerWorldX=camera.x*w+player.x;
       const playerWorldY=camera.y*h+player.y;
       let focusedItem=null;
       let focusedItemDistance=NEARBY_INFO_RADIUS;
       const visibleChatBubbles=[];
-      const plantForegroundPlayerClips=[];
       worldItems.forEach(item=>{
         if(item.collected) return;
         const distance=Math.hypot(playerWorldX-item.x,playerWorldY-item.y);
@@ -204,18 +207,9 @@
       });
       renderables.forEach(({entity})=>{
         if(entity.type==='plant-foreground') {
-          // Plantas só encobrem a metade inferior dos jogadores que já foram
-          // desenhados atrás delas. A região da cabeça nunca recebe a planta.
-          if(plantForegroundPlayerClips.length) {
-            ctx.save();
-            ctx.beginPath();
-            plantForegroundPlayerClips.forEach(clip => {
-              ctx.rect(clip.x,clip.y,clip.width,clip.height);
-            });
-            ctx.clip();
-            window.KTKWorldMap?.drawPlantForeground?.(ctx,entity);
-            ctx.restore();
-          }
+          // A própria máscara de pixels da planta determina o que fica em primeiro plano.
+          // O personagem é sempre desenhado inteiro; não há recorte retangular sobre ele.
+          window.KTKWorldMap?.drawPlantForeground?.(ctx,entity);
           return;
         }
         if(entity.type==='rock-foreground') {
@@ -260,15 +254,6 @@
           const drawY=screenY-(player.knockbackHeight||0);
 
           drawLayeredCharacter(ctx,screenX,drawY,visiblePlayerLayers,PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
-          if(!inLakeWater) {
-            const playerDisplaySize=(bodyFrameLayer?.displaySize||bodyFrameSize)*PLAYER_WORLD_SCALE;
-            plantForegroundPlayerClips.push({
-              x:screenX-playerDisplaySize/2,
-              y:drawY,
-              width:playerDisplaySize,
-              height:playerDisplaySize/2
-            });
-          }
           const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
           if(chatBubble) visibleChatBubbles.push({
             text:chatBubble.text,opacity:chatBubble.opacity,x:screenX,
@@ -309,15 +294,6 @@
           const visibleRemoteLayers=inLakeWater?getHeadOnlyLayers(remoteLayers):remoteLayers;
           const remoteDrawY=screenY-(entity.knockbackHeight||0);
           drawLayeredCharacter(ctx,screenX,remoteDrawY,visibleRemoteLayers,PLAYER_WORLD_SCALE,remoteDirection,remoteFrame,Boolean(entity.knockback),attackActive?bodyColumns:0);
-          if(!inLakeWater) {
-            const playerDisplaySize=(bodyLayer?.displaySize||bodySize)*PLAYER_WORLD_SCALE;
-            plantForegroundPlayerClips.push({
-              x:screenX-playerDisplaySize/2,
-              y:remoteDrawY,
-              width:playerDisplaySize,
-              height:playerDisplaySize/2
-            });
-          }
           drawNearbyEntityStats(ctx,entity,screenX,screenY);
           const chatBubble=window.KTKChat?.getBubble?.(entity.id);
           if(chatBubble) visibleChatBubbles.push({
