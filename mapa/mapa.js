@@ -435,14 +435,14 @@
     ],
     '1,0': [
       { type: 'plant', x: .14, y: .17, sx: 160, sy: 64, sw: 96, sh: 64, size: .78 },
-      { type: 'rock', x: .86, y: .16, sx: 0, sy: 64, size: .62 },
+      { type: 'rock', x: .86, y: .16, sx: 0, sy: 0, size: .62 },
       { type: 'mushroom', x: .15, y: .84, sx: 96, sy: 96, size: .72 },
       { type: 'flowers', x: .86, y: .83, variant: 6 }
     ],
     '1,1': [
       { type: 'plant', x: .14, y: .83, sx: 64, sy: 0, sw: 32, sh: 32, size: 1.16 },
       { type: 'plant', x: .85, y: .83, sx: 384, sy: 0, sw: 32, sh: 64, size: .96 },
-      { type: 'rock', x: .85, y: .16, sx: 64, sy: 64, size: .64 },
+      { type: 'rock', x: .85, y: .16, sx: 64, sy: 0, size: .64 },
       { type: 'mushroom', x: .14, y: .16, sx: 128, sy: 96, size: .74 },
       { type: 'flowers', x: .51, y: .14, variant: 9 }
     ],
@@ -454,7 +454,7 @@
     ],
     '-1,1': [
       { type: 'plant', x: .14, y: .17, sx: 352, sy: 0, sw: 32, sh: 64, size: .98 },
-      { type: 'plant', x: .85, y: .83, sx: 192, sy: 0, sw: 32, sh: 32, size: 1.14 },
+      
       { type: 'rock', x: .85, y: .83, sx: 0, sy: 0, size: .57 },
       { type: 'mushroom', x: .15, y: .83, sx: 32, sy: 96, size: .76 },
       { type: 'flowers', x: .52, y: .16, variant: 5 }
