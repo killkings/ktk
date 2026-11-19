@@ -25,6 +25,10 @@
   const assets = new Map();
   const assetStatus = new Map();
   const rockMaskCache = new Map();
+  // Componentes opacos das árvores: os sprites são extraídos pelo alfa real do PNG,
+  // não por células retangulares que podem atravessar desenhos vizinhos.
+  let treeSpriteComponents = [];
+  const treeSpriteSelectionCache = new Map();
   let lastCentralVegetationSprites = [];
 
   const biomes = [
@@ -160,8 +164,17 @@
   function loadAsset(file) {
     if (assets.has(file)) return;
     const image = new Image();
+    // A leitura do canal alfa do atlas remoto requer CORS habilitado na imagem.
+    if (file === 'trees_summer.png') image.crossOrigin = 'anonymous';
     image.onload = () => {
       assetStatus.set(file, 'loaded');
+      if (file === 'trees_summer.png') {
+        treeSpriteComponents = buildTreeSpriteComponents(image);
+        treeSpriteSelectionCache.clear();
+        if (!treeSpriteComponents.length) {
+          console.warn('Atlas LPC carregou, mas nenhum recorte íntegro de árvore foi identificado.');
+        }
+      }
       tileCache.clear();
       roomCanvasCache.clear();
     };
@@ -171,6 +184,119 @@
     };
     image.src = assetSources[file] || (assetRoot + file);
     assets.set(file, image);
+  }
+
+  // Separa os desenhos conectados pela transparência real do atlas.
+  // Copas e troncos permanecem juntos; sombras isoladas e fragmentos pequenos
+  // não são tratados como árvores.
+  function buildTreeSpriteComponents(image) {
+    if (!image || !image.complete || !image.naturalWidth || !image.naturalHeight) return [];
+    const width = image.naturalWidth;
+    const height = image.naturalHeight;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) return [];
+
+    try {
+      context.clearRect(0, 0, width, height);
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, width, height).data;
+      const visited = new Uint8Array(width * height);
+      const queue = new Int32Array(width * height);
+      const components = [];
+      const alphaThreshold = 24;
+
+      for (let start = 0; start < width * height; start++) {
+        if (visited[start]) continue;
+        if (pixels[start * 4 + 3] <= alphaThreshold) {
+          visited[start] = 1;
+          continue;
+        }
+
+        let head = 0;
+        let tail = 0;
+        queue[tail++] = start;
+        visited[start] = 1;
+        let minX = width, minY = height, maxX = -1, maxY = -1;
+        let area = 0;
+
+        while (head < tail) {
+          const index = queue[head++];
+          const x = index % width;
+          const y = Math.floor(index / width);
+          area++;
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+
+          for (let oy = -1; oy <= 1; oy++) {
+            const ny = y + oy;
+            if (ny < 0 || ny >= height) continue;
+            for (let ox = -1; ox <= 1; ox++) {
+              if (ox === 0 && oy === 0) continue;
+              const nx = x + ox;
+              if (nx < 0 || nx >= width) continue;
+              const next = ny * width + nx;
+              if (visited[next]) continue;
+              visited[next] = 1;
+              if (pixels[next * 4 + 3] > alphaThreshold) queue[tail++] = next;
+            }
+          }
+        }
+
+        const componentWidth = maxX - minX + 1;
+        const componentHeight = maxY - minY + 1;
+        // Exclui sombras, marcas e pequenos fragmentos soltos do atlas.
+        if (area < 260 || componentWidth < 20 || componentHeight < 36) continue;
+        components.push({
+          x: minX, y: minY, width: componentWidth, height: componentHeight,
+          area, centerX: (minX + maxX + 1) / 2, centerY: (minY + maxY + 1) / 2
+        });
+      }
+
+      return components.sort((a, b) => b.area - a.area);
+    } catch (error) {
+      console.warn('Não foi possível ler a transparência do atlas LPC de árvores:', error);
+      return [];
+    }
+  }
+
+  // Associa cada posição antiga do mapa à árvore opaca que realmente ocupa
+  // aquela região. O desenho final usa a caixa exata do componente encontrado.
+  function getTreeComponentForPlacement(item) {
+    const key = `${item.sx},${item.sy}`;
+    if (treeSpriteSelectionCache.has(key)) return treeSpriteSelectionCache.get(key);
+    if (!treeSpriteComponents.length) return null;
+
+    const cell = { left: item.sx, top: item.sy, right: item.sx + 128, bottom: item.sy + 144 };
+    const centerX = (cell.left + cell.right) / 2;
+    const centerY = (cell.top + cell.bottom) / 2;
+    let best = null;
+    let bestScore = -Infinity;
+
+    for (const component of treeSpriteComponents) {
+      const left = Math.max(cell.left, component.x);
+      const top = Math.max(cell.top, component.y);
+      const right = Math.min(cell.right, component.x + component.width);
+      const bottom = Math.min(cell.bottom, component.y + component.height);
+      const overlap = Math.max(0, right - left) * Math.max(0, bottom - top);
+      if (!overlap) continue;
+
+      const componentArea = component.width * component.height;
+      const coverage = overlap / Math.max(1, componentArea);
+      const distance = Math.hypot(component.centerX - centerX, component.centerY - centerY);
+      const score = coverage * 3 + Math.min(component.area / 12000, 0.25) - distance / 500;
+      if (score > bestScore) {
+        bestScore = score;
+        best = component;
+      }
+    }
+
+    treeSpriteSelectionCache.set(key, best);
+    return best;
   }
 
   ['terrain_summer.png', 'wildflowers_summer.png', 'plants_summer.png', 'mushrooms.png', 'rocks_grasslands.png', 'trees_summer.png'].forEach(loadAsset);
@@ -518,7 +644,7 @@
 
 function getTreeRenderables(cameraLeft, cameraTop, width, height) {
     const trees = assets.get('trees_summer.png');
-    if (!trees || !trees.complete || trees.naturalWidth < 512 || trees.naturalHeight < 576) return [];
+    if (!trees || !trees.complete || !treeSpriteComponents.length) return [];
 
     const viewportWidth = Math.max(1, Number(width) || viewWidth);
     const viewportHeight = Math.max(1, Number(height) || viewHeight);
@@ -530,12 +656,17 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       for (const item of placements) {
         if (item.type !== 'tree') continue;
 
-        // O atlas de árvores é alinhado em quadros de 128×128.
-        // 144 px atravessava a próxima faixa e misturava árvores diferentes.
-        const drawWidth = 128 * scale * item.size;
-        const drawHeight = 128 * scale * item.size;
-        const worldLeft = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth - drawWidth / 2;
-        const worldTop = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight - drawHeight;
+        const source = getTreeComponentForPlacement(item);
+        if (!source) continue;
+
+        // Usa os limites reais da árvore no PNG, incluindo a copa e o tronco,
+        // sem pedaços transparentes nem pixels de outra árvore.
+        const drawWidth = source.width * scale * item.size;
+        const drawHeight = source.height * scale * item.size;
+        const baseX = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth;
+        const baseY = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight;
+        const worldLeft = baseX - drawWidth / 2;
+        const worldTop = baseY - drawHeight;
         const screenX = worldLeft - cameraLeft;
         const screenY = worldTop - cameraTop;
 
@@ -544,8 +675,10 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
 
         renderables.push({
           type: 'tree-depth',
-          sx: item.sx,
-          sy: item.sy,
+          sx: source.x,
+          sy: source.y,
+          sw: source.width,
+          sh: source.height,
           screenX,
           screenY,
           drawWidth,
@@ -565,7 +698,7 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(
       trees,
-      tree.sx, tree.sy, 128, 128,
+      tree.sx, tree.sy, tree.sw, tree.sh,
       tree.screenX, tree.screenY,
       tree.drawWidth, tree.drawHeight
     );
@@ -772,7 +905,6 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
     if (!placements) return;
 
     const rocks = assets.get('rocks_grasslands.png');
-    const trees = assets.get('trees_summer.png');
     const mushrooms = assets.get('mushrooms.png');
     const flowers = assets.get('wildflowers_summer.png');
     const scale = Math.min(width / 1920, height / 1080);
@@ -789,22 +921,16 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       const y = item.y * height;
 
       if (item.type === 'tree') {
-        if (trees?.complete && trees.naturalWidth >= 512 && trees.naturalHeight >= 576) {
-          // A coluna zero guarda apenas as sombras, em quatro faixas de 128×64.
-          // As árvores usam células de 128×144 nas outras colunas; usar item.sy
-          // diretamente aqui fazia a sombra recortar troncos e árvores secas.
-          const treeRow = Math.max(0, Math.min(3, Math.round(item.sy / 128)));
-          const shadowSy = treeRow * 64;
-          const shadowWidth = 128 * scale * item.size;
-          const shadowHeight = 64 * scale * item.size;
-
-          g.drawImage(
-            trees, 0, shadowSy, 128, 64,
-            x - shadowWidth / 2,
-            y - shadowHeight / 2,
-            shadowWidth, shadowHeight
-          );
-        }
+        // Sombra simples no solo; não reutiliza recortes da coluna de sombras
+        // do atlas, que são independentes e não seguem a posição das árvores.
+        const shadowWidth = 34 * scale * item.size;
+        const shadowHeight = 9 * scale * item.size;
+        g.save();
+        g.fillStyle = 'rgba(18, 28, 16, .34)';
+        g.beginPath();
+        g.ellipse(x, y - 2 * scale, shadowWidth, shadowHeight, 0, 0, Math.PI * 2);
+        g.fill();
+        g.restore();
         continue;
       }
       if (item.type === 'plant') continue;
