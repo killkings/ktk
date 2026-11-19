@@ -180,9 +180,11 @@
       const frame=punch.active
         ? Math.min(attackFrameCount-1,Math.floor((punch.elapsed/PUNCH_ANIMATION_SECONDS)*attackFrameCount))
         : playerMoving?Math.floor(walkTime*10)%WALK_COLUMNS:Math.floor(idleTime*2)%IDLE_COLUMNS;
+      const plantForegrounds=window.KTKWorldMap?.getPlantForegrounds?.(camX,camY,w,h)||[];
       const rockForegrounds=window.KTKWorldMap?.getRockForegrounds?.(camX,camY,w,h)||[];
       const renderables=[
         ...getWorldEntities().map(entity=>({entity,depth:entity.y})),
+        ...plantForegrounds.map(plant=>({entity:plant,depth:plant.depth})),
         ...rockForegrounds.map(rock=>({entity:rock,depth:rock.depth})),
         {entity:{type:'local-player'},depth:camera.y*h+playerVisual.y}
       ].sort((a,b)=>a.depth-b.depth);
@@ -200,6 +202,10 @@
         }
       });
       renderables.forEach(({entity})=>{
+        if(entity.type==='plant-foreground') {
+          window.KTKWorldMap?.drawPlantForeground?.(ctx,entity);
+          return;
+        }
         if(entity.type==='rock-foreground') {
           window.KTKWorldMap?.drawRockForeground?.(ctx,entity);
           return;

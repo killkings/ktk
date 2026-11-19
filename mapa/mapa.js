@@ -24,6 +24,7 @@
   const assets = new Map();
   const assetStatus = new Map();
   const rockMaskCache = new Map();
+  let lastCentralVegetationSprites = [];
 
   const biomes = [
     {
@@ -452,6 +453,95 @@
     return overlapArea;
   }
 
+  // Metade superior das plantas entra na ordenação de profundidade com os personagens.
+  // A metade inferior permanece no cenário; não existe colisão para as plantas.
+  function getPlantForegrounds(cameraLeft, cameraTop, width, height) {
+    const overlays = [];
+    const plants = assets.get('plants_summer.png');
+    if (!plants || !plants.complete || plants.naturalWidth < 512 || plants.naturalHeight < 160) {
+      return overlays;
+    }
+
+    const scale = Math.min(width / 1920, height / 1080);
+
+    // Plantas fixas dos oito mapas externos.
+    for (const [roomKey, placements] of Object.entries(outerNatureLayouts)) {
+      const [roomCol, roomRow] = roomKey.split(',').map(Number);
+      for (const item of placements) {
+        if (item.type !== 'plant') continue;
+
+        const drawWidth = item.sw * scale * 1.35 * item.size;
+        const drawHeight = item.sh * scale * 1.35 * item.size;
+        const baseX = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth;
+        const baseY = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight;
+        const screenX = baseX - cameraLeft - drawWidth / 2;
+        const screenY = baseY - cameraTop - drawHeight;
+
+        if (screenX + drawWidth < 0 || screenX > width ||
+            screenY + drawHeight / 2 < 0 || screenY > height) continue;
+
+        overlays.push({
+          type: 'plant-foreground',
+          source: 'outer',
+          sx: item.sx, sy: item.sy, sw: item.sw, sh: item.sh,
+          screenX, screenY, drawWidth, drawHeight,
+          depth: baseY
+        });
+      }
+    }
+
+    // Vegetação animada do campo central: usa o mesmo balanço do sprite de fundo.
+    for (const sprite of lastCentralVegetationSprites) {
+      const screenX = sprite.baseX - sprite.drawWidth / 2;
+      const screenY = sprite.baseY - sprite.drawHeight;
+      if (screenX + sprite.drawWidth < 0 || screenX > width ||
+          screenY + sprite.drawHeight / 2 < 0 || screenY > height) continue;
+
+      overlays.push({
+        type: 'plant-foreground',
+        source: 'central',
+        sx: sprite.sx, sy: sprite.sy, sw: sprite.sw, sh: sprite.sh,
+        screenBaseX: sprite.baseX,
+        screenBaseY: sprite.baseY,
+        drawWidth: sprite.drawWidth,
+        drawHeight: sprite.drawHeight,
+        sway: sprite.sway,
+        depth: cameraTop + sprite.baseY
+      });
+    }
+
+    return overlays;
+  }
+
+  function drawPlantForeground(ctx, plant) {
+    const plants = assets.get('plants_summer.png');
+    if (!ctx || !plant || !plants || !plants.complete || !plants.naturalWidth) return;
+    const halfSourceHeight = plant.sh / 2;
+    const halfDrawHeight = plant.drawHeight / 2;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if (plant.source === 'central') {
+      // Mantém a rotação de vento sincronizada com o sprite que está no chão.
+      ctx.translate(plant.screenBaseX, plant.screenBaseY);
+      ctx.rotate(plant.sway);
+      ctx.drawImage(
+        plants,
+        plant.sx, plant.sy, plant.sw, halfSourceHeight,
+        -plant.drawWidth / 2, -plant.drawHeight,
+        plant.drawWidth, halfDrawHeight
+      );
+    } else {
+      ctx.drawImage(
+        plants,
+        plant.sx, plant.sy, plant.sw, halfSourceHeight,
+        plant.screenX, plant.screenY,
+        plant.drawWidth, halfDrawHeight
+      );
+    }
+    ctx.restore();
+  }
+
   // Camada de profundidade das pedras: a metade superior é redesenhada
   // no ponto Y da base da pedra, depois de quem está atrás e antes de quem está à frente.
   function getRockForegrounds(cameraLeft, cameraTop, width, height) {
@@ -691,6 +781,7 @@
   // Todos os elementos recebem balanço procedural de vento, com intensidade
   // proporcional ao porte: capins/juncos mais soltos; arbustos/samambaias sutis.
   function drawCentralVegetationAnimation(ctx, width, height, timeSeconds) {
+    lastCentralVegetationSprites = [];
     const plants = assets.get('plants_summer.png');
     if (!plants || !plants.complete || plants.naturalWidth < 512 || plants.naturalHeight < 160) return;
 
@@ -772,6 +863,12 @@
         && spriteTop < clearBottom
         && spriteBottom > clearTop;
       if (overlapsClearing) continue;
+
+      // Guarda os dados exatos desta planta/quadros de vento para a camada frontal.
+      lastCentralVegetationSprites.push({
+        sx: sprite.sx, sy: sprite.sy, sw: sprite.sw, sh: sprite.sh,
+        drawWidth, drawHeight, baseX, baseY, sway
+      });
 
       // O eixo fica na base de cada planta para ela não deslizar pelo chão.
       ctx.save();
@@ -1365,6 +1462,7 @@
     ctx.drawImage(roomCanvas, 0, 0, width, height);
     const animationTime = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
     if (roomCol === 0 && roomRow === 0) drawCentralVegetationAnimation(ctx, width, height, animationTime);
+    else lastCentralVegetationSprites = [];
     drawOuterLakeAnimation(ctx, roomCol, roomRow, width, height, animationTime);
     ctx.restore();
   }
@@ -1380,6 +1478,8 @@
     draw,
     getCollisionCircles,
     getRockOverlap,
+    getPlantForegrounds,
+    drawPlantForeground,
     getRockForegrounds,
     drawRockForeground,
     isOnRoad,
