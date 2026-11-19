@@ -191,7 +191,16 @@
         ...plantRenderables.map(plant=>({entity:plant,depth:plant.depth})),
         ...rockForegrounds.map(rock=>({entity:rock,depth:rock.depth})),
         {entity:{type:'local-player'},depth:camera.y*h+playerVisual.y+PLAYER_FOOT_DEPTH_OFFSET}
-      ].sort((a,b)=>a.depth-b.depth);
+      ].sort((a,b)=>{
+        const depthDifference=a.depth-b.depth;
+        if(depthDifference!==0) return depthDifference;
+        // No empate exato do ponto médio, a planta é desenhada antes do jogador.
+        // Assim, pés na linha central contam como metade inferior do personagem.
+        const aIsPlant=a.entity.type==='plant';
+        const bIsPlant=b.entity.type==='plant';
+        if(aIsPlant!==bIsPlant) return aIsPlant?-1:1;
+        return 0;
+      });
       const playerWorldX=camera.x*w+player.x;
       const playerWorldY=camera.y*h+player.y;
       let focusedItem=null;
