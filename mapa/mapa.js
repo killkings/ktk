@@ -16,7 +16,8 @@
     'wildflowers_summer.png': './mapa/assets/lpc-wildflowers-summer.png',
     'plants_summer.png': './mapa/assets/lpc-plants-summer.png',
     'mushrooms.png': './mapa/assets/lpc-mushrooms.png',
-    'rocks_grasslands.png': './mapa/assets/lpc-rocks-grasslands.png'
+    'rocks_grasslands.png': './mapa/assets/lpc-rocks-grasslands.png',
+    'trees_summer.png': 'https://cdn.jsdelivr.net/gh/ElizaWy/LPC@f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/trees_summer.png'
   };
   const tileCache = new Map();
   const decorationCache = new Map();
@@ -172,7 +173,7 @@
     assets.set(file, image);
   }
 
-  ['terrain_summer.png', 'wildflowers_summer.png', 'plants_summer.png', 'mushrooms.png', 'rocks_grasslands.png'].forEach(loadAsset);
+  ['terrain_summer.png', 'wildflowers_summer.png', 'plants_summer.png', 'mushrooms.png', 'rocks_grasslands.png', 'trees_summer.png'].forEach(loadAsset);
 
   function setViewport(width, height) {
     const safeWidth = Math.max(1, Number(width) || 1920);
@@ -515,7 +516,61 @@
     return renderables;
   }
 
-  function drawPlant(ctx, plant) {
+function getTreeRenderables(cameraLeft, cameraTop, width, height) {
+    const trees = assets.get('trees_summer.png');
+    if (!trees || !trees.complete || trees.naturalWidth < 512 || trees.naturalHeight < 576) return [];
+
+    const viewportWidth = Math.max(1, Number(width) || viewWidth);
+    const viewportHeight = Math.max(1, Number(height) || viewHeight);
+    const scale = Math.min(width / 1920, height / 1080);
+    const renderables = [];
+
+    for (const [roomKey, placements] of Object.entries(outerNatureLayouts)) {
+      const [roomCol, roomRow] = roomKey.split(',').map(Number);
+      for (const item of placements) {
+        if (item.type !== 'tree') continue;
+
+        const drawWidth = 128 * scale * item.size;
+        const drawHeight = 144 * scale * item.size;
+        const worldLeft = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth - drawWidth / 2;
+        const worldTop = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight - drawHeight;
+        const screenX = worldLeft - cameraLeft;
+        const screenY = worldTop - cameraTop;
+
+        if (screenX + drawWidth < 0 || screenX > viewportWidth ||
+            screenY + drawHeight < 0 || screenY > viewportHeight) continue;
+
+        renderables.push({
+          type: 'tree-depth',
+          sx: item.sx,
+          sy: item.sy,
+          screenX,
+          screenY,
+          drawWidth,
+          drawHeight,
+          depth: worldTop + drawHeight / 2
+        });
+      }
+    }
+    return renderables;
+  }
+
+  function drawTree(ctx, tree) {
+    const trees = assets.get('trees_summer.png');
+    if (!ctx || !tree || !trees || !trees.complete || !trees.naturalWidth) return;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      trees,
+      tree.sx, tree.sy, 128, 144,
+      tree.screenX, tree.screenY,
+      tree.drawWidth, tree.drawHeight
+    );
+    ctx.restore();
+  }
+
+    function drawPlant(ctx, plant) {
     const plants = assets.get('plants_summer.png');
     if (!ctx || !plant || !plants || !plants.complete || !plants.naturalWidth) return;
 
@@ -668,20 +723,26 @@
       { type: 'plant', x: .14, y: .83, sx: 416, sy: 0, sw: 32, sh: 64, size: 1.00 },
       { type: 'plant', x: .88, y: .83, sx: 32, sy: 0, sw: 32, sh: 32, size: 1.12 },
       { type: 'rock', x: .14, y: .15, sx: 128, sy: 0, size: .60 },
-      { type: 'mushroom', x: .92, y: .53, sx: 64, sy: 96, size: .76 }
+      { type: 'mushroom', x: .92, y: .53, sx: 64, sy: 96, size: .76 },
+      { type: 'tree', x: .46, y: .44, sx: 256, sy: 0, size: 1.15 },
+      { type: 'tree', x: .72, y: .72, sx: 128, sy: 288, size: .95 }
     ],
     '1,0': [
       { type: 'plant', x: .14, y: .17, sx: 160, sy: 64, sw: 96, sh: 64, size: .78 },
       { type: 'rock', x: .86, y: .16, sx: 0, sy: 0, size: .62 },
       { type: 'mushroom', x: .15, y: .84, sx: 96, sy: 96, size: .72 },
-      { type: 'flowers', x: .86, y: .83, variant: 6 }
+      { type: 'flowers', x: .86, y: .83, variant: 6 },
+      { type: 'tree', x: .46, y: .43, sx: 384, sy: 0, size: 1.05 },
+      { type: 'tree', x: .72, y: .72, sx: 256, sy: 432, size: .98 }
     ],
     '1,1': [
       { type: 'plant', x: .14, y: .83, sx: 64, sy: 0, sw: 32, sh: 32, size: 1.16 },
       { type: 'plant', x: .85, y: .83, sx: 384, sy: 0, sw: 32, sh: 64, size: .96 },
       { type: 'rock', x: .85, y: .16, sx: 64, sy: 0, size: .64 },
       { type: 'mushroom', x: .14, y: .16, sx: 128, sy: 96, size: .74 },
-      { type: 'flowers', x: .51, y: .14, variant: 9 }
+      { type: 'flowers', x: .51, y: .14, variant: 9 },
+      { type: 'tree', x: .48, y: .44, sx: 256, sy: 288, size: 1.10 },
+      { type: 'tree', x: .73, y: .72, sx: 128, sy: 432, size: .96 }
     ],
     '0,1': [
       { type: 'plant', x: .15, y: .18, sx: 160, sy: 0, sw: 32, sh: 32, size: 1.08 },
@@ -709,6 +770,7 @@
     if (!placements) return;
 
     const rocks = assets.get('rocks_grasslands.png');
+    const trees = assets.get('trees_summer.png');
     const mushrooms = assets.get('mushrooms.png');
     const flowers = assets.get('wildflowers_summer.png');
     const scale = Math.min(width / 1920, height / 1080);
@@ -721,9 +783,23 @@
     g.imageSmoothingEnabled = false;
     const ordered = placements.slice().sort((a, b) => a.y - b.y);
     for (const item of ordered) {
-      if (item.type === 'plant') continue;
       const x = item.x * width;
       const y = item.y * height;
+
+      if (item.type === 'tree') {
+        if (trees?.complete && trees.naturalWidth >= 512 && trees.naturalHeight >= 576) {
+          const drawWidth = 128 * scale * item.size;
+          const drawHeight = 144 * scale * item.size;
+          // A coluna zero do atlas contém a sombra já alinhada a cada árvore.
+          g.drawImage(
+            trees, 0, item.sy, 128, 144,
+            x - drawWidth / 2, y - drawHeight,
+            drawWidth, drawHeight
+          );
+        }
+        continue;
+      }
+      if (item.type === 'plant') continue;
 
       if (item.type === 'rock' && rocks?.complete && rocks.naturalWidth >= 192 && rocks.naturalHeight >= 128) {
         const drawSize = 64 * scale * item.size;
@@ -1456,6 +1532,8 @@
     getRockOverlap,
     getPlantRenderables,
     drawPlant,
+    getTreeRenderables,
+    drawTree,
     getRockRenderables,
     drawRock,
     isOnRoad,
