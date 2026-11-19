@@ -530,8 +530,10 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       for (const item of placements) {
         if (item.type !== 'tree') continue;
 
+        // O atlas de árvores é alinhado em quadros de 128×128.
+        // 144 px atravessava a próxima faixa e misturava árvores diferentes.
         const drawWidth = 128 * scale * item.size;
-        const drawHeight = 144 * scale * item.size;
+        const drawHeight = 128 * scale * item.size;
         const worldLeft = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth - drawWidth / 2;
         const worldTop = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight - drawHeight;
         const screenX = worldLeft - cameraLeft;
@@ -563,7 +565,7 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(
       trees,
-      tree.sx, tree.sy, 128, 144,
+      tree.sx, tree.sy, 128, 128,
       tree.screenX, tree.screenY,
       tree.drawWidth, tree.drawHeight
     );
@@ -725,7 +727,7 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       { type: 'rock', x: .14, y: .15, sx: 128, sy: 0, size: .60 },
       { type: 'mushroom', x: .92, y: .53, sx: 64, sy: 96, size: .76 },
       { type: 'tree', x: .46, y: .44, sx: 256, sy: 0, size: 1.15 },
-      { type: 'tree', x: .72, y: .72, sx: 128, sy: 288, size: .95 }
+      { type: 'tree', x: .72, y: .72, sx: 128, sy: 256, size: .95 }
     ],
     '1,0': [
       { type: 'plant', x: .14, y: .17, sx: 160, sy: 64, sw: 96, sh: 64, size: .78 },
@@ -733,7 +735,7 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       { type: 'mushroom', x: .15, y: .84, sx: 96, sy: 96, size: .72 },
       { type: 'flowers', x: .86, y: .83, variant: 6 },
       { type: 'tree', x: .46, y: .43, sx: 384, sy: 0, size: 1.05 },
-      { type: 'tree', x: .72, y: .72, sx: 256, sy: 432, size: .98 }
+      { type: 'tree', x: .72, y: .72, sx: 256, sy: 384, size: .98 }
     ],
     '1,1': [
       { type: 'plant', x: .14, y: .83, sx: 64, sy: 0, sw: 32, sh: 32, size: 1.16 },
@@ -741,8 +743,8 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       { type: 'rock', x: .85, y: .16, sx: 64, sy: 0, size: .64 },
       { type: 'mushroom', x: .14, y: .16, sx: 128, sy: 96, size: .74 },
       { type: 'flowers', x: .51, y: .14, variant: 9 },
-      { type: 'tree', x: .48, y: .44, sx: 256, sy: 288, size: 1.10 },
-      { type: 'tree', x: .73, y: .72, sx: 128, sy: 432, size: .96 }
+      { type: 'tree', x: .48, y: .44, sx: 256, sy: 256, size: 1.10 },
+      { type: 'tree', x: .73, y: .72, sx: 128, sy: 384, size: .96 }
     ],
     '0,1': [
       { type: 'plant', x: .15, y: .18, sx: 160, sy: 0, sw: 32, sh: 32, size: 1.08 },
@@ -791,7 +793,7 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
           // A coluna zero guarda apenas as sombras, em quatro faixas de 128×64.
           // As árvores usam células de 128×144 nas outras colunas; usar item.sy
           // diretamente aqui fazia a sombra recortar troncos e árvores secas.
-          const treeRow = Math.max(0, Math.min(3, Math.round(item.sy / 144)));
+          const treeRow = Math.max(0, Math.min(3, Math.round(item.sy / 128)));
           const shadowSy = treeRow * 64;
           const shadowWidth = 128 * scale * item.size;
           const shadowHeight = 64 * scale * item.size;
