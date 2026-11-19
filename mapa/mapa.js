@@ -267,6 +267,15 @@
   // Associa cada posição antiga do mapa à árvore opaca que realmente ocupa
   // aquela região. O desenho final usa a caixa exata do componente encontrado.
   function getTreeComponentForPlacement(item) {
+    // Recortes manuais permitem preservar troncos que aparecem separados da copa
+    // no canal alfa do atlas, especialmente nas duas árvores de X3Y2.
+    if (Number(item.sw) > 0 && Number(item.sh) > 0) {
+      return {
+        x: item.sx, y: item.sy, width: item.sw, height: item.sh,
+        centerX: item.sx + item.sw / 2, centerY: item.sy + item.sh / 2
+      };
+    }
+
     const key = `${item.sx},${item.sy}`;
     if (treeSpriteSelectionCache.has(key)) return treeSpriteSelectionCache.get(key);
     if (!treeSpriteComponents.length) return null;
@@ -867,8 +876,10 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       { type: 'rock', x: .86, y: .16, sx: 0, sy: 0, size: .62 },
       { type: 'mushroom', x: .15, y: .84, sx: 96, sy: 96, size: .72 },
       { type: 'flowers', x: .86, y: .83, variant: 6 },
-      { type: 'tree', x: .46, y: .43, sx: 384, sy: 0, size: 1.05 },
-      { type: 'tree', x: .72, y: .72, sx: 256, sy: 384, size: .98 }
+      // Recortes individuais do atlas: árvore de copa redonda + conífera.
+      // Os dois retângulos incluem explicitamente toda a extensão do tronco.
+      { type: 'tree', x: .46, y: .43, sx: 416, sy: 16, sw: 96, sh: 128, size: 1.05 },
+      { type: 'tree', x: .72, y: .72, sx: 224, sy: 384, sw: 96, sh: 128, size: .98 }
     ],
     '1,1': [
       { type: 'plant', x: .14, y: .83, sx: 64, sy: 0, sw: 32, sh: 32, size: 1.16 },
