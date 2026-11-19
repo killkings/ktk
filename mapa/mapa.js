@@ -933,14 +933,29 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       const y = item.y * height;
 
       if (item.type === 'tree') {
-        // Sombra simples no solo; não reutiliza recortes da coluna de sombras
-        // do atlas, que são independentes e não seguem a posição das árvores.
-        const shadowWidth = 34 * scale * item.size;
-        const shadowHeight = 9 * scale * item.size;
+        // A sombra acompanha a dimensão real do recorte de cada árvore.
+        // Os valores são raios proporcionais à largura/altura do sprite,
+        // portanto acompanham também as árvores que tiveram o tamanho dobrado.
+        const treeSource = getTreeComponentForPlacement(item);
+        const sourceWidth = treeSource?.width || Number(item.sw) || 128;
+        const sourceHeight = treeSource?.height || Number(item.sh) || 144;
+        const treeWidth = sourceWidth * scale * item.size;
+        const treeHeight = sourceHeight * scale * item.size;
+        const shadowRadiusX = treeWidth * .36;
+        const shadowRadiusY = treeHeight * .06;
+
         g.save();
         g.fillStyle = 'rgba(18, 28, 16, .34)';
         g.beginPath();
-        g.ellipse(x, y - 2 * scale, shadowWidth, shadowHeight, 0, 0, Math.PI * 2);
+        g.ellipse(
+          x,
+          y - shadowRadiusY * .22,
+          shadowRadiusX,
+          shadowRadiusY,
+          0,
+          0,
+          Math.PI * 2
+        );
         g.fill();
         g.restore();
         continue;
