@@ -180,7 +180,7 @@
       const frame=punch.active
         ? Math.min(attackFrameCount-1,Math.floor((punch.elapsed/PUNCH_ANIMATION_SECONDS)*attackFrameCount))
         : playerMoving?Math.floor(walkTime*10)%WALK_COLUMNS:Math.floor(idleTime*2)%IDLE_COLUMNS;
-      const plantForegrounds=window.KTKWorldMap?.getPlantForegrounds?.(camX,camY,w,h)||[];
+      const plantRenderables=window.KTKWorldMap?.getPlantRenderables?.(camX,camY,w,h)||[];
       const rockForegrounds=window.KTKWorldMap?.getRockForegrounds?.(camX,camY,w,h)||[];
       const PLAYER_FOOT_DEPTH_OFFSET=33;
       const renderables=[
@@ -188,7 +188,7 @@
           entity,
           depth:entity.type==='player'?entity.y+PLAYER_FOOT_DEPTH_OFFSET:entity.y
         })),
-        ...plantForegrounds.map(plant=>({entity:plant,depth:plant.depth})),
+        ...plantRenderables.map(plant=>({entity:plant,depth:plant.depth})),
         ...rockForegrounds.map(rock=>({entity:rock,depth:rock.depth})),
         {entity:{type:'local-player'},depth:camera.y*h+playerVisual.y+PLAYER_FOOT_DEPTH_OFFSET}
       ].sort((a,b)=>a.depth-b.depth);
@@ -206,10 +206,8 @@
         }
       });
       renderables.forEach(({entity})=>{
-        if(entity.type==='plant-foreground') {
-          // A própria máscara de pixels da planta determina o que fica em primeiro plano.
-          // O personagem é sempre desenhado inteiro; não há recorte retangular sobre ele.
-          window.KTKWorldMap?.drawPlantForeground?.(ctx,entity);
+        if(entity.type==='plant') {
+          window.KTKWorldMap?.drawPlant?.(ctx,entity);
           return;
         }
         if(entity.type==='rock-foreground') {

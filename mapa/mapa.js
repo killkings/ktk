@@ -23,141 +23,7 @@
   const roomCanvasCache = new Map();
   const assets = new Map();
   const assetStatus = new Map();
-  // Perfis individuais de profundidade para os recortes reais do atlas LPC.
-  // anchorY indica onde a planta toca o chão dentro do recorte; não é um corte.
-  // center-root: folhas nascem em torno de uma raiz mais central.
-  // bottom-root: raízes/base ficam na borda inferior do recorte.
-  const plantDepthProfiles = {
-    '0,0,32,32':     { mode: 'center-root', anchorY: .52, rootX: .50, frontDepth: .31, rootRadiusX: .48, edgeDrop: .035 },
-    '32,0,32,32':    { mode: 'center-root', anchorY: .50, rootX: .50, frontDepth: .30, rootRadiusX: .47, edgeDrop: .030 },
-    '64,0,32,32':    { mode: 'center-root', anchorY: .57, rootX: .50, frontDepth: .27, rootRadiusX: .46, edgeDrop: .045 },
-    '96,0,32,32':    { mode: 'center-root', anchorY: .62, rootX: .50, frontDepth: .25, rootRadiusX: .46, edgeDrop: .040 },
-    '128,0,32,32':   { mode: 'center-root', anchorY: .58, rootX: .50, frontDepth: .27, rootRadiusX: .45, edgeDrop: .040 },
-    '160,0,32,32':   { mode: 'center-root', anchorY: .54, rootX: .50, frontDepth: .29, rootRadiusX: .47, edgeDrop: .035 },
-    '192,0,32,32':   { mode: 'center-root', anchorY: .63, rootX: .50, frontDepth: .24, rootRadiusX: .46, edgeDrop: .045 },
-    '224,0,32,32':   { mode: 'center-root', anchorY: .59, rootX: .50, frontDepth: .26, rootRadiusX: .46, edgeDrop: .040 },
-
-    '0,32,32,32':    { mode: 'center-root', anchorY: .64, rootX: .50, frontDepth: .24, rootRadiusX: .47, edgeDrop: .040 },
-    '32,32,32,32':   { mode: 'center-root', anchorY: .61, rootX: .50, frontDepth: .25, rootRadiusX: .47, edgeDrop: .035 },
-    '64,32,32,32':   { mode: 'center-root', anchorY: .67, rootX: .50, frontDepth: .22, rootRadiusX: .44, edgeDrop: .050 },
-    '96,32,32,32':   { mode: 'center-root', anchorY: .69, rootX: .50, frontDepth: .21, rootRadiusX: .45, edgeDrop: .045 },
-    '128,32,32,32':  { mode: 'center-root', anchorY: .65, rootX: .50, frontDepth: .23, rootRadiusX: .46, edgeDrop: .045 },
-    '160,32,32,32':  { mode: 'center-root', anchorY: .68, rootX: .50, frontDepth: .21, rootRadiusX: .44, edgeDrop: .050 },
-    '192,32,32,32':  { mode: 'center-root', anchorY: .70, rootX: .50, frontDepth: .20, rootRadiusX: .44, edgeDrop: .050 },
-
-    '0,64,32,64':    { mode: 'bottom-root', anchorY: .98, rootX: .50, frontDepth: .25, rootRadiusX: .48 },
-    '32,64,32,64':   { mode: 'bottom-root', anchorY: .96, rootX: .50, frontDepth: .23, rootRadiusX: .48 },
-    '64,64,32,64':   { mode: 'bottom-root', anchorY: .90, rootX: .50, frontDepth: .22, rootRadiusX: .44 },
-    '96,64,64,64':   { mode: 'center-root', anchorY: .82, rootX: .50, frontDepth: .22, rootRadiusX: .46, edgeDrop: .035 },
-    '160,64,96,64':  { mode: 'center-root', anchorY: .84, rootX: .52, frontDepth: .22, rootRadiusX: .46, edgeDrop: .040 },
-
-    '256,0,32,64':   { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .34, rootRadiusX: .49 },
-    '288,0,32,64':   { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .32, rootRadiusX: .48 },
-    '320,0,32,64':   { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .31, rootRadiusX: .48 },
-    '352,0,32,64':   { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .30, rootRadiusX: .48 },
-    '384,0,32,64':   { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .30, rootRadiusX: .48 },
-    '416,0,32,64':   { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .29, rootRadiusX: .48 },
-    '256,64,32,64':  { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .32, rootRadiusX: .48 },
-    '288,64,32,64':  { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .30, rootRadiusX: .48 },
-    '320,64,32,64':  { mode: 'bottom-root', anchorY: 1.00, rootX: .50, frontDepth: .31, rootRadiusX: .48 }
-  };
-
-  function getPlantDepthProfile(sprite) {
-    const key = `${sprite.sx},${sprite.sy},${sprite.sw},${sprite.sh}`;
-    return plantDepthProfiles[key] || {
-      mode: 'bottom-root',
-      anchorY: 1,
-      rootX: .5,
-      frontDepth: .22,
-      rootRadiusX: .46
-    };
-  }
-
-  // Cria uma segunda cópia somente dos pixels da folhagem que ficam voltados
-  // para o lado sul/frontal da raiz. O sprite completo continua no cenário;
-  // esta máscara não recorta a planta original nem cria uma linha de corte.
-  function getPlantFrontMask(plants, sprite) {
-    if (!plants || !plants.complete || !plants.naturalWidth) return null;
-    const profile = getPlantDepthProfile(sprite);
-    const key = `${sprite.sx},${sprite.sy},${sprite.sw},${sprite.sh},${profile.mode},${profile.anchorY},${profile.rootX},${profile.frontDepth}`;
-    if (plantFrontMaskCache.has(key)) return plantFrontMaskCache.get(key);
-
-    const maskCanvas = document.createElement('canvas');
-    maskCanvas.width = sprite.sw;
-    maskCanvas.height = sprite.sh;
-    const maskContext = maskCanvas.getContext('2d', { willReadFrequently: true });
-    if (!maskContext) return null;
-
-    try {
-      maskContext.drawImage(
-        plants,
-        sprite.sx, sprite.sy, sprite.sw, sprite.sh,
-        0, 0, sprite.sw, sprite.sh
-      );
-      const imageData = maskContext.getImageData(0, 0, sprite.sw, sprite.sh);
-      const pixels = imageData.data;
-      const bottomMost = new Int16Array(sprite.sw);
-      bottomMost.fill(-1);
-
-      for (let x = 0; x < sprite.sw; x++) {
-        for (let y = 0; y < sprite.sh; y++) {
-          if (pixels[(y * sprite.sw + x) * 4 + 3] > 0) bottomMost[x] = y;
-        }
-      }
-
-      let selectedPixels = 0;
-      for (let y = 0; y < sprite.sh; y++) {
-        for (let x = 0; x < sprite.sw; x++) {
-          const index = (y * sprite.sw + x) * 4;
-          if (pixels[index + 3] === 0) continue;
-
-          const xNorm = Math.abs((x + .5) / sprite.sw - profile.rootX) / profile.rootRadiusX;
-          let isFront = false;
-
-          if (xNorm <= 1 && profile.mode === 'center-root') {
-            // A borda acompanha a raiz central e forma um arco irregular,
-            // em vez de dividir o sprite por uma linha horizontal.
-            const curve = profile.edgeDrop * xNorm * xNorm;
-            const frontStart = profile.anchorY + curve;
-            const frontEnd = profile.anchorY + profile.frontDepth;
-            const sourceY = (y + .5) / sprite.sh;
-            isFront = sourceY >= frontStart && sourceY <= frontEnd;
-          } else if (xNorm <= 1 && profile.mode === 'bottom-root' && bottomMost[x] >= 0) {
-            // Em plantas com raiz na borda inferior, a máscara segue o contorno
-            // real dos pixels opacos coluna a coluna.
-            const sideTaper = 1 - .22 * xNorm * xNorm;
-            const band = profile.frontDepth * sideTaper * sprite.sh;
-            isFront = bottomMost[x] - (y + .5) <= band;
-          }
-
-          if (!isFront) pixels[index + 3] = 0;
-          else selectedPixels++;
-        }
-      }
-
-      if (!selectedPixels) {
-        // Proteção para um recorte incomum: usa uma faixa adaptada ao contorno alfa.
-        for (let x = 0; x < sprite.sw; x++) {
-          if (bottomMost[x] < 0) continue;
-          const band = Math.max(3, Math.round(sprite.sh * .12));
-          for (let y = Math.max(0, bottomMost[x] - band); y <= bottomMost[x]; y++) {
-            const index = (y * sprite.sw + x) * 4;
-            if (pixels[index + 3] > 0) pixels[index + 3] = 255;
-          }
-        }
-      }
-
-      maskContext.putImageData(imageData, 0, 0);
-      plantFrontMaskCache.set(key, maskCanvas);
-      return maskCanvas;
-    } catch (error) {
-      console.warn('Não foi possível preparar a máscara frontal da planta LPC:', error);
-      return null;
-    }
-  }
-
   const rockMaskCache = new Map();
-  const plantFrontMaskCache = new Map();
   let lastCentralVegetationSprites = [];
 
   const biomes = [
@@ -587,97 +453,89 @@
     return overlapArea;
   }
 
-  // Só a folhagem voltada para a frente da raiz participa da oclusão.
-  // O sprite completo permanece no fundo; a máscara é uma cópia de pixels,
-  // específica para cada recorte e alinhada ao mesmo pivô do desenho original.
-  function getPlantForegrounds(cameraLeft, cameraTop, width, height) {
-    const overlays = [];
+  // Plantas inteiras entram na mesma fila de profundidade dos personagens.
+  // O ponto de ordenação é o meio vertical do sprite: pés abaixo dele deixam
+  // a planta atrás; pés na metade superior deixam a planta na frente.
+  function getPlantRenderables(cameraLeft, cameraTop, width, height) {
+    const renderables = [];
     const plants = assets.get('plants_summer.png');
     if (!plants || !plants.complete || plants.naturalWidth < 512 || plants.naturalHeight < 160) {
-      return overlays;
+      return renderables;
     }
 
     const scale = Math.min(width / 1920, height / 1080);
 
+    // Plantas fixas dos oito mapas externos.
     for (const [roomKey, placements] of Object.entries(outerNatureLayouts)) {
       const [roomCol, roomRow] = roomKey.split(',').map(Number);
       for (const item of placements) {
         if (item.type !== 'plant') continue;
 
-        const profile = getPlantDepthProfile(item);
-        const maskCanvas = getPlantFrontMask(plants, item);
-        if (!maskCanvas) continue;
-
         const drawWidth = item.sw * scale * 1.35 * item.size;
         const drawHeight = item.sh * scale * 1.35 * item.size;
         const baseX = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth;
         const baseY = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight;
+        const worldTop = baseY - drawHeight;
         const screenX = baseX - cameraLeft - drawWidth / 2;
-        const screenY = baseY - cameraTop - drawHeight * profile.anchorY;
+        const screenY = worldTop - cameraTop;
 
         if (screenX + drawWidth < 0 || screenX > width ||
             screenY + drawHeight < 0 || screenY > height) continue;
 
-        overlays.push({
-          type: 'plant-foreground',
+        renderables.push({
+          type: 'plant',
           source: 'outer',
-          maskCanvas,
+          sx: item.sx, sy: item.sy, sw: item.sw, sh: item.sh,
           screenX, screenY, drawWidth, drawHeight,
-          depth: baseY
+          depth: worldTop + drawHeight / 2
         });
       }
     }
 
-    // As plantas centrais reutilizam o mesmo perfil, pivô e oscilação do fundo.
+    // Plantas animadas do campo central: mantêm o mesmo pivô e balanço do fundo.
     for (const sprite of lastCentralVegetationSprites) {
-      const profile = sprite.profile || getPlantDepthProfile(sprite);
-      const maskCanvas = getPlantFrontMask(plants, sprite);
-      if (!maskCanvas) continue;
-
       const screenX = sprite.baseX - sprite.drawWidth / 2;
-      const screenY = sprite.baseY - sprite.drawHeight * profile.anchorY;
+      const screenY = sprite.baseY - sprite.drawHeight;
       if (screenX + sprite.drawWidth < 0 || screenX > width ||
           screenY + sprite.drawHeight < 0 || screenY > height) continue;
 
-      overlays.push({
-        type: 'plant-foreground',
+      renderables.push({
+        type: 'plant',
         source: 'central',
-        maskCanvas,
+        sx: sprite.sx, sy: sprite.sy, sw: sprite.sw, sh: sprite.sh,
         screenBaseX: sprite.baseX,
         screenBaseY: sprite.baseY,
         drawWidth: sprite.drawWidth,
         drawHeight: sprite.drawHeight,
-        anchorY: profile.anchorY,
         sway: sprite.sway,
-        depth: cameraTop + sprite.baseY
+        depth: cameraTop + screenY + sprite.drawHeight / 2
       });
     }
 
-    return overlays;
+    return renderables;
   }
 
-  function drawPlantForeground(ctx, plant) {
-    if (!ctx || !plant || !plant.maskCanvas) return;
+  function drawPlant(ctx, plant) {
+    const plants = assets.get('plants_summer.png');
+    if (!ctx || !plant || !plants || !plants.complete || !plants.naturalWidth) return;
+
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     if (plant.source === 'central') {
-      // O mesmo pivô e ângulo de vento da planta completa evitam separação/tremor.
       ctx.translate(plant.screenBaseX, plant.screenBaseY);
       ctx.rotate(plant.sway);
       ctx.drawImage(
-        plant.maskCanvas,
-        -plant.drawWidth / 2,
-        -plant.drawHeight * plant.anchorY,
-        plant.drawWidth,
-        plant.drawHeight
+        plants,
+        plant.sx, plant.sy, plant.sw, plant.sh,
+        -plant.drawWidth / 2, -plant.drawHeight,
+        plant.drawWidth, plant.drawHeight
       );
     } else {
       ctx.drawImage(
-        plant.maskCanvas,
-        plant.screenX,
-        plant.screenY,
-        plant.drawWidth,
-        plant.drawHeight
+        plants,
+        plant.sx, plant.sy, plant.sw, plant.sh,
+        plant.screenX, plant.screenY,
+        plant.drawWidth, plant.drawHeight
       );
     }
     ctx.restore();
@@ -850,7 +708,6 @@
     const placements = outerNatureLayouts[`${roomCol},${roomRow}`];
     if (!placements) return;
 
-    const plants = assets.get('plants_summer.png');
     const rocks = assets.get('rocks_grasslands.png');
     const mushrooms = assets.get('mushrooms.png');
     const flowers = assets.get('wildflowers_summer.png');
@@ -864,17 +721,16 @@
     g.imageSmoothingEnabled = false;
     const ordered = placements.slice().sort((a, b) => a.y - b.y);
     for (const item of ordered) {
+      if (item.type === 'plant') continue;
       const x = item.x * width;
       const y = item.y * height;
 
       if (item.type === 'plant' && plants?.complete && plants.naturalWidth >= 512 && plants.naturalHeight >= 160) {
         const drawWidth = item.sw * scale * 1.35 * item.size;
         const drawHeight = item.sh * scale * 1.35 * item.size;
-        const profile = getPlantDepthProfile(item);
-        const drawTop = y - drawHeight * profile.anchorY;
         g.drawImage(
           plants, item.sx, item.sy, item.sw, item.sh,
-          x - drawWidth / 2, drawTop,
+          x - drawWidth / 2, y - drawHeight,
           drawWidth, drawHeight
         );
       } else if (item.type === 'rock' && rocks?.complete && rocks.naturalWidth >= 192 && rocks.naturalHeight >= 128) {
@@ -990,9 +846,6 @@
       const baseX = sprite.x * width;
       const baseY = sprite.y * height;
       const sway = Math.sin(timeSeconds * 1.35 + sprite.phase) * sprite.amplitude;
-      const sourceY = sprite.sy;
-      const profile = getPlantDepthProfile(sprite);
-      const drawTop = baseY - drawHeight * profile.anchorY;
 
       // Clareira central: impede que qualquer parte visível da planta entre na área reservada.
       const clearLeft = width * .37;
@@ -1001,8 +854,8 @@
       const clearBottom = height * .64;
       const spriteLeft = baseX - drawWidth / 2;
       const spriteRight = baseX + drawWidth / 2;
-      const spriteTop = drawTop;
-      const spriteBottom = drawTop + drawHeight;
+      const spriteTop = baseY - drawHeight;
+      const spriteBottom = baseY;
       const overlapsClearing = spriteLeft < clearRight
         && spriteRight > clearLeft
         && spriteTop < clearBottom
@@ -1012,20 +865,10 @@
       // Guarda os dados exatos desta planta/quadros de vento para a camada frontal.
       lastCentralVegetationSprites.push({
         sx: sprite.sx, sy: sprite.sy, sw: sprite.sw, sh: sprite.sh,
-        drawWidth, drawHeight, baseX, baseY, sway, profile
+        drawWidth, drawHeight, baseX, baseY, sway
       });
 
-      // O eixo fica na base de cada planta para ela não deslizar pelo chão.
-      ctx.save();
-      ctx.translate(baseX, baseY);
-      ctx.rotate(sway);
-      ctx.drawImage(
-        plants,
-        sprite.sx, sourceY, sprite.sw, sprite.sh,
-        -drawWidth / 2, -drawHeight * profile.anchorY,
-        drawWidth, drawHeight
-      );
-      ctx.restore();
+      // O desenho integral é feito pelo renderizador, na profundidade do meio do sprite.
     }
     ctx.restore();
   }
@@ -1623,8 +1466,8 @@
     draw,
     getCollisionCircles,
     getRockOverlap,
-    getPlantForegrounds,
-    drawPlantForeground,
+    getPlantRenderables,
+    drawPlant,
     getRockForegrounds,
     drawRockForeground,
     isOnRoad,
