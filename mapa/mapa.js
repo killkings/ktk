@@ -360,10 +360,32 @@
     return result;
   }
 
-  // O mapa não possui árvores nem obstáculos ambientais desse tipo.
-  // Mantém a API para os módulos de movimento sem criar colisores invisíveis.
-  function getCollisionCircles() {
-    return [];
+  // Pedras dos oito mapas externos: colisores circulares alinhados à base visual.
+  // O mapa central e a clareira continuam sem obstáculos ambientais.
+  function getCollisionCircles(worldX, worldY, searchRadius = 96) {
+    const hasCenter = Number.isFinite(Number(worldX)) && Number.isFinite(Number(worldY));
+    const queryX = Number(worldX);
+    const queryY = Number(worldY);
+    const queryRadius = Math.max(0, Number(searchRadius) || 96);
+    const scale = Math.min(viewWidth / 1920, viewHeight / 1080);
+    const colliders = [];
+
+    for (const [roomKey, placements] of Object.entries(outerNatureLayouts)) {
+      const [roomCol, roomRow] = roomKey.split(',').map(Number);
+      for (const item of placements) {
+        if (item.type !== 'rock') continue;
+
+        const drawSize = 64 * scale * item.size;
+        const x = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth;
+        const baseY = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight;
+        const y = baseY - drawSize * 0.42;
+        const radius = drawSize * 0.38;
+
+        if (hasCenter && Math.hypot(queryX - x, queryY - y) > queryRadius + radius) continue;
+        colliders.push({ x, y, radius });
+      }
+    }
+    return colliders;
   }
 
   function drawDecorations(ctx, left, top, width, height, tileSize) {
@@ -498,6 +520,23 @@
         );
       } else if (item.type === 'rock' && rocks?.complete && rocks.naturalWidth >= 192 && rocks.naturalHeight >= 128) {
         const drawSize = 64 * scale * item.size;
+
+        // Sombra oval curta, assentada sob a base da pedra.
+        g.save();
+        g.fillStyle = 'rgba(18, 25, 16, .40)';
+        g.beginPath();
+        g.ellipse(
+          x + drawSize * .06,
+          y - drawSize * .035,
+          drawSize * .48,
+          drawSize * .17,
+          0,
+          0,
+          Math.PI * 2
+        );
+        g.fill();
+        g.restore();
+
         g.drawImage(
           rocks, item.sx, item.sy, 64, 64,
           x - drawSize / 2, y - drawSize,
