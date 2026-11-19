@@ -13,8 +13,10 @@
   const assetRoot = './mapa/assets/';
   const assetSources = {
     'terrain_summer.png': './mapa/assets/lpc-terrain-summer.png',
-    'wildflowers_summer.png': 'https://raw.githubusercontent.com/ElizaWy/LPC/f07f7f5892e67c932c68f70bb04472f2c64e46bc/Terrain/wildflowers_summer.png',
-    'plants_summer.png': './mapa/assets/lpc-plants-summer.png'
+    'wildflowers_summer.png': './mapa/assets/lpc-wildflowers-summer.png',
+    'plants_summer.png': './mapa/assets/lpc-plants-summer.png',
+    'mushrooms.png': './mapa/assets/lpc-mushrooms.png',
+    'rocks_grasslands.png': './mapa/assets/lpc-rocks-grasslands.png'
   };
   const tileCache = new Map();
   const decorationCache = new Map();
@@ -168,7 +170,7 @@
     assets.set(file, image);
   }
 
-  ['terrain_summer.png', 'wildflowers_summer.png', 'plants_summer.png'].forEach(loadAsset);
+  ['terrain_summer.png', 'wildflowers_summer.png', 'plants_summer.png', 'mushrooms.png', 'rocks_grasslands.png'].forEach(loadAsset);
 
   function setViewport(width, height) {
     const safeWidth = Math.max(1, Number(width) || 1920);
@@ -406,6 +408,117 @@
         }
       }
     }
+  }
+
+  // Decoração leve dos oito mapas externos. As posições são fixas por sala,
+  // para os objetos não mudarem de lugar ao reconstruir o canvas.
+  // A área central e a clareira dos Campos Centrais não são afetadas.
+  const outerNatureLayouts = {
+    '-1,-1': [
+      { type: 'plant', x: .13, y: .23, sx: 0, sy: 0, sw: 32, sh: 32, size: 1.20 },
+      { type: 'plant', x: .83, y: .84, sx: 352, sy: 0, sw: 32, sh: 64, size: 1.05 },
+      { type: 'rock', x: .84, y: .17, sx: 0, sy: 0, size: .62 },
+      { type: 'mushroom', x: .15, y: .81, sx: 0, sy: 96, size: .78 },
+      { type: 'flowers', x: .68, y: .73, variant: 0 }
+    ],
+    '0,-1': [
+      { type: 'plant', x: .14, y: .80, sx: 96, sy: 64, sw: 64, sh: 64, size: .92 },
+      { type: 'rock', x: .86, y: .15, sx: 64, sy: 0, size: .65 },
+      { type: 'mushroom', x: .14, y: .14, sx: 32, sy: 96, size: .74 },
+      { type: 'flowers', x: .83, y: .83, variant: 3 }
+    ],
+    '1,-1': [
+      { type: 'plant', x: .14, y: .83, sx: 416, sy: 0, sw: 32, sh: 64, size: 1.00 },
+      { type: 'plant', x: .88, y: .83, sx: 32, sy: 0, sw: 32, sh: 32, size: 1.12 },
+      { type: 'rock', x: .14, y: .15, sx: 128, sy: 0, size: .60 },
+      { type: 'mushroom', x: .92, y: .53, sx: 64, sy: 96, size: .76 }
+    ],
+    '1,0': [
+      { type: 'plant', x: .14, y: .17, sx: 160, sy: 64, sw: 96, sh: 64, size: .78 },
+      { type: 'rock', x: .86, y: .16, sx: 0, sy: 64, size: .62 },
+      { type: 'mushroom', x: .15, y: .84, sx: 96, sy: 96, size: .72 },
+      { type: 'flowers', x: .86, y: .83, variant: 6 }
+    ],
+    '1,1': [
+      { type: 'plant', x: .14, y: .83, sx: 64, sy: 0, sw: 32, sh: 32, size: 1.16 },
+      { type: 'plant', x: .85, y: .83, sx: 384, sy: 0, sw: 32, sh: 64, size: .96 },
+      { type: 'rock', x: .85, y: .16, sx: 64, sy: 64, size: .64 },
+      { type: 'mushroom', x: .14, y: .16, sx: 128, sy: 96, size: .74 },
+      { type: 'flowers', x: .51, y: .14, variant: 9 }
+    ],
+    '0,1': [
+      { type: 'plant', x: .15, y: .18, sx: 160, sy: 0, sw: 32, sh: 32, size: 1.08 },
+      { type: 'rock', x: .85, y: .18, sx: 128, sy: 64, size: .62 },
+      { type: 'mushroom', x: .85, y: .83, sx: 160, sy: 96, size: .72 },
+      { type: 'flowers', x: .15, y: .83, variant: 12 }
+    ],
+    '-1,1': [
+      { type: 'plant', x: .14, y: .17, sx: 352, sy: 0, sw: 32, sh: 64, size: .98 },
+      { type: 'plant', x: .85, y: .83, sx: 192, sy: 0, sw: 32, sh: 32, size: 1.14 },
+      { type: 'rock', x: .85, y: .83, sx: 0, sy: 0, size: .57 },
+      { type: 'mushroom', x: .15, y: .83, sx: 32, sy: 96, size: .76 },
+      { type: 'flowers', x: .52, y: .16, variant: 5 }
+    ],
+    '-1,0': [
+      { type: 'plant', x: .15, y: .17, sx: 96, sy: 64, sw: 64, sh: 64, size: .88 },
+      { type: 'rock', x: .85, y: .17, sx: 64, sy: 0, size: .61 },
+      { type: 'mushroom', x: .15, y: .84, sx: 0, sy: 96, size: .70 },
+      { type: 'flowers', x: .84, y: .83, variant: 2 }
+    ]
+  };
+
+  function drawOuterNature(g, roomCol, roomRow, width, height) {
+    const placements = outerNatureLayouts[`${roomCol},${roomRow}`];
+    if (!placements) return;
+
+    const plants = assets.get('plants_summer.png');
+    const rocks = assets.get('rocks_grasslands.png');
+    const mushrooms = assets.get('mushrooms.png');
+    const flowers = assets.get('wildflowers_summer.png');
+    const scale = Math.min(width / 1920, height / 1080);
+    const flowerCells = [
+      [0, 0], [16, 0], [32, 0], [48, 0], [64, 0], [80, 0], [96, 0],
+      [112, 0], [128, 0], [16, 16], [48, 16], [80, 16], [112, 16], [32, 32]
+    ];
+
+    g.save();
+    g.imageSmoothingEnabled = false;
+    const ordered = placements.slice().sort((a, b) => a.y - b.y);
+    for (const item of ordered) {
+      const x = item.x * width;
+      const y = item.y * height;
+
+      if (item.type === 'plant' && plants?.complete && plants.naturalWidth >= 512 && plants.naturalHeight >= 160) {
+        const drawWidth = item.sw * scale * 1.35 * item.size;
+        const drawHeight = item.sh * scale * 1.35 * item.size;
+        g.drawImage(
+          plants, item.sx, item.sy, item.sw, item.sh,
+          x - drawWidth / 2, y - drawHeight,
+          drawWidth, drawHeight
+        );
+      } else if (item.type === 'rock' && rocks?.complete && rocks.naturalWidth >= 192 && rocks.naturalHeight >= 128) {
+        const drawSize = 64 * scale * item.size;
+        g.drawImage(
+          rocks, item.sx, item.sy, 64, 64,
+          x - drawSize / 2, y - drawSize,
+          drawSize, drawSize
+        );
+      } else if (item.type === 'mushroom' && mushrooms?.complete && mushrooms.naturalWidth >= 192 && mushrooms.naturalHeight >= 128) {
+        const drawSize = 32 * scale * item.size;
+        g.drawImage(
+          mushrooms, item.sx, item.sy, 32, 32,
+          x - drawSize / 2, y - drawSize,
+          drawSize, drawSize
+        );
+      } else if (item.type === 'flowers' && flowers?.complete && flowers.naturalWidth >= 144 && flowers.naturalHeight >= 160) {
+        const first = flowerCells[item.variant % flowerCells.length];
+        const second = flowerCells[(item.variant + 5) % flowerCells.length];
+        const flowerSize = 15 * scale;
+        g.drawImage(flowers, first[0], first[1], 16, 16, x - 11 * scale, y - flowerSize, flowerSize, flowerSize);
+        g.drawImage(flowers, second[0], second[1], 16, 16, x + 2 * scale, y - flowerSize * .78, flowerSize, flowerSize);
+      }
+    }
+    g.restore();
   }
 
   // Vegetação LPC dos Campos Centrais.
@@ -1048,6 +1161,7 @@
     }
 
     drawDecorations(roomCtx, left, top, width, height, size);
+    drawOuterNature(roomCtx, roomCol, roomRow, width, height);
     drawOuterLake(roomCtx, roomCol, roomRow, width, height);
     drawOuterRoad(roomCtx, roomCol, roomRow, width, height);
     return roomCanvas;
