@@ -193,6 +193,7 @@
       let focusedItem=null;
       let focusedItemDistance=NEARBY_INFO_RADIUS;
       const visibleChatBubbles=[];
+      const plantForegroundPlayerClips=[];
       worldItems.forEach(item=>{
         if(item.collected) return;
         const distance=Math.hypot(playerWorldX-item.x,playerWorldY-item.y);
@@ -203,7 +204,18 @@
       });
       renderables.forEach(({entity})=>{
         if(entity.type==='plant-foreground') {
-          window.KTKWorldMap?.drawPlantForeground?.(ctx,entity);
+          // Plantas só encobrem a metade inferior dos jogadores que já foram
+          // desenhados atrás delas. A região da cabeça nunca recebe a planta.
+          if(plantForegroundPlayerClips.length) {
+            ctx.save();
+            ctx.beginPath();
+            plantForegroundPlayerClips.forEach(clip => {
+              ctx.rect(clip.x,clip.y,clip.width,clip.height);
+            });
+            ctx.clip();
+            window.KTKWorldMap?.drawPlantForeground?.(ctx,entity);
+            ctx.restore();
+          }
           return;
         }
         if(entity.type==='rock-foreground') {
@@ -248,6 +260,15 @@
           const drawY=screenY-(player.knockbackHeight||0);
 
           drawLayeredCharacter(ctx,screenX,drawY,visiblePlayerLayers,PLAYER_WORLD_SCALE,direction,frame,Boolean(player.knockback),bodyFrameColumns);
+          if(!inLakeWater) {
+            const playerDisplaySize=(bodyFrameLayer?.displaySize||bodyFrameSize)*PLAYER_WORLD_SCALE;
+            plantForegroundPlayerClips.push({
+              x:screenX-playerDisplaySize/2,
+              y:drawY,
+              width:playerDisplaySize,
+              height:playerDisplaySize/2
+            });
+          }
           const chatBubble=window.KTKChat?.getBubble?.(window.KTKOnline?.userId);
           if(chatBubble) visibleChatBubbles.push({
             text:chatBubble.text,opacity:chatBubble.opacity,x:screenX,
@@ -286,7 +307,17 @@
           const bodyWidth=bodyLayer?.image?.naturalWidth||bodyLayer?.image?.width||bodySize;
           const bodyColumns=Math.max(1,Math.floor(bodyWidth/bodySize));
           const visibleRemoteLayers=inLakeWater?getHeadOnlyLayers(remoteLayers):remoteLayers;
-          drawLayeredCharacter(ctx,screenX,screenY-(entity.knockbackHeight||0),visibleRemoteLayers,PLAYER_WORLD_SCALE,remoteDirection,remoteFrame,Boolean(entity.knockback),attackActive?bodyColumns:0);
+          const remoteDrawY=screenY-(entity.knockbackHeight||0);
+          drawLayeredCharacter(ctx,screenX,remoteDrawY,visibleRemoteLayers,PLAYER_WORLD_SCALE,remoteDirection,remoteFrame,Boolean(entity.knockback),attackActive?bodyColumns:0);
+          if(!inLakeWater) {
+            const playerDisplaySize=(bodyLayer?.displaySize||bodySize)*PLAYER_WORLD_SCALE;
+            plantForegroundPlayerClips.push({
+              x:screenX-playerDisplaySize/2,
+              y:remoteDrawY,
+              width:playerDisplaySize,
+              height:playerDisplaySize/2
+            });
+          }
           drawNearbyEntityStats(ctx,entity,screenX,screenY);
           const chatBubble=window.KTKChat?.getBubble?.(entity.id);
           if(chatBubble) visibleChatBubbles.push({
