@@ -725,15 +725,7 @@
       const x = item.x * width;
       const y = item.y * height;
 
-      if (item.type === 'plant' && plants?.complete && plants.naturalWidth >= 512 && plants.naturalHeight >= 160) {
-        const drawWidth = item.sw * scale * 1.35 * item.size;
-        const drawHeight = item.sh * scale * 1.35 * item.size;
-        g.drawImage(
-          plants, item.sx, item.sy, item.sw, item.sh,
-          x - drawWidth / 2, y - drawHeight,
-          drawWidth, drawHeight
-        );
-      } else if (item.type === 'rock' && rocks?.complete && rocks.naturalWidth >= 192 && rocks.naturalHeight >= 128) {
+      if (item.type === 'rock' && rocks?.complete && rocks.naturalWidth >= 192 && rocks.naturalHeight >= 128) {
         const drawSize = 64 * scale * item.size;
 
         // Sombra oval curta, assentada sob a base da pedra.

@@ -194,11 +194,11 @@
       ].sort((a,b)=>{
         const depthDifference=a.depth-b.depth;
         if(depthDifference!==0) return depthDifference;
-        // No empate exato do ponto médio, a planta é desenhada antes do jogador.
-        // Assim, pés na linha central contam como metade inferior do personagem.
+        // O ponto médio pertence à metade superior: no empate,
+        // a planta é desenhada depois do personagem e fica na frente.
         const aIsPlant=a.entity.type==='plant';
         const bIsPlant=b.entity.type==='plant';
-        if(aIsPlant!==bIsPlant) return aIsPlant?-1:1;
+        if(aIsPlant!==bIsPlant) return aIsPlant?1:-1;
         return 0;
       });
       const playerWorldX=camera.x*w+player.x;
