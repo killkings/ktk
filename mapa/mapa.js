@@ -543,14 +543,14 @@
 
   // Camada de profundidade das pedras: a metade superior é redesenhada
   // no ponto Y da base da pedra, depois de quem está atrás e antes de quem está à frente.
-  function getRockForegrounds(cameraLeft, cameraTop, width, height) {
+  function getRockRenderables(cameraLeft, cameraTop, width, height) {
     const rocks = assets.get('rocks_grasslands.png');
     if (!rocks || !rocks.complete || !rocks.naturalWidth) return [];
 
     const viewportWidth = Math.max(1, Number(width) || viewWidth);
     const viewportHeight = Math.max(1, Number(height) || viewHeight);
     const scale = Math.min(viewWidth / 1920, viewHeight / 1080);
-    const overlays = [];
+    const renderables = [];
 
     for (const [roomKey, placements] of Object.entries(outerNatureLayouts)) {
       const [roomCol, roomRow] = roomKey.split(',').map(Number);
@@ -560,39 +560,39 @@
         const drawSize = 64 * scale * item.size;
         const worldLeft = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth - drawSize / 2;
         const worldTop = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight - drawSize;
-        const worldBaseY = worldTop + drawSize;
         const screenX = worldLeft - cameraLeft;
         const screenY = worldTop - cameraTop;
 
         if (screenX + drawSize < 0 || screenX > viewportWidth ||
-            screenY + drawSize / 2 < 0 || screenY > viewportHeight) continue;
+            screenY + drawSize < 0 || screenY > viewportHeight) continue;
 
-        overlays.push({
-          type: 'rock-foreground',
+        renderables.push({
+          type: 'rock-depth',
           sx: item.sx,
           sy: item.sy,
           screenX,
           screenY,
           drawSize,
-          depth: worldBaseY
+          // Mesmo ponto de ordenação usado nas plantas: metade vertical do sprite.
+          depth: worldTop + drawSize / 2
         });
       }
     }
-    return overlays;
+    return renderables;
   }
 
-  function drawRockForeground(ctx, rock) {
+  function drawRock(ctx, rock) {
     const rocks = assets.get('rocks_grasslands.png');
     if (!ctx || !rock || !rocks || !rocks.complete || !rocks.naturalWidth) return;
 
-    // Só a metade superior (64×32) fica na camada da frente.
     ctx.save();
     ctx.imageSmoothingEnabled = false;
+    // Sprite inteiro 64×64. A posição já foi calculada para a fila de profundidade.
     ctx.drawImage(
       rocks,
-      rock.sx, rock.sy, 64, 32,
+      rock.sx, rock.sy, 64, 64,
       rock.screenX, rock.screenY,
-      rock.drawSize, rock.drawSize / 2
+      rock.drawSize, rock.drawSize
     );
     ctx.restore();
   }
@@ -744,11 +744,7 @@
         g.fill();
         g.restore();
 
-        g.drawImage(
-          rocks, item.sx, item.sy, 64, 64,
-          x - drawSize / 2, y - drawSize,
-          drawSize, drawSize
-        );
+        // A imagem inteira é desenhada pelo renderizador, na profundidade do ponto médio.
       } else if (item.type === 'mushroom' && mushrooms?.complete && mushrooms.naturalWidth >= 192 && mushrooms.naturalHeight >= 128) {
         const drawSize = 32 * scale * item.size;
         g.drawImage(
@@ -1460,8 +1456,8 @@
     getRockOverlap,
     getPlantRenderables,
     drawPlant,
-    getRockForegrounds,
-    drawRockForeground,
+    getRockRenderables,
+    drawRock,
     isOnRoad,
     isInLake,
     isInWater,

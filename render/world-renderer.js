@@ -181,7 +181,7 @@
         ? Math.min(attackFrameCount-1,Math.floor((punch.elapsed/PUNCH_ANIMATION_SECONDS)*attackFrameCount))
         : playerMoving?Math.floor(walkTime*10)%WALK_COLUMNS:Math.floor(idleTime*2)%IDLE_COLUMNS;
       const plantRenderables=window.KTKWorldMap?.getPlantRenderables?.(camX,camY,w,h)||[];
-      const rockForegrounds=window.KTKWorldMap?.getRockForegrounds?.(camX,camY,w,h)||[];
+      const rockRenderables=window.KTKWorldMap?.getRockRenderables?.(camX,camY,w,h)||[];
       const PLAYER_FOOT_DEPTH_OFFSET=33;
       const renderables=[
         ...getWorldEntities().map(entity=>({
@@ -189,16 +189,15 @@
           depth:entity.type==='player'?entity.y+PLAYER_FOOT_DEPTH_OFFSET:entity.y
         })),
         ...plantRenderables.map(plant=>({entity:plant,depth:plant.depth})),
-        ...rockForegrounds.map(rock=>({entity:rock,depth:rock.depth})),
+        ...rockRenderables.map(rock=>({entity:rock,depth:rock.depth})),
         {entity:{type:'local-player'},depth:camera.y*h+playerVisual.y+PLAYER_FOOT_DEPTH_OFFSET}
       ].sort((a,b)=>{
         const depthDifference=a.depth-b.depth;
         if(depthDifference!==0) return depthDifference;
-        // O ponto médio pertence à metade superior: no empate,
-        // a planta é desenhada depois do personagem e fica na frente.
-        const aIsPlant=a.entity.type==='plant';
-        const bIsPlant=b.entity.type==='plant';
-        if(aIsPlant!==bIsPlant) return aIsPlant?1:-1;
+        // A metade superior inclui a linha central: planta e pedra ficam na frente.
+        const aIsDepthSprite=a.entity.type==='plant'||a.entity.type==='rock-depth';
+        const bIsDepthSprite=b.entity.type==='plant'||b.entity.type==='rock-depth';
+        if(aIsDepthSprite!==bIsDepthSprite) return aIsDepthSprite?1:-1;
         return 0;
       });
       const playerWorldX=camera.x*w+player.x;
@@ -219,8 +218,8 @@
           window.KTKWorldMap?.drawPlant?.(ctx,entity);
           return;
         }
-        if(entity.type==='rock-foreground') {
-          window.KTKWorldMap?.drawRockForeground?.(ctx,entity);
+        if(entity.type==='rock-depth') {
+          window.KTKWorldMap?.drawRock?.(ctx,entity);
           return;
         }
         const localPlayer=entity.type==='local-player';
