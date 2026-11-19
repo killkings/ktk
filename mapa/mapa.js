@@ -452,6 +452,62 @@
     return overlapArea;
   }
 
+  // Camada de profundidade das pedras: a metade superior é redesenhada
+  // no ponto Y da base da pedra, depois de quem está atrás e antes de quem está à frente.
+  function getRockForegrounds(cameraLeft, cameraTop, width, height) {
+    const rocks = assets.get('rocks_grasslands.png');
+    if (!rocks || !rocks.complete || !rocks.naturalWidth) return [];
+
+    const viewportWidth = Math.max(1, Number(width) || viewWidth);
+    const viewportHeight = Math.max(1, Number(height) || viewHeight);
+    const scale = Math.min(viewWidth / 1920, viewHeight / 1080);
+    const overlays = [];
+
+    for (const [roomKey, placements] of Object.entries(outerNatureLayouts)) {
+      const [roomCol, roomRow] = roomKey.split(',').map(Number);
+      for (const item of placements) {
+        if (item.type !== 'rock') continue;
+
+        const drawSize = 64 * scale * item.size;
+        const worldLeft = roomCol * viewWidth - viewWidth / 2 + item.x * viewWidth - drawSize / 2;
+        const worldTop = roomRow * viewHeight - viewHeight / 2 + item.y * viewHeight - drawSize;
+        const worldBaseY = worldTop + drawSize;
+        const screenX = worldLeft - cameraLeft;
+        const screenY = worldTop - cameraTop;
+
+        if (screenX + drawSize < 0 || screenX > viewportWidth ||
+            screenY + drawSize / 2 < 0 || screenY > viewportHeight) continue;
+
+        overlays.push({
+          type: 'rock-foreground',
+          sx: item.sx,
+          sy: item.sy,
+          screenX,
+          screenY,
+          drawSize,
+          depth: worldBaseY
+        });
+      }
+    }
+    return overlays;
+  }
+
+  function drawRockForeground(ctx, rock) {
+    const rocks = assets.get('rocks_grasslands.png');
+    if (!ctx || !rock || !rocks || !rocks.complete || !rocks.naturalWidth) return;
+
+    // Só a metade superior (64×32) fica na camada da frente.
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      rocks,
+      rock.sx, rock.sy, 64, 32,
+      rock.screenX, rock.screenY,
+      rock.drawSize, rock.drawSize / 2
+    );
+    ctx.restore();
+  }
+
   // API de círculos preservada para outros obstáculos futuros; pedras usam
   // exclusivamente a máscara alfa acima, nunca um círculo aproximado.
   function getCollisionCircles() {
@@ -1324,6 +1380,8 @@
     draw,
     getCollisionCircles,
     getRockOverlap,
+    getRockForegrounds,
+    drawRockForeground,
     isOnRoad,
     isInLake,
     isInWater,
