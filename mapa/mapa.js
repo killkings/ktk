@@ -876,10 +876,11 @@ function getTreeRenderables(cameraLeft, cameraTop, width, height) {
       { type: 'rock', x: .86, y: .16, sx: 0, sy: 0, size: .62 },
       { type: 'mushroom', x: .15, y: .84, sx: 96, sy: 96, size: .72 },
       { type: 'flowers', x: .86, y: .83, variant: 6 },
-      // Recortes individuais do atlas: árvore de copa redonda + conífera.
-      // Os dois retângulos incluem explicitamente toda a extensão do tronco.
-      { type: 'tree', x: .46, y: .43, sx: 416, sy: 16, sw: 96, sh: 128, size: 1.05 },
-      { type: 'tree', x: .72, y: .72, sx: 224, sy: 384, sw: 96, sh: 128, size: .98 }
+      // Duas árvores alternativas com troncos completos visíveis no atlas LPC.
+      // Recorte 1: árvore de copa arredondada, coluna central-direita.
+      { type: 'tree', x: .46, y: .43, sx: 320, sy: 0, sw: 96, sh: 144, size: 1.05 },
+      // Recorte 2: árvore de copa mais larga, logo abaixo da primeira.
+      { type: 'tree', x: .72, y: .72, sx: 320, sy: 144, sw: 96, sh: 128, size: .98 }
     ],
     '1,1': [
       { type: 'plant', x: .14, y: .83, sx: 64, sy: 0, sw: 32, sh: 32, size: 1.16 },
